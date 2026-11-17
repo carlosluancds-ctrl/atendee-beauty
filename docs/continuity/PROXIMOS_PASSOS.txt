@@ -1,33 +1,37 @@
-ATENDEE BEAUTY — NEXT STEPS — BACKUP V21 (17/11/2026)
+ATENDEE BEAUTY — NEXT STEPS — BACKUP V22
+Atualizado: 17/11/2026 21:28 UTC
 
-SAVED CODE CHECKPOINT
+CHECKPOINT SALVO
+- Repositório privado: https://github.com/carlosluancds-ctrl/atendee-beauty
 - Branch: wip/operational-identity-v1
-- Commit: a74089cc1c325d1e7130bcaca6953797ee00d745
-- Base main commit: 4464001
-- Private repository: https://github.com/carlosluancds-ctrl/atendee-beauty
-- All work in this identity phase has been committed locally. No identity changes were merged to main.
+- Código testado: c815881200ea29831a6814aa45917fdf1cac3470
+- Main permanece no commit-base 4464001…; identidade não foi mergeada.
 
-PREVIOUS GATE
-- PostgreSQL 18.7 workflow run 44166541043 is SUCCESS.
-- Domain 15/15, persistence 9/9, build 0 warnings/errors, no SKIP.
+CI COMPLETA APROVADA
+- GitHub Actions run 44179994461: SUCCESS
+- .NET locked restore: PASS
+- Release build: 0 warning / 0 error
+- Domínio: 15/15
+- PostgreSQL 18.7 migration/provision: PASS
+- Persistência/RLS/pool: 9/9
+- Identidade/TOTP/contexto tenant: 23/23
+- Cleanup container/volume: PASS; nenhum teste crítico SKIPPED.
 
-IDENTITY WORK IN PROGRESS
-- ASP.NET Core Identity operational store, migration 002, TOTP, encrypted recovery codes, TOTP replay guard, secure cookies, CSRF, per-IP rate limits and trusted tenant resolution implemented in branch.
-- Locked restore, Release build (0 warning/error) and domain 15/15 pass locally.
-- PostgreSQL migration 002 and identity integration checks have NOT yet been run successfully in CI at this checkpoint.
+PRÓXIMA FASE
+1. Revisão de segurança do fluxo login/MFA, SQL, cookies e middleware.
+2. Testes HTTP end-to-end para antiforgery, cookie, MFA, logout, revogação, conta desativada, enumeração e MFA bypass.
+3. Matriz de autorização por role e tenant status + audit events.
+4. Escolher provedor de email antes de habilitar signup, email verification, convites e reset de senha.
+5. Store e MFA do Administrador Atendee separados, com break-glass auditado.
+6. Proteger Data Protection em produção não-Windows, rate limiter distribuído, forwarded headers confiáveis, backup/restore.
+7. Só então abrir PR para main. Sem deploy.
 
-NEXT ACTIONS
-1. Push/verify branch wip/operational-identity-v1 and run GitHub Actions.
-2. Fix SQL/migration/identity tests until all steps pass on PostgreSQL 18.7 without SKIP.
-3. Verify encrypted TOTP/recovery values, one-time TOTP incl. concurrent replay, function permissions, no stale GUC in pool-size-1, no direct auth role reads and unique one-salon constraint.
-4. Review cookie/MFA/CSRF/lockout/role-promotion flow and add HTTP integration tests.
-5. Only after all checks and security review, open PR to main. No deploy.
-6. Public signup, invitation and password reset stay disabled until email provider selection.
-7. Platform Admin identity remains a separate future phase.
+LIMITES
+- Ainda não produção-ready; CI verde não substitui revisão independente.
+- Não ativar cadastro público nem usar dados reais.
+- WebAuthn, email, Platform Admin, auditoria e HTTP session tests pendentes.
 
-READ FIRST:
+LEITURA OBRIGATÓRIA
 - docs/continuity/BACKUP_HANDOFF_2026-11-17.md
 - docs/technical/OPERATIONAL_IDENTITY_DESIGN_V1.md
 - docs/technical/SECURITY_BOUNDARIES.md
-
-IMPORTANT: not production-ready; no production data/server was changed.

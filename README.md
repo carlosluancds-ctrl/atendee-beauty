@@ -2,7 +2,7 @@
 
 **Repositório privado do produto Atendee Beauty.** Este repositório reúne as decisões de produto, arquitetura, segurança, documentação de continuidade e o Starter Kit técnico atual.
 
-> **Estado em 17/11/2026:** Starter Kit v7 validado em GitHub Actions no PostgreSQL 18.7: restore bloqueado, build Release, 15/15 checks de domínio e 9/9 checks de persistência/RLS/pool passaram (run 44166541043). A próxima fase é identidade operacional, MFA e contexto confiável de tenant. A aplicação ainda não está pronta para produção.
+> **Estado em 17/11/2026:** Starter Kit v7 + identidade operacional/MFA/contexto confiável de tenant validados em GitHub Actions no PostgreSQL 18.7 na branch `wip/operational-identity-v1` (run 44179994461): restore bloqueado, build Release, 15/15 checks de domínio, 9/9 de persistência/RLS/pool e 23/23 de identidade passaram. O trabalho ainda não foi incorporado à `main`; a aplicação não está pronta para produção.
 
 ## Conteúdo
 

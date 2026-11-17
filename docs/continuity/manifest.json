@@ -1,52 +1,56 @@
 {
-  "backup_version": "v21-wip-identity",
-  "updated_at": "2026-11-17T21:16:00Z",
+  "backup_version": "v22-identity-ci-passed",
+  "updated_at": "2026-11-17T21:28:08Z",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "wip/operational-identity-v1",
-  "snapshot_commit": "a74089cc1c325d1e7130bcaca6953797ee00d745",
-  "base_branch": "main",
-  "base_commit": "4464001",
-  "previous_security_gate": {
+  "tested_code_commit": "c815881200ea29831a6814aa45917fdf1cac3470",
+  "main_base_commit": "44640018f6fa596755d93f9aa0e5affb713f8344",
+  "identity_ci": {
+    "run_id": "44179994461",
+    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44179994461",
+    "status": "success",
+    "locked_restore": "passed",
+    "release_build": "passed; 0 warnings; 0 errors",
+    "domain_checks": "15/15",
+    "postgres_version": "18.7",
+    "persistence_rls_pool_checks": "9/9",
+    "identity_totp_tenant_context_checks": "23/23",
+    "database_cleanup": "passed",
+    "critical_tests_skipped": 0
+  },
+  "previous_postgres_gate": {
     "run_id": "44166541043",
     "status": "success",
     "domain_checks": "15/15",
-    "postgres_18_7_persistence_checks": "9/9",
-    "build_warnings": 0,
-    "build_errors": 0
-  },
-  "identity_stage": {
-    "status": "work_in_progress_not_production_ready",
-    "locked_restore": "passed locally",
-    "release_build": "passed locally with zero warnings/errors",
-    "domain_checks": "15/15 locally",
-    "postgres_identity_migration": "not yet executed in CI at snapshot time",
-    "identity_integration_checks": "not yet executed in PostgreSQL at snapshot time",
-    "github_actions_identity_run": "pending after branch push"
+    "persistence_checks": "9/9"
   },
   "implemented": [
-    "ASP.NET Core Identity operational store in identity schema",
-    "Separate platform admin boundary (not implemented yet)",
-    "One operational identity to one salon DB constraint",
+    "ASP.NET Core Identity operational store",
+    "Separate platform admin identity boundary",
+    "Single-salon operational user database constraint",
     "Unique normalized email",
-    "Server-side tenant membership resolution via restricted SECURITY DEFINER function",
-    "Auth DB role without direct SELECT to tenants or tenant_users",
-    "TOTP using RFC 6238 and Data Protection encryption at rest",
-    "Encrypted one-time recovery codes",
-    "Atomic replay protection in identity.TotpReplayGuards",
-    "Owner and Manager MFA enforcement with amr=mfa",
-    "Secure HttpOnly SameSite Strict __Host cookies",
-    "Antiforgery and auth endpoint IP rate limits",
-    "PostgreSQL identity integration test harness and CI steps"
+    "Trusted server-side tenant membership resolution",
+    "Restricted SECURITY DEFINER membership function",
+    "Auth database role without direct SELECT on tenants and tenant_users",
+    "TOTP RFC 6238",
+    "TOTP and recovery token encryption at rest",
+    "Atomic TOTP replay guard and concurrent replay test",
+    "Owner and Manager MFA enforcement and amr=mfa marker",
+    "Secure HttpOnly SameSite Strict cookies",
+    "Antiforgery validation and auth IP rate limits",
+    "PostgreSQL 18.7 migrations and integration CI"
   ],
-  "not_ready": [
-    "No production deployment",
-    "No public signup or invitation/email reset flows",
-    "No platform admin identity store",
-    "No WebAuthn/passkey migration",
-    "No complete HTTP/session/revocation/CSRF security integration suite",
-    "Non-Windows production Data Protection protector not configured",
-    "Distributed rate limiting and trusted proxy configuration not configured"
+  "not_production_ready": [
+    "Email provider / verified signup / invitation / password reset pending",
+    "Platform Admin store, MFA and break-glass pending",
+    "WebAuthn/passkey migration pending",
+    "HTTP end-to-end session and CSRF tests pending",
+    "Session revocation, account disablement and audit event pipeline pending",
+    "Non-Windows production Data Protection protector pending",
+    "Distributed rate limiting and trusted proxy configuration pending",
+    "Tenant status authorization matrix pending",
+    "No production deployment authorized or performed"
   ],
-  "next_blocking_step": "Push branch to private GitHub, run the PostgreSQL 18.7 CI including migration 002 and tests/Atendee.Identity.Checks; fix failures, require all tests pass without SKIP before proposing PR to main.",
+  "next_blocking_step": "Security review of identity SQL and authentication flow, then HTTP end-to-end tests for cookie/MFA/CSRF/session revocation/disablement/enumeration/audit before proposing PR to main.",
   "handoff_file": "docs/continuity/BACKUP_HANDOFF_2026-11-17.md"
 }

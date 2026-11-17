@@ -1,114 +1,119 @@
 ﻿# Atendee Beauty â€” backup e guia de retomada
 
-**Snapshot:** 17/11/2026, 21:16 UTC
-**PropÃ³sito:** carregar este arquivo em outra conta GPT e continuar o trabalho sem depender do histÃ³rico desta conversa.
+**Snapshot validado:** 17/11/2026, 21:28 UTC
+**Finalidade:** carregar este arquivo numa outra conta GPT e retomar o trabalho sem depender do histÃ³rico desta conversa.
 
-## Estado salvo
+## LocalizaÃ§Ã£o e checkpoint salvo
 
-- RepositÃ³rio GitHub privado: https://github.com/carlosluancds-ctrl/atendee-beauty
-- Branch de trabalho (nÃ£o Ã© `main`): `wip/operational-identity-v1`
-- Commit do snapshot: `a74089cc1c325d1e7130bcaca6953797ee00d745`
-- Branch base: `main`
-- Commit base da branch: `4464001` â€” registro do gate PostgreSQL 18.7
-- DiretÃ³rio no computador autorizado: `C:\Users\RDP\Documents\Atendee_Beauty_Repository_v18_Validation`
-- Todas as alteraÃ§Ãµes feitas nesta etapa foram commitadas localmente. Working tree estava limpa depois do commit.
-- A etapa de identidade ainda **nÃ£o foi publicada em main nem aprovada pelo CI PostgreSQL** quando este backup foi criado.
+- RepositÃ³rio privado: https://github.com/carlosluancds-ctrl/atendee-beauty
+- Branch: `wip/operational-identity-v1`
+- Commit de cÃ³digo testado: `c815881200ea29831a6814aa45917fdf1cac3470`
+- Base `main`: `44640018f6fa596755d93f9aa0e5affb713f8344`
+- DiretÃ³rio do projeto no computador autorizado: `C:\Users\RDP\Documents\Atendee_Beauty_Repository_v18_Validation`
+- Working tree estava limpa apÃ³s os commits/pushes desta sessÃ£o.
+- As mudanÃ§as de identidade estÃ£o numa branch separada. NÃ£o foram incorporadas em `main`.
 
-## ValidaÃ§Ãµes comprovadas
+## CI â€” identidade e persistÃªncia aprovadas
 
-### Gate anterior â€” aprovado em GitHub Actions
+<badge>GitHub Actions: SUCCESS</badge>
 
 Workflow: PostgreSQL 18 persistence integration
-Run: https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44166541043
-Commit: `6925d2add40544719b7cf16101665b333185b361`
+Run: https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44179994461
+Commit testado: `c815881200ea29831a6814aa45917fdf1cac3470`
 
-- .NET locked restore: PASS
-- Build Release: PASS, 0 warnings / 0 errors
-- Domain checks: 15/15
-- PostgreSQL 18.7 disposable container: PASS
-- EF Core + Npgsql + RLS + pool integration: 9/9
-- Cleanup do banco descartÃ¡vel: PASS
-- Nenhum teste de integraÃ§Ã£o foi ignorado nessa execuÃ§Ã£o.
+Resultados da execuÃ§Ã£o:
+- .NET locked restore: PASS.
+- Build Release: PASS, 0 warnings e 0 errors.
+- Domain checks: **15/15**.
+- PostgreSQL 18.7 (Debian 18.7-1.pgdg12+2): inicializaÃ§Ã£o e health check PASS.
+- Provisionamento de database, papÃ©is e migrations 001 + 002: PASS.
+- EF Core + Npgsql + RLS + pool: **9/9**.
+- Operational Identity + TOTP + tenant context: **23/23**.
+- RemoÃ§Ã£o do container e volume descartÃ¡veis: PASS.
+- Nenhuma etapa crÃ­tica de teste foi ignorada.
 
-A primeira tentativa (run 44166048437) falhou na criaÃ§Ã£o do schema porque `atendee_owner` nÃ£o possuÃ­a `CREATE` no database. Foi corrigida: o administrador cria o schema e atribui sua propriedade ao papel dedicado sem ampliar os privilÃ©gios do owner.
+### O que os 23 testes de identidade verificaram
 
-### Etapa de identidade â€” validaÃ§Ã£o local parcial
+- Mapeamento Identity schema v2, sem tabelas WebAuthn/passkey prematuras.
+- CriaÃ§Ã£o de login sintÃ©tico e validaÃ§Ã£o de senha certa/errada.
+- Segredo TOTP cifrado em repouso e descriptografado pelo Data Protection ao ser lido pelo Identity.
+- TOTP RFC 6238 vÃ¡lido; cÃ³digo rejeitado na segunda utilizaÃ§Ã£o.
+- Duas requisiÃ§Ãµes concorrentes com o mesmo intervalo TOTP: somente uma Ã© aceita.
+- Dez recovery codes; conteÃºdo cifrado no banco, uso Ãºnico e replay recusado.
+- Resolver retorna a Ãºnica associaÃ§Ã£o ativa do usuÃ¡rio.
+- Papel auth nÃ£o possui SELECT direto em `tenant_users` nem `tenants`.
+- FunÃ§Ã£o de resoluÃ§Ã£o nÃ£o retorna membership sem identidade definida transacionalmente.
+- Header/query/claims antigos nÃ£o conseguem substituir o tenant confiÃ¡vel.
+- Ator e papel vÃªm do registro persistido no servidor.
+- Constraint do banco impede a mesma identidade de entrar em um segundo salÃ£o.
 
-Executado depois da implementaÃ§Ã£o inicial:
+## HistÃ³rico dos bloqueios corrigidos
 
-- `dotnet restore Atendee.sln --locked-mode`: PASS
-- `dotnet build Atendee.sln --no-restore --configuration Release`: PASS, 0 warnings / 0 errors
-- `Atendee.Domain.Checks`: PASS, 15/15
+- Run `44178869368`: o teste nÃ£o passava o novo `UserManager` ao middleware. Assinatura/claim MFA do teste corrigidas.
+- Run `44179269656`: o container de testes nÃ£o registrava serviÃ§os de autenticaÃ§Ã£o necessÃ¡rios ao `SignInManager`. `AddAuthentication().AddIdentityCookies()` foi adicionado ao setup de teste.
+- Run `44179605495`: helper de teste criava o segundo salÃ£o sem fazer `SET LOCAL ROLE atendee_owner`. Corrigido.
+- Run `44179994461`: passou integralmente, com todos os testes acima.
 
-**Ainda nÃ£o comprovado:** executar a migration `002_create_operational_identity.sql` num PostgreSQL 18.7 descartÃ¡vel, correr `Atendee.Identity.Checks` de ponta a ponta e obter CI verde para esta branch. O workflow foi ampliado para esse teste, mas o novo run nÃ£o tinha sido executado/inspecionado quando o snapshot foi feito.
-
-## O que foi implementado nesta branch
+## O que foi salvo nesta branch
 
 1. ASP.NET Core Identity para contas operacionais dos salÃµes no schema PostgreSQL `identity`.
-2. SeparaÃ§Ã£o conceitual do Administrador global Atendee: nenhuma identidade global foi criada dentro do store operacional.
-3. RestriÃ§Ã£o de um usuÃ¡rio operacional por um Ãºnico salÃ£o (`UNIQUE(identity_user_id)`).
-4. Unicidade global do email normalizado.
-5. ResoluÃ§Ã£o server-side do tenant a cada requisiÃ§Ã£o usando o `NameIdentifier` do cookie autenticado.
-6. FunÃ§Ã£o PostgreSQL `SECURITY DEFINER` sem parÃ¢metro de tenant/usuÃ¡rio, usando contexto `app.identity_user_id` limitado Ã  transaÃ§Ã£o.
-7. Papel `atendee_auth_login` sem SELECT direto em `atendee.tenant_users` e `atendee.tenants`; sÃ³ pode executar a funÃ§Ã£o de consulta restrita.
-8. TOTP RFC 6238, chave e recovery codes protegidos com ASP.NET Core Data Protection no EF value converter.
-9. ProteÃ§Ã£o contra replay TOTP numa tabela separada `identity.TotpReplayGuards`, com UPDATE condicional atÃ´mico.
-10. Owner e Manager exigem TOTP. A sessÃ£o normal precisa conter `amr=mfa`; o middleware verifica isso tambÃ©m quando o usuÃ¡rio Ã© promovido a papel privilegiado.
-11. Cookies `Secure`, `HttpOnly`, `SameSite=Strict`, prefixo `__Host-`; setup MFA em cookie separado e curto.
-12. Antiforgery global para mÃ©todos mutÃ¡veis e rate limit por IP para rotas de autenticaÃ§Ã£o.
-13. MigraÃ§Ã£o SQL manual `002_create_operational_identity.sql` e runner de integraÃ§Ã£o `tests/Atendee.Identity.Checks`.
-14. Workflow GitHub atualizado para provisionar papÃ©is separados, executar as duas migrations e rodar os testes de identidade.
+2. SeparaÃ§Ã£o do Administrador global Atendee: nenhuma identidade global foi criada dentro do store operacional.
+3. RestriÃ§Ã£o de um usuÃ¡rio operacional para exatamente um salÃ£o (`UNIQUE(identity_user_id)`).
+4. Email normalizado globalmente Ãºnico.
+5. Tenant resolvido no servidor a cada requisiÃ§Ã£o pelo `NameIdentifier` do cookie.
+6. FunÃ§Ã£o PostgreSQL `SECURITY DEFINER` sem argumento de tenant/usuÃ¡rio, usando contexto `app.identity_user_id` local Ã  transaÃ§Ã£o.
+7. Papel `atendee_auth_login` sem SELECT direto em `tenant_users` ou `tenants`, com acesso apenas Ã  funÃ§Ã£o controlada.
+8. TOTP RFC 6238, segredo e recovery codes cifrados com ASP.NET Core Data Protection no EF value converter.
+9. Anti-replay de TOTP em `identity.TotpReplayGuards`, com atualizaÃ§Ã£o condicional atÃ´mica.
+10. Owner/Manager exigem MFA; sessÃ£o normal inclui `amr=mfa`, tambÃ©m verificado apÃ³s promoÃ§Ã£o de papel.
+11. Cookies `Secure`, `HttpOnly`, `SameSite=Strict`, prefixo `__Host-`; cookie temporÃ¡rio separado para setup MFA.
+12. Antiforgery para mÃ©todos mutÃ¡veis e rate limits por IP nas rotas de autenticaÃ§Ã£o.
+13. Migration manual `002_create_operational_identity.sql`, teste de integraÃ§Ã£o `Atendee.Identity.Checks` e CI PostgreSQL 18.7 ampliado.
 
 ## Arquivos principais
 
-- `src/Atendee.Api/Program.cs` â€” configuraÃ§Ã£o da API, cookies, CSRF, limites e pipeline.
-- `src/Atendee.Api/Authentication/OperationalAuthenticationEndpoints.cs` â€” login, desafio MFA, inscriÃ§Ã£o MFA, logout e perfil autenticado.
-- `src/Atendee.Infrastructure/Identity/AtendeeIdentityDbContext.cs` â€” EF Identity e criptografia dos valores de token.
-- `src/Atendee.Infrastructure/Identity/OperationalTotpTokenProvider.cs` â€” TOTP e proteÃ§Ã£o anti-replay.
-- `src/Atendee.Infrastructure/Identity/PostgresTenantMembershipResolver.cs` â€” resoluÃ§Ã£o restrita do vÃ­nculo.
-- `src/Atendee.Infrastructure/Web/TenantContextMiddleware.cs` â€” tenant/role confiÃ¡veis por requisiÃ§Ã£o.
-- `src/Atendee.Infrastructure/Web/TrustedRequestContext.cs` â€” contexto de ator e tenant scoped.
+- `src/Atendee.Api/Program.cs` â€” cookies, CSRF, rate limiting e pipeline.
+- `src/Atendee.Api/Authentication/OperationalAuthenticationEndpoints.cs` â€” login, MFA, logout e perfil.
+- `src/Atendee.Infrastructure/Identity/AtendeeIdentityDbContext.cs` â€” EF Identity e criptografia dos tokens.
+- `src/Atendee.Infrastructure/Identity/OperationalTotpTokenProvider.cs` â€” TOTP e anti-replay.
+- `src/Atendee.Infrastructure/Identity/PostgresTenantMembershipResolver.cs` â€” resolver restrito.
+- `src/Atendee.Infrastructure/Web/TenantContextMiddleware.cs` â€” resoluÃ§Ã£o de contexto por requisiÃ§Ã£o.
+- `src/Atendee.Infrastructure/Web/TrustedRequestContext.cs` â€” contexto scoped de ator/tenant.
 - `db/security/001_roles_template.sql` â€” papÃ©is do banco.
-- `db/migrations/002_create_operational_identity.sql` â€” schema Identity, memberships e funÃ§Ã£o de resoluÃ§Ã£o.
-- `tests/Atendee.Identity.Checks/Program.cs` â€” testes para criptografia, TOTP, recovery codes, replay concorrente, privilÃ©gios e contexto.
-- `.github/workflows/postgres18-persistence.yml` â€” CI PostgreSQL 18.7 com as novas verificaÃ§Ãµes.
-- `docs/technical/OPERATIONAL_IDENTITY_DESIGN_V1.md` â€” desenho de arquitetura e riscos.
-- `docs/technical/SECURITY_BOUNDARIES.md` â€” limites de seguranÃ§a atuais.
+- `db/migrations/002_create_operational_identity.sql` â€” Identity, membership e funÃ§Ã£o SQL.
+- `tests/Atendee.Identity.Checks/Program.cs` â€” 23 checks de integraÃ§Ã£o de identidade.
+- `.github/workflows/postgres18-persistence.yml` â€” CI completa com PostgreSQL 18.7.
+- `docs/technical/OPERATIONAL_IDENTITY_DESIGN_V1.md` â€” arquitetura, limites e riscos.
+- `docs/technical/SECURITY_BOUNDARIES.md` â€” limites da seguranÃ§a atual.
 
-## Riscos/limitaÃ§Ãµes para nÃ£o esquecer
+## Limites ainda existentes â€” nÃ£o declarar produÃ§Ã£o pronta
 
-- NÃ£o considerar a aplicaÃ§Ã£o pronta para produÃ§Ã£o.
-- NÃ£o fazer deploy, nÃ£o criar dados reais e nÃ£o habilitar signup pÃºblico.
-- Email verification, password-reset, convite e envio de recuperaÃ§Ã£o dependem da escolha de um provedor de e-mail; esses fluxos permanecem desligados.
-- Administrador Atendee global permanece separado e nÃ£o foi implementado ainda.
-- WebAuthn/passkeys foram adiados; Identity Schema v2 foi selecionado explicitamente e a migration atual nÃ£o inclui tabelas de passkey.
-- Data Protection fora de Development requer key ring persistente e proteÃ§Ã£o explÃ­cita. O cÃ³digo atual sÃ³ permite produÃ§Ã£o Windows com DPAPI; Linux falha fechado atÃ© configurar proteÃ§Ã£o via certificado/KMS/managed key.
-- O rate limit da API estÃ¡ em memÃ³ria e por IP. Para produÃ§Ã£o multi-instÃ¢ncia/proxy, configurar forwarded headers confiÃ¡veis e limiter distribuÃ­do.
-- Middleware sÃ³ bloqueia tenant em `Closed`; implementar a matriz de polÃ­ticas para PendingVerification, SetupRequired, Trial, Active, PastDue, Suspended, Closing e Closed antes de criar endpoints de negÃ³cio.
-- Completar testes de sessÃ£o/revogaÃ§Ã£o, cookies, CSRF, MFA bypass, disablement, enumeraÃ§Ã£o, audit log e autorizaÃ§Ã£o por papel.
-- Custom PostgreSQL GUCs podem ser definidos pela prÃ³pria sessÃ£o. `app.identity_user_id` Ã© confiÃ¡vel apenas porque o backend o deriva do cookie autenticado, usa SQL parametrizado e define o valor transaction-local. NÃ£o Ã© defesa contra SQL injection ou execuÃ§Ã£o arbitrÃ¡ria de SQL.
-- Rever o fluxo de rotaÃ§Ã£o/revogaÃ§Ã£o de sessÃ£o e os testes de MFA com cuidado antes de deploy.
+- CI verde valida os testes existentes, mas nÃ£o Ã© certificaÃ§Ã£o de seguranÃ§a nem aprovaÃ§Ã£o de deploy.
+- NÃ£o fazer deploy nem usar dados reais nesta etapa.
+- Signup pÃºblico, verificaÃ§Ã£o de email, convites e reset de senha continuam desligados atÃ© escolha de provedor de e-mail e desenho do fluxo.
+- Administrador global Atendee permanece separado e ainda nÃ£o foi implementado.
+- WebAuthn/passkeys foram adiados para migration futura; Identity Schema v2 estÃ¡ explicitamente selecionado.
+- Data Protection fora de Development exige key ring persistente/protegido. O cÃ³digo atual permite produÃ§Ã£o Windows com DPAPI; nÃ£o-Windows falha fechado atÃ© configurar proteÃ§Ã£o por certificado/KMS/serviÃ§o gerenciado.
+- Rate limit Ã© em memÃ³ria e por IP; produÃ§Ã£o multi-instÃ¢ncia/proxy requer trusted forwarded headers e limiter distribuÃ­do.
+- Implementar matriz de acesso por status do tenant antes de endpoints de negÃ³cio: PendingVerification, SetupRequired, Trial, Active, PastDue, Suspended, Closing e Closed.
+- Completar testes HTTP de cookie/session, CSRF, revogaÃ§Ã£o, conta desativada, MFA bypass, enumeraÃ§Ã£o, auditoria e autorizaÃ§Ã£o por papel.
+- O GUC PostgreSQL pode ser definido por uma sessÃ£o SQL. `app.identity_user_id` sÃ³ Ã© confiÃ¡vel porque o backend o deriva do cookie autenticado, usa SQL parametrizado e define contexto transaction-local. NÃ£o protege contra SQL injection/execuÃ§Ã£o arbitrÃ¡ria.
+- Rever rotaÃ§Ã£o/revogaÃ§Ã£o de sessÃµes e procedimentos de recuperaÃ§Ã£o MFA antes de produÃ§Ã£o.
 
-## PrÃ³xima sequÃªncia recomendada
+## PrÃ³ximos passos recomendados
 
-1. Verificar que o branch/commit Ã© exatamente `wip/operational-identity-v1` / `a74089c`.
-2. Rodar o workflow GitHub Actions da branch e acompanhar o run.
-3. Corrigir erros de migration, permissÃµes ou integraÃ§Ã£o atÃ© todos os checks passarem sem SKIP.
-4. Examinar os logs de teste e verificar especialmente:
-   - TOTP secreto e recovery codes cifrados em repouso;
-   - mesmo cÃ³digo TOTP nÃ£o pode ser reutilizado nem por duas requisiÃ§Ãµes concorrentes;
-   - papel auth nÃ£o lÃª diretamente `tenants` nem `tenant_users`;
-   - funÃ§Ã£o nÃ£o retorna membership sem contexto local autenticado;
-   - contexto nÃ£o pode ser trocado por header, query string ou claims antigas;
-   - usuÃ¡rio nÃ£o pode ter segunda associaÃ§Ã£o a outro salÃ£o;
-   - o pool de tamanho 1 nÃ£o retÃ©m o GUC entre transaÃ§Ãµes.
-5. Depois de CI verde, pedir revisÃ£o do cÃ³digo e dos SQLs. Somente entÃ£o abrir PR para `main`; nÃ£o fazer merge automÃ¡tico.
-6. Implementar testes da camada HTTP, sessÃ£o, CSRF, revogaÃ§Ã£o, MFA bypass e auditoria.
-7. Selecionar provedor de e-mail antes de ativar verificaÃ§Ã£o, convites e reset de senha.
+1. Confirmar checkout da branch `wip/operational-identity-v1` no commit `c815881200ea29831a6814aa45917fdf1cac3470`.
+2. Fazer revisÃ£o humana do fluxo login/MFA/cookies e dos SQLs; CI jÃ¡ passou.
+3. Acrescentar testes HTTP end-to-end para antiforgery, cookies, MFA setup/challenge, logout, revogaÃ§Ã£o, desativaÃ§Ã£o e enumeraÃ§Ã£o.
+4. Implementar a matriz de autorizaÃ§Ã£o por role e tenant status, e auditoria de eventos.
+5. Definir provedor de email e sÃ³ depois ativar email verification, password reset e invitations.
+6. Implementar store/fluxo separado de Platform Admin, MFA forte e break-glass auditado.
+7. Rever DP/KMS, backup/restore, forwarded headers, CORS e rate limiter distribuÃ­do antes de qualquer produÃ§Ã£o.
+8. SÃ³ depois abrir PR da branch para `main`; nÃ£o fazer merge automÃ¡tico nem deploy.
 
-## InstruÃ§Ã£o para a prÃ³xima conta GPT
+## InstruÃ§Ã£o pronta para a prÃ³xima conta GPT
 
-> Abra este guia, conecte ao repositÃ³rio privado `carlosluancds-ctrl/atendee-beauty` se a conta tiver acesso, faÃ§a checkout de `wip/operational-identity-v1` no commit `a74089cc1c325d1e7130bcaca6953797ee00d745`, e continue a validaÃ§Ã£o da migration/CI PostgreSQL 18.7. NÃ£o sobrescreva `main`, nÃ£o faÃ§a deploy, nÃ£o habilite cadastro pÃºblico e nÃ£o assuma que a etapa de identidade estÃ¡ aprovada. Leia primeiro `docs/technical/OPERATIONAL_IDENTITY_DESIGN_V1.md` e este guia. O prÃ³ximo resultado que precisa ser obtido Ã© CI completo verde sem SKIP.
+> Leia este guia e `docs/technical/OPERATIONAL_IDENTITY_DESIGN_V1.md`. Conecte ao repositÃ³rio privado `carlosluancds-ctrl/atendee-beauty`, faÃ§a checkout de `wip/operational-identity-v1` no commit `c815881200ea29831a6814aa45917fdf1cac3470` e confira a CI `44179994461`. O gate de persistÃªncia e identidade estÃ¡ verde (15 domÃ­nio, 9 persistÃªncia, 23 identidade). Continue com revisÃ£o de seguranÃ§a e testes HTTP/sessÃ£o/CSRF/revogaÃ§Ã£o/auditoria. Mantenha o trabalho em branch separada, nÃ£o sobrescreva `main`, nÃ£o habilite signup e nÃ£o faÃ§a deploy.
 
 ---
-Este arquivo registra o estado de trabalho em 17/11/2026. Ele nÃ£o Ã© um certificado de seguranÃ§a nem substitui testes/revisÃ£o.
+Backup criado em 17/11/2026. Este documento Ã© um handoff de trabalho e nÃ£o substitui revisÃ£o de seguranÃ§a independente.
