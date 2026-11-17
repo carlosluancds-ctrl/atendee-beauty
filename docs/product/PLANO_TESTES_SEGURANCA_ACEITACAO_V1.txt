@@ -1,0 +1,136 @@
+PLANO DE TESTES DE SEGURANÇA E ACEITAÇÃO — ATENDEE BEAUTY
+Versão: v1 | Data: 17/11/2026
+Estado: plano de testes; nenhum destes testes foi executado ainda.
+
+1. REGRAS DE PUBLICAÇÃO
+- Nenhum defeito crítico ou alto aberto pode ser aceito para produção com dados reais.
+- Falha em isolamento entre tenants é bloqueador absoluto.
+- Falha em autenticação/MFA, autorização, ledger, agenda, webhooks ou backups é bloqueador quando expõe dados ou altera estado indevidamente.
+- Defeitos médios exigem análise documentada, responsável, prazo e mitigação.
+- Testes devem rodar em CI sempre que aplicável, em staging isolado antes de cada release.
+- Testes ofensivos só em ambientes autorizados, com dados sintéticos e janela aprovada.
+
+2. AMBIENTE E DADOS DE TESTE
+Preparar tenants A e B, mais um tenant de controle, com:
+- Proprietário, gerente, recepcionista e profissional em cada salão.
+- Clientes, serviços, profissionais, horários, mensagens, créditos e campanhas sintéticos.
+- IDs/UUIDs cruzados conhecidos pelos testes para provar que a segurança não depende de IDs difíceis de adivinhar.
+- Administrador global separado.
+- Segredos fictícios; nunca usar tokens ou dados reais em testes automatizados.
+
+3. TESTES DE ISOLAMENTO MULTIEMPRESA — BLOQUEADORES
+RLS e banco:
+- Sem tenant context: SELECT retorna zero linhas ou é negado conforme política; INSERT/UPDATE/DELETE não atravessam o escopo.
+- Tenant A não lê, altera ou apaga linhas de B, mesmo conhecendo IDs.
+- INSERT com tenant_id de B via API falha.
+- UPDATE não consegue mover uma linha de A para B.
+- Verificar todas as tabelas classificadas tenant-scoped, não apenas customers.
+- Confirmar que role do tráfego normal não é superuser, não tem BYPASSRLS e não é owner das tabelas.
+- Testar FORCED RLS e políticas SELECT/INSERT/UPDATE/DELETE.
+- Reutilizar conexões no pool alternando A→B→A e comprovar que contexto transaction-local não vaza.
+
+API e aplicação:
+- Repetir testes com UUID válido de outro tenant em GET/PATCH/DELETE/export/search/report.
+- Testar IDOR/BOLA em nested routes, bulk endpoints, filtros e parâmetros de paginação.
+- Testar mass assignment de tenant_id, role, owner_id, price, credit_balance e campos de estado.
+- Testar cache com duas sessões e mesma chave de recurso; não pode retornar dados do outro tenant.
+- Testar relatórios, autocomplete, contagem, agregações e buscas globais.
+- Testar notificações e e-mails para evitar endereço ou conteúdo de outro tenant.
+
+Arquivos, filas e operações assíncronas:
+- Tentar ler, substituir ou excluir arquivo de outro tenant, inclusive por path traversal.
+- Verificar autorização antes de gerar URL assinada e expiração curta.
+- Inserir evento em fila com tenant_id manipulado; consumer deve validar produtor/mapeamento e negar.
+- Testar retry, dead-letter e reprocessamento sem cruzar tenant.
+- Testar restore de um tenant em ambiente isolado sem importar dados de outros.
+
+4. TESTES DE PAPÉIS E AUTORIZAÇÃO
+- Matriz de teste para todas as rotas e ações por papel.
+- Recepcionista não acessa billing, créditos, segredos, usuários, permissões nem exportação em massa.
+- Profissional não acessa agenda de outro profissional, conversa não atribuída ou cliente fora de atendimento permitido.
+- Gerente não concede papel igual/superior, não troca titularidade nem administra conta global.
+- Proprietário só atua no próprio tenant.
+- Administrador Atendee não lê conversas/fichas sem break-glass.
+- Break-glass exige justificativa, escopo, expiração, aprovação conforme criticidade, notificação e auditoria.
+- Desativação de usuário revoga sessões e convites; remoção de papel retira acesso sem exigir logout manual.
+
+5. TESTES DE LOGIN, SESSÃO E CONTA
+- Login, MFA e recuperação não revelam se usuário existe.
+- Rate limit de login/recuperação e proteção contra credential stuffing.
+- Token de convite/reset expira, é de uso único, revogável e não aparece nos logs.
+- Cookies Secure, HttpOnly, SameSite, CSRF e rotação de sessão.
+- Logout, troca de senha, MFA reset, desativação e alteração de papel revogam sessões relevantes.
+- Testar MFA bypass por endpoint alternativo e estados inconsistentes.
+- Reautenticação nas ações de alto risco.
+
+6. TESTES DE AGENDA E INTEGRIDADE FINANCEIRA
+- Dois pedidos simultâneos para o mesmo profissional/intervalo: apenas um pode confirmar quando houver conflito.
+- Repetição da mesma Idempotency-Key com payload igual retorna resultado original.
+- Mesma key com payload diferente retorna conflito.
+- Timeouts não devem gerar reserva/cobrança duplicada.
+- Cancelamento/remarcação preserva histórico e registra ator/motivo.
+- Duração, buffer, fuso horário, horário de verão e exceções de disponibilidade são testados.
+- Ledger não admite UPDATE/DELETE por conta operacional; correção ocorre por lançamento compensatório.
+- Compra/consumo de crédito não duplica com repetição; saldo reconcilia com lançamentos.
+- Não realizar excedente automático sem consentimento configurado.
+
+7. TESTES DE WHATSAPP, WEBHOOKS E IA
+- Webhook sem assinatura válida é rejeitado.
+- Evento repetido é processado uma única vez.
+- Evento fora de ordem não corrompe o estado; timeout resulta em reconciliação, não reenvio cego.
+- phone_number_id mapeia para tenant no servidor; tenant_id de payload é ignorado.
+- Token não aparece em logs, telas, exportações ou mensagens de erro.
+- IA não pode executar SQL, código ou ferramentas não allowlisted.
+- Prompt injection do cliente/documentos não altera instruções de sistema nem atravessa tenant.
+- IA não inventa horário, preço ou serviço; confirma somente resultado do backend.
+- Falha de IA/provedor aciona fallback humano sem fabricar sucesso.
+- Ferramenta de cancelamento/remarcação/campanha exige confirmação segundo política.
+
+8. TESTES DE API E APLICAÇÃO
+- Validação contra OWASP ASVS 5.0.0 e OWASP API Security Top 10.
+- SAST, análise de dependências/SCA e segredo em repositório em cada build.
+- DAST em staging, revisão de configuração, headers, TLS e CORS.
+- Testes de SQL injection, XSS, CSRF, SSRF, path traversal, upload malicioso e open redirect.
+- Rate limits, paginação e tamanho de payload; resposta 429 e Retry-After onde aplicável.
+- Inventário de endpoints, webhooks, versões e dependências.
+- Revisão de autorização em propriedades de objeto para evitar mass assignment.
+
+9. TESTES DE INFRAESTRUTURA, BACKUP E RECUPERAÇÃO
+- Banco não exposto à internet; firewall permite somente portas necessárias.
+- Acesso administrativo protegido por MFA e caminho restrito (VPN/bastion ou equivalente).
+- TLS válido em todos endpoints externos; certificados renovam sem indisponibilidade.
+- Segredos separados por ambiente e ausentes em código, logs e ZIPs.
+- Backup criptografado fora do servidor principal.
+- Restauração completa em ambiente isolado e medição de tempo.
+- Restauração por tenant com prova de não contaminação de outros.
+- Simular perda do servidor e indisponibilidade de provedor externo.
+- Monitorar disco, RAM, CPU, conexões, filas, erros e taxa de falhas.
+- Verificar alertas de consumo anormal e uso de recursos por tenant.
+
+10. TESTES DE CARGA E RESILIÊNCIA
+- Carga média, pico e burst de acesso/agendamento e mensagens.
+- Um tenant abusivo não pode consumir todos os workers/conexões ou orçamento de IA.
+- Testar limites e backpressure de filas, conexões e provedores.
+- Testar timeout, circuit breaker e indisponibilidade transitória.
+- Testar recuperação após reinício controlado do serviço/worker.
+- Definir metas RPO/RTO com base no negócio e validar em simulado.
+
+11. EVIDÊNCIAS E RELATÓRIO
+Cada execução registra:
+- Versão/commit/build testado e ambiente.
+- Casos executados, resultado, timestamp e responsável.
+- Evidência sanitizada; nunca incluir senhas, tokens, dados reais de cliente ou conteúdo privado.
+- Defeitos classificados Critical/High/Medium/Low, impacto, caminho de reprodução e correção.
+- Reteste de correção e regressão associada.
+- Aprovação formal para release.
+
+12. PORTÃO DE PRODUÇÃO
+Antes de receber dados reais de salões:
+- Todos os testes críticos de isolamento e autorização aprovados.
+- Nenhuma vulnerabilidade crítica/alta aberta.
+- Threat model atualizado.
+- Backups e restauração comprovados.
+- MFA ativo para papéis privilegiados.
+- Segredos protegidos, observabilidade e alertas ativos.
+- Revisão independente de segurança (pentest) e correção das descobertas críticas/altas.
+- Política de privacidade, retenção, termos e processos de titular revisados juridicamente.

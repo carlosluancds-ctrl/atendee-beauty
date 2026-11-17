@@ -1,0 +1,95 @@
+MODELO DE DADOS MULTIEMPRESA — ATENDEE BEAUTY
+Versão: proposta técnica inicial v1
+Data: 17/11/2026
+Status: desenho lógico preliminar; deve ser refinado em migrações e revisado antes de produção.
+
+DECISÕES ESTRUTURAIS
+- PostgreSQL como banco relacional principal, sujeito à validação da hospedagem.
+- Aplicação compartilhada e banco compartilhado com tenant_id nas tabelas pertencentes a salões.
+- Row-Level Security (RLS) como defesa adicional, além da autorização no backend.
+- Conta operacional vinculada a exatamente um tenant; sem relação muitos-para-muitos usuário-salão na primeira versão.
+- Identidade do Administrador Atendee separada das identidades operacionais dos salões.
+- Chaves primárias UUID; timestamps UTC; valores financeiros em unidades monetárias inteiras (centavos), nunca float.
+- Soft delete/arquivamento para dados operacionais; exclusão definitiva somente em fluxo controlado de retenção/privacidade.
+- Todas as tabelas tenant-scoped devem ter tenant_id NOT NULL e índices iniciados por tenant_id.
+- Relações entre registros tenant-scoped devem validar tenant_id em conjunto com o ID, evitando referências cruzadas.
+
+CLASSIFICAÇÃO DE DADOS
+1. Globais da plataforma (sem tenant_id): planos, catálogo de permissões, versões de aplicação, configurações globais não secretas, identidades administrativas globais.
+2. Pertencentes a um salão (tenant_id obrigatório): usuários operacionais, clientes, serviços, profissionais, agenda, conversas, integrações, consumo, créditos, assinatura do salão, preferências, relatórios e auditoria do tenant.
+3. Pertencentes a um usuário dentro do salão: preferências pessoais, sessões e notificações, sempre ligadas ao tenant e ao usuário.
+4. Segredos: armazenados em cofre/serviço de segredos ou campo criptografado com chave gerenciada fora do banco; nunca em texto puro.
+
+ENTIDADES GLOBAIS
+- platform_admins: identidade administrativa global, status, MFA obrigatório, timestamps.
+- tenants: salão/empresa, nome, slug, status (trial/active/suspended/closing/closed), fuso horário, idioma, país, timestamps.
+- plans: planos e limites comerciais globais.
+- permissions: catálogo global de permissões atômicas.
+- platform_audit_events: auditoria global administrativa e de segurança.
+- platform_settings: configurações globais sem segredos de cliente.
+
+ENTIDADES TENANT-SCOPED
+- tenant_users: usuário operacional, tenant_id, nome, email/login, password_hash ou referência ao provedor de identidade, status, último acesso. Regra: cada usuário operacional tem um único tenant_id. Email/login com unicidade global na primeira versão para evitar ambiguidade de identidade.
+- roles: papéis de salão (owner, manager, receptionist, professional), tenant_id quando customizáveis; papéis base podem ser templates globais.
+- user_role_assignments: usuário, tenant_id, papel; proibir combinações incompatíveis e impedir papel global.
+- tenant_invitations: convites com token armazenado como hash, expiração, uso único e tenant_id.
+- tenant_settings: preferências e configurações do salão.
+- customers: clientes do salão, contatos normalizados, consentimentos, status, timestamps.
+- customer_privacy_requests: solicitações de acesso, correção, exportação e exclusão, status e trilha.
+- professionals: vínculo entre usuário profissional e perfil profissional; especialidades e disponibilidade.
+- services: serviços, duração, preço em centavos, buffer, status.
+- professional_services: associação entre profissional e serviços que executa.
+- business_hours: horários regulares do salão.
+- professional_availability: disponibilidade e exceções por profissional.
+- appointments: cliente, profissional, serviço, início/fim UTC, timezone de exibição, status, origem, created_by; restrições contra conflito.
+- appointment_events: histórico append-only de criação, remarcação, cancelamento, check-in e conclusão.
+- conversations: cliente, canal, estado, responsável e metadados.
+- messages: conversa, direção, provedor, identificador externo, status e timestamps; política de retenção definida.
+- whatsapp_connections: tenant, identificadores públicos da conexão, estado e referência ao segredo; nunca token em texto puro.
+- webhook_events: tenant quando identificável, provedor, event_id, payload mínimo/normalizado, status, received_at, processed_at; deduplicação por provedor + event_id.
+- ai_settings: instruções e limites por tenant, versão e aprovador.
+- ai_usage_events: tenant, modelo, unidades, custo estimado/real, correlação e data; sem guardar prompts completos por padrão.
+- plans/subscriptions: plano, ciclo, estado e vínculo com tenant; catálogo global separado de subscription tenant-scoped.
+- credit_ledger: entradas e saídas imutáveis de créditos, origem, referência, autor e saldo calculado; ajustes por lançamento compensatório, nunca editar histórico.
+- usage_ledger: eventos de consumo imutáveis por categoria/provedor, correlação e custo.
+- invoices/payments: documentos e eventos de pagamento do tenant, IDs externos e estado; dados de cartão não armazenados.
+- campaigns: campanhas, público elegível, aprovação e estado.
+- consent_records: finalidade, canal, texto/versão, origem, data e retirada do consentimento.
+- audit_events: eventos de segurança e operação do tenant, ator, ação, recurso, resultado, timestamp, request_id e metadados mínimos.
+- files_metadata: metadados e referência ao armazenamento de objetos privado, tenant_id, classificação e política de retenção; objetos fora de pastas públicas.
+- support_tickets: solicitações de suporte do tenant; conteúdo limitado e acesso controlado.
+
+REGRAS DE INTEGRIDADE E ISOLAMENTO
+- Criar chaves estrangeiras compostas (tenant_id, resource_id) entre tabelas do mesmo tenant.
+- Índices únicos tenant-scoped: (tenant_id, normalized_phone) para clientes, com regras para números compartilhados/ausentes; (tenant_id, provider, external_id) para objetos externos.
+- Webhooks: chave única (provider, event_id) para impedir processamento duplicado.
+- Agenda: impedir sobreposição de horários por profissional com constraint de exclusão sobre intervalos (quando aplicável) e transação; considerar buffers e serviços simultâneos permitidos explicitamente.
+- Dinheiro: armazenar centavos em BIGINT/NUMERIC inteiro apropriado, moeda explícita ISO 4217.
+- Ledger: append-only; correções por lançamento inverso e referência ao lançamento original.
+- RLS em toda tabela tenant-scoped; política SELECT/INSERT/UPDATE/DELETE baseada no tenant confiável definido pelo backend.
+- A conexão da aplicação nunca usa superuser, BYPASSRLS ou papel proprietário das tabelas.
+- Contexto do tenant configurado por transação e limpo ao final; testar pool de conexões para impedir vazamento de contexto.
+- Jobs e filas carregam tenant_id validado e revalidam o estado do tenant no processamento.
+- Armazenamento de arquivos privado, URLs assinadas de curta duração e validação de autorização antes de emitir URL.
+- Cache deve incluir tenant_id na chave; preferir não cachear dados sensíveis até haver estratégia comprovada.
+- Logs não devem conter tokens, conteúdo completo de mensagens ou dados pessoais desnecessários.
+
+FLUXOS CRÍTICOS
+1. Cadastro de salão: criar tenant em estado pending; verificar e-mail do proprietário; aceitar termos; ativar somente após etapas de segurança e cobrança configuradas.
+2. Convite de funcionário: proprietário/gerente autorizado gera token aleatório; banco guarda hash; token expira e é de uso único; ao aceitar, cria usuário no tenant do convite; nunca permitir escolher tenant no navegador.
+3. Agendamento: validar cliente, profissional, serviço, horário e tenant na mesma transação; verificar disponibilidade e conflito no banco; registrar evento.
+4. WhatsApp webhook: validar assinatura, registrar event_id, deduplicar, mapear conexão para tenant no servidor, processar em fila idempotente.
+5. Créditos: cada recarga, concessão, consumo, estorno e expiração gera lançamento no ledger; saldo é derivado dos lançamentos.
+6. Suporte: acesso a dados privados negado por padrão; fluxo break-glass temporário, justificado, auditado e notificado.
+7. Encerramento de salão: suspender novas operações, permitir exportação legítima, aplicar política de retenção e exclusão; preservar registros legais/auditáveis conforme obrigação aplicável.
+
+PONTOS A VALIDAR ANTES DA IMPLEMENTAÇÃO
+- Provedor de autenticação e política de MFA.
+- Stack backend e framework compatíveis com hospedagem final.
+- Estratégia de migração e testes de RLS em pool de conexões.
+- Regras de conflito de agenda, duração, buffer, recorrência e múltiplas unidades.
+- Política de retenção de conversas, mensagens, fichas e logs.
+- Modelo jurídico/operacional de controlador e operador de dados, consentimento e solicitações de titulares.
+- Modelo de faturamento Meta/Cloud API e tratamento dos segredos.
+- RPO/RTO, frequência de backup, retenção e local de cópia externa.
+- Política de acesso break-glass e aprovação dupla.

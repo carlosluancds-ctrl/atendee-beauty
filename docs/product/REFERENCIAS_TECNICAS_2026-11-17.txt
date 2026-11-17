@@ -1,0 +1,19 @@
+REFERÊNCIAS TÉCNICAS CONSULTADAS — 17/11/2026
+
+1. Microsoft .NET Support Policy
+https://dotnet.microsoft.com/en-us/platform/support/policy
+A página consultada lista .NET 10 como LTS ativo, com fim de suporte em novembro de 2028.
+
+2. Microsoft Learn — Install .NET on Windows
+https://learn.microsoft.com/en-us/dotnet/core/install/windows
+A tabela de sistemas operacionais inclui Windows Server 2022 para .NET 10.
+
+3. PostgreSQL — Versioning Policy
+https://www.postgresql.org/support/versioning/
+A página lista PostgreSQL 18 como versão suportada, com janela de suporte até novembro de 2030.
+
+4. PostgreSQL — Windows installers
+https://www.postgresql.org/download/windows/
+A página informa que os instaladores EDB para PostgreSQL 18 são testados em Windows Server 2022.
+
+Observação: compatibilidade do produto base não garante compatibilidade de todos os drivers, extensões, pacotes ou ferramentas. Validar no protótipo e em ambiente de teste antes da produção.

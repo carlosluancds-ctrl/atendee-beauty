@@ -1,0 +1,111 @@
+name: PostgreSQL 18 persistence integration
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  persistence:
+    name: Build and verify tenant isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.404
+
+      - name: Restore locked dependencies
+        run: dotnet restore Atendee.sln --locked-mode
+
+      - name: Build Release
+        run: dotnet build Atendee.sln --no-restore --configuration Release
+
+      - name: Run domain checks
+        run: dotnet run --project tests/Atendee.Domain.Checks/Atendee.Domain.Checks.csproj --no-build --configuration Release
+
+      - name: Start isolated PostgreSQL 18.7
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+          ADMIN_TEST_PASSWORD="$(openssl rand -hex 32)"
+          printf 'ATENDEE_TEST_POSTGRES_ADMIN_PASSWORD=%s\n' "${ADMIN_TEST_PASSWORD}" >> "${GITHUB_ENV}"
+
+          docker run --detach --rm --name atendee-postgres18-ci \
+            --publish 127.0.0.1:5432:5432 \
+            --env POSTGRES_USER=postgres \
+            --env "POSTGRES_PASSWORD=${ADMIN_TEST_PASSWORD}" \
+            --health-cmd 'pg_isready -U postgres -d postgres' \
+            --health-interval 2s \
+            --health-timeout 5s \
+            --health-retries 30 \
+            postgres:18.7-bookworm
+          unset ADMIN_TEST_PASSWORD
+
+          for attempt in $(seq 1 45); do
+            HEALTH="$(docker inspect --format '{{.State.Health.Status}}' atendee-postgres18-ci 2>/dev/null || true)"
+            if [[ "${HEALTH}" == "healthy" ]]; then
+              docker exec atendee-postgres18-ci psql -U postgres -d postgres \
+                -Atqc 'SHOW server_version;' \
+                | sed 's/^/Disposable test server: PostgreSQL /'
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker logs atendee-postgres18-ci || true
+          echo 'PostgreSQL 18.7 did not become healthy.' >&2
+          exit 1
+
+      - name: Provision disposable database and restricted roles
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          APP_TEST_PASSWORD="$(openssl rand -hex 32)"
+          MIGRATOR_TEST_PASSWORD="$(openssl rand -hex 32)"
+          export PGPASSWORD="${ATENDEE_TEST_POSTGRES_ADMIN_PASSWORD}"
+
+          createdb --host 127.0.0.1 --username postgres atendee_rls_lab
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
+            --username postgres --dbname atendee_rls_lab \
+            --file db/security/001_roles_template.sql
+
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
+            --username postgres --dbname atendee_rls_lab \
+            --command "ALTER ROLE atendee_app_login PASSWORD '${APP_TEST_PASSWORD}';"
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
+            --username postgres --dbname atendee_rls_lab \
+            --command "ALTER ROLE atendee_migrator PASSWORD '${MIGRATOR_TEST_PASSWORD}';"
+
+          export PGPASSWORD="${MIGRATOR_TEST_PASSWORD}"
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
+            --username atendee_migrator --dbname atendee_rls_lab \
+            --file db/migrations/001_create_tenant_notes.sql
+
+          printf '%s\n' \
+            "ATENDEE_TEST_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=atendee_rls_lab;Username=atendee_app_login;Password=${APP_TEST_PASSWORD};Pooling=true;Maximum Pool Size=1" \
+            >> "${GITHUB_ENV}"
+          printf 'ATENDEE_TEST_POSTGRES_ADMIN_PASSWORD=\n' >> "${GITHUB_ENV}"
+
+          unset APP_TEST_PASSWORD MIGRATOR_TEST_PASSWORD PGPASSWORD
+
+      - name: Run EF Core and PostgreSQL RLS integration checks
+        run: dotnet run --project tests/Atendee.Persistence.Checks/Atendee.Persistence.Checks.csproj --no-build --configuration Release
+
+      - name: Remove disposable PostgreSQL container
+        if: always()
+        run: docker rm --force --volumes atendee-postgres18-ci || true

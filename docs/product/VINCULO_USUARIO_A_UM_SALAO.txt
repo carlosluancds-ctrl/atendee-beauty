@@ -1,0 +1,20 @@
+DECISÃO DE VÍNCULO DE USUÁRIOS — ATENDEE BEAUTY
+
+Data: 17/11/2026
+
+Decisão aprovada:
+- Cada usuário operacional ficará vinculado a apenas um salão (um único tenant).
+- Não haverá, na primeira versão, um mesmo login operacional com acesso a vários salões.
+- Os perfis Proprietário, Gerente, Recepcionista e Profissional pertencem ao salão ao qual o usuário está vinculado.
+- O backend deve validar o vínculo do usuário com o tenant em toda operação e impedir acesso a dados de outros salões.
+- O Administrador Atendee continua sendo um perfil global separado, com autenticação, permissões e auditoria próprias; não é um usuário operacional compartilhado entre salões.
+
+Impacto no modelo de dados:
+- A conta operacional deve ter um vínculo único com a empresa/salão (tenant_id).
+- Não criar tabela de associação usuário-salão muitos-para-muitos para a primeira versão.
+- Caso futuramente seja necessário permitir que uma pessoa trabalhe em vários salões, isso deverá ser tratado como mudança de arquitetura e autorização, não como simples ajuste de interface.
+
+Próxima etapa:
+- Detalhar permissões por módulo para os cinco perfis aprovados.
+- Em seguida, desenhar o modelo de dados multiempresa e revisar as regras de isolamento.
+- Não instalar nem alterar o servidor nesta etapa.

@@ -1,0 +1,42 @@
+DECISÃO DE ARQUITETURA — MULTIEMPRESA
+Data: 2026-11-17
+
+DECISÃO CONFIRMADA PELO USUÁRIO
+O Atendee Beauty será construído desde o início como uma plataforma multiempresa (multi-tenant), preparada para atender vários salões e clínicas de estética desde a primeira versão.
+
+REQUISITOS DE ISOLAMENTO
+Cada salão/empresa (tenant) deverá ter seus próprios:
+- Usuários e permissões;
+- Clientes e histórico de conversas;
+- Serviços, preços e duração;
+- Profissionais e horários de trabalho;
+- Agendamentos e disponibilidade;
+- Configurações de atendimento e personalidade da IA;
+- Número/conta de WhatsApp e credenciais de integração;
+- Franquia, consumo, créditos adicionais e faturamento.
+
+Nenhum salão poderá consultar, alterar ou inferir dados de outro salão. Acesso administrativo da plataforma deve ser separado, limitado, autenticado e auditável.
+
+DIREÇÃO TÉCNICA INICIAL
+Avaliar um modelo compartilhado de aplicação e banco PostgreSQL com tenant_id em todos os registros pertencentes a empresas e políticas de Row-Level Security (RLS), além de autorização no backend. Esta é uma direção de arquitetura a validar na seleção da stack; não significa que o banco já foi instalado ou configurado.
+Referências técnicas consultadas:
+- AWS Prescriptive Guidance: modelos pool/bridge/silo e RLS para isolamento multi-tenant.
+- OWASP Multi-Tenant Security Cheat Sheet: contexto de tenant verificado, isolamento de dados, testes de acesso cruzado e limites de consumo.
+
+DECISÕES DE NEGÓCIO/ACESSO RELACIONADAS
+- Usuário não tem CNPJ no momento e pretende começar como pessoa física.
+- Usuário não quer usar perfil pessoal do Facebook para administrar o Atendee Beauty, mesmo que a integração oficial WhatsApp precise esperar.
+- Não criar perfil pessoal falso/duplicado.
+- Não criar contas Meta nem iniciar Embedded Signup sem que haja um caminho compatível com essa restrição.
+- A integração WhatsApp oficial permanece pendente; não conectar nem alterar o número de teste ainda.
+- Usuário informou possuir um número WhatsApp Business para testes; o número não foi informado nem armazenado.
+
+PRÓXIMA FASE
+1. Definir a arquitetura funcional e o modelo de dados multiempresa.
+2. Definir papéis: administrador da plataforma, proprietário do salão, gerente, profissional/recepção.
+3. Definir módulos da primeira versão: cadastro do salão, serviços, profissionais, clientes, agenda, conversas, configurações de IA, consumo/créditos.
+4. Só então escolher e validar stack/implantação, respeitando o diagnóstico já feito do Windows Server 2022, Docker em modo Windows, 8 GB RAM e ausência de suporte Linux container/WSL2 funcional no ambiente atual.
+5. Antes de qualquer instalação ou alteração do servidor, revalidar o estado atual e pedir autorização.
+
+STATUS
+Nenhuma instalação, migração ou alteração no servidor foi realizada nesta etapa.

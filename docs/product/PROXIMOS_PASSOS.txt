@@ -1,0 +1,118 @@
+
+
+
+DECISÃO CONFIRMADA NESTA VERSÃO:
+Cada usuário operacional ficará vinculado a apenas um salão. Não haverá login operacional multi-salão na primeira versão.
+
+PRÓXIMAS ETAPAS:
+1. Detalhar permissões por módulo para Administrador Atendee, Proprietário, Gerente, Recepcionista e Profissional.
+2. Desenhar o modelo de dados multiempresa com vínculo único do usuário operacional ao tenant.
+3. Definir e revisar as regras de isolamento e auditoria.
+4. Só depois avaliar implantação, após novo diagnóstico e autorização explícita.
+
+BASELINE DE SEGURANÇA:
+Adotar o documento BASELINE_SEGURANCA_E_ARQUITETURA.txt como requisitos iniciais. Próximo trabalho: matriz de permissões por perfil/módulo, classificação de dados por tenant e modelo de dados. Nenhuma instalação/alteração no servidor sem diagnóstico atualizado e autorização.
+
+MARCO V7 — MATRIZ DE PERMISSÕES E MODELO DE DADOS:
+- Foram adicionados MATRIZ_PERMISSOES_V1.txt e MODELO_DADOS_MULTIEMPRESA_V1.txt.
+- A matriz define acesso por papel e controles especiais para suporte global, financeiro, exportações e profissionais.
+- O modelo define entidades globais e tenant-scoped, isolamento PostgreSQL/RLS, integridade, ledger financeiro e fluxos críticos.
+- Próxima etapa: converter o desenho lógico em especificação técnica de API, autenticação, estados e fluxos; revisar requisitos de privacidade e operação. Ainda não instalar nem alterar o servidor.
+
+MARCO V8 — ARQUITETURA DE APLICAÇÃO E STACK:
+- Recomendação inicial: monólito modular ASP.NET Core 10 LTS + PostgreSQL 18.x + React/TypeScript + worker .NET com transactional outbox.
+- A direção é compatível com execução nativa Windows Server 2022, evitando containers Linux/WSL2.
+- Não houve instalação nem alteração do servidor. Stack, provedor de identidade e hospedagem só serão fechados após protótipo e diagnóstico atualizado.
+- Referências técnicas registradas em REFERENCIAS_TECNICAS_2026-11-17.txt.
+
+MARCO V9 — ESPECIFICAÇÕES DE FLUXOS E API:
+- ESPEC_IDENTIDADE_LOGIN_CADASTRO_V1.txt define onboarding, login, MFA, convites, recuperação e desligamento.
+- ESPEC_FLUXOS_AGENDA_WHATSAPP_IA_V1.txt define estados e fluxos de agendamento, mensagens, WhatsApp, IA, handoff e campanhas.
+- CONTRATO_API_SEGURANCA_V1.txt define convenções, rotas lógicas, autorização, idempotência, controles HTTP e testes bloqueadores.
+- Nenhum código de produção foi implantado; as rotas são contratos de projeto.
+Próxima etapa: threat model e plano de testes/aceitação; depois especificação de implantação Windows e inventário de recursos, sem executar instalação automaticamente.
+
+MARCO V10 — MODELO DE AMEAÇAS, TESTES E OPERAÇÃO:
+- MODELO_AMEACAS_STRIDE_V1.txt identifica ativos, atores, fronteiras de confiança, ameaças STRIDE e controles.
+- PLANO_TESTES_SEGURANCA_ACEITACAO_V1.txt define testes bloqueadores de isolamento, autorização, identidade, agenda, financeiro, IA, WhatsApp, infraestrutura e recuperação.
+- PORTOES_LIBERACAO_OPERACAO_V1.txt define ambientes, processo de release, backup, observabilidade, servidor atual e critérios para produção.
+- REFERENCIAS_E_DECISOES_TECNICAS_V10.txt atualiza documentação técnica e registra a decisão de manter .NET 10 LTS mesmo após lançamento do .NET 11 STS.
+- Nenhum teste foi executado e nenhuma instalação/alteração de servidor foi realizada nesta etapa.
+PRÓXIMA ETAPA:
+1. Converter os requisitos em backlog implementável por épicos, histórias e critérios de aceite.
+2. Preparar um repositório inicial com estrutura modular, migrações e testes automatizados, primeiro fora do servidor de produção.
+3. Realizar diagnóstico atualizado do servidor antes de qualquer instalação.
+
+MARCO V11 — BACKLOG E STARTER KIT DE CÓDIGO:
+- BACKLOG_MESTRE_DESENVOLVIMENTO_V1.txt prioriza os épicos e critérios de aceite até produção.
+- Atendee_Beauty_Starter_Kit_v1 contém solução .NET modular inicial, classes de domínio mínimas, contratos e API de health isolada.
+- O starter kit deliberadamente não implementa autenticação, banco/RLS, endpoints de negócio, WhatsApp, IA ou pagamentos; não publicar na internet.
+- Build não validado: o ambiente gerador não possui .NET SDK instalado. Executar restore/build com .NET 10 SDK em máquina de desenvolvimento antes de avançar.
+- Próximo marco: prova de conceito PostgreSQL/RLS em banco descartável com dois tenants e testes de pool de conexões. Nenhuma conexão com o servidor atual será feita nesta fase.
+
+SUBMARCO V11.1 — PROVA DE CONCEITO RLS PREPARADA:
+- Adicionados scripts SQL de laboratório e documentação em Atendee_Beauty_Starter_Kit_v1/db/poc.
+- Os scripts não foram executados; exigem banco PostgreSQL descartável.
+- Limitação registrada: contexto via set_config é mutável pelo papel da sessão, então RLS não substitui prevenção de SQL injection nem proteção das credenciais.
+- Próxima validação requer PostgreSQL de teste e, depois, integração com pool de conexões.
+
+MARCO V12 — PRIMEIRA VALIDAÇÃO REAL DO CÓDIGO:
+- Starter Kit v2 adicionado com validações de domínio reforçadas.
+- Build Release do scaffold v1 no servidor Windows Server 2022 passou com .NET SDK 10.0.404, zero avisos e zero erros.
+- Smoke test GET /health/live em 127.0.0.1:5127 passou com HTTP 200; processo encerrado e temporários removidos.
+- 14 smoke checks de invariantes de domínio v2 passaram.
+- PostgreSQL 18 ainda não está disponível no host; não iniciar o PostgreSQL 14 antigo/parado nem executar RLS POC nele.
+- Suíte formal xUnit/MSTest ainda pendente porque pacotes de teste não estão no cache NuGet local; não substituir isso por uma solução caseira permanente.
+PRÓXIMO TRABALHO:
+1. Executar build integrado final do Starter Kit v2.
+2. Definir estratégia segura para disponibilizar PostgreSQL 18 descartável (ambiente isolado ou máquina de teste), antes de instalar qualquer banco no host atual.
+3. Criar a suíte formal xUnit e executar RLS/pool tests.
+4. Implementar o primeiro módulo persistente somente depois desses testes.
+
+
+MARCO V13 — TEST HARNESS POSTGRESQL 18.7:
+- Starter Kit v3 criado em Atendee_Beauty_Starter_Kit_v3.
+- RLS POC reforçado e harness Docker Compose efêmero criado para Linux/CI.
+- No servidor Windows atual Docker continua em modo Windows; o harness se recusa a executar nesse modo.
+- PostgreSQL 14.24 existente está EOL (14.25 foi a última release); serviço continua parado/desabilitado e não será usado.
+- Não houve instalação nem mudança persistente no servidor.
+- Próximo passo: executar o harness em um host Linux Docker/CI, depois configurar testes de integração Npgsql/EF Core e pool de conexões.
+
+
+MARCO V14 — TESTES DE DOMÍNIO REPRODUZÍVEIS:
+- Starter Kit v4 inclui runner local de 15 verificações de domínio (sem NuGet externo).
+- Executado com .NET SDK 10.0.404 no servidor: 15/15 aprovadas.
+- Ajustado trap de cleanup no script RLS.
+- Bash syntax check e YAML parse aprovados; PostgreSQL 18.7 não executado.
+- Corrigida a contagem apresentada em um resumo anterior: número comprovado é 15, não 14.
+- Próxima etapa: rodar harness em Linux Docker/CI; depois testar integração EF Core/Npgsql, contexto transaction-local e pool de conexões.
+
+MARCO V15 — PERSISTÊNCIA EF CORE / NPGSQL:
+- Incluído Starter Kit v6, com `TenantDbContext`, `NpgsqlTenantTransactionRunner`, repositório demonstrativo, role template, migration sample e runner de integração opcional.
+- Build Release de seis projetos no Windows Server 2022: aprovado com zero avisos/erros.
+- Restore em modo locked: aprovado.
+- 15/15 verificações de domínio aprovadas.
+- Runner de integração compilado; runtime PostgreSQL ainda pendente porque não há PostgreSQL 18.7 acessível e o Docker atual está em modo Windows.
+- PostgreSQL 14.24 permaneceu parado/desabilitado e não foi utilizado.
+- Nenhuma alteração persistente no servidor.
+PRÓXIMO: executar integração real PostgreSQL 18.7 em host Linux/CI isolado; depois implementar autenticação real e modelo de dados de clientes/serviços/profissionais/agendamentos.
+
+MARCO V16 — PREPARAÇÃO DA VALIDAÇÃO POSTGRESQL 18.7 EM CI:
+- Adicionado Atendee_Beauty_Starter_Kit_v7, preservando o v6 e adicionando workflow GitHub Actions para Linux, PostgreSQL 18.7 descartável e execução do adaptador EF Core/Npgsql com app login restrito.
+- Adicionada verificação de reuso da mesma conexão física após rollback, além da alternância A/B já existente.
+- O workflow gera senhas aleatórias temporárias em tempo de execução; nenhuma senha/token real foi incluída no pacote.
+- YAML do workflow e sintaxe Bash dos blocos de execução foram verificados estaticamente.
+- Esta máquina de trabalho não possui .NET SDK nem Docker; nenhum build, migração ou teste PostgreSQL foi executado nesta etapa. O marco V16 está PREPARADO, NÃO VALIDADO EM RUNTIME.
+PRÓXIMA AÇÃO OBRIGATÓRIA:
+1. Executar .github/workflows/postgres18-persistence.yml com Atendee_Beauty_Starter_Kit_v7 como raiz do repositório (ou mover o workflow à raiz do repositório existente).
+2. Revisar logs e exigir build, checks de domínio e todos os checks de persistência como PASS, sem SKIP.
+3. Registrar URL/ID e data da execução bem-sucedida no próximo backup.
+4. Somente após o gate PostgreSQL/RLS passar, implementar autenticação/MFA e o ICurrentTenantContext de produção.
+- Nenhum acesso ou alteração ao Windows Server 2022 foi realizado ou autorizado.
+
+
+MARCO V17 — REVISÃO ESTÁTICA DO WORKFLOW CI:
+- YAML, Bash do workflow e scripts Bash revalidados estaticamente.
+- Dotnet, Docker e remote Git não estão disponíveis nesta sessão; CI e PostgreSQL 18.7/RLS/pool permanecem NÃO EXECUTADOS.
+- Próxima ação obrigatória: conectar repositório GitHub autorizado, rodar o workflow em Linux e registrar URL/ID/logs.
+- Não implementar autenticação/MFA nem alterar o servidor antes de todos os PASS do portão de persistência.

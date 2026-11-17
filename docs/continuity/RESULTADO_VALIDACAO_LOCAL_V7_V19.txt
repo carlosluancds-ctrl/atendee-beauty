@@ -1,0 +1,40 @@
+ATENDEE BEAUTY — RESULTADO DA VALIDAÇÃO LOCAL — MARCO V19
+Data: 17/11/2026
+
+FONTE E AMBIENTE
+- Base: Atendee_Beauty_Repository_v18.zip encontrado em Downloads.
+- Cópia isolada de trabalho: C:\Users\RDP\Documents\Atendee_Beauty_Repository_v18_Validation.
+- SDK selecionado por global.json: .NET SDK 10.0.404.
+- Docker daemon consultado apenas em modo leitura: OSType=windows.
+- GitHub CLI: instalado, mas gh auth status informou que não há sessão autenticada.
+
+CORREÇÃO DE DEPENDÊNCIAS
+- A primeira execução de dotnet restore Atendee.sln --locked-mode falhou com NU1004 em Atendee.Infrastructure.
+- O packages.lock.json registrava Microsoft.EntityFrameworkCore.Relational como dependência direta, mas o .csproj não continha essa referência.
+- Foi adicionada referência explícita a Microsoft.EntityFrameworkCore.Relational 10.0.15, alinhada ao Microsoft.EntityFrameworkCore 10.0.15.
+- Os pacotes.lock.json foram regenerados na cópia isolada e o restore bloqueado foi repetido com sucesso.
+- O provider Npgsql.EntityFrameworkCore.PostgreSQL permanece em 10.0.3.
+
+VALIDAÇÕES EXECUTADAS — PASS
+- dotnet restore Atendee.sln --locked-mode: PASS, exit code 0.
+- dotnet build Atendee.sln --no-restore --configuration Release: PASS, 0 avisos e 0 erros, exit code 0.
+- A solução compilou Domain, Application, Infrastructure, API, Domain.Checks e Persistence.Checks.
+- dotnet run --no-build --project tests/Atendee.Domain.Checks/Atendee.Domain.Checks.csproj --configuration Release: PASS, 15/15 checks.
+
+NÃO EXECUTADO — PORTÃO AINDA ABERTO
+- O runner Atendee.Persistence.Checks foi compilado, mas não foi executado contra PostgreSQL.
+- PostgreSQL 18.7, RLS, papéis restritos e reutilização de conexão após rollback: NÃO VALIDADO EM RUNTIME.
+- Workflow GitHub Actions: NÃO EXECUTADO. Não há autenticação gh no computador; o repositório privado não foi acessado nem alterado.
+- Docker local está em OSType=windows; não foi convertido para Linux nem foi instalado PostgreSQL para contornar o portão.
+
+PRÓXIMA AÇÃO BLOQUEADORA
+1. O titular deve autenticar gh no computador autorizado com gh auth login (não compartilhar senha ou token no chat).
+2. Confirmar o repositório privado correto e publicar a raiz deste repositório.
+3. Executar PostgreSQL 18 persistence integration em runner Linux, revisar logs completos e exigir PASS em todos os checks, sem SKIP.
+4. Só após esse portão passar iniciar autenticação/MFA e ICurrentTenantContext de produção.
+
+SEGURANÇA E ESCOPO
+- Todas as alterações de código e lock file deste marco foram feitas somente na cópia isolada de validação.
+- Nenhum .env, token, senha ou chave foi lido ou incluído neste relatório.
+- Nenhum serviço de produção, serviço PostgreSQL 14, contêiner, volume, porta ou firewall foi alterado.
+- Nenhuma implantação ou publicação foi feita.

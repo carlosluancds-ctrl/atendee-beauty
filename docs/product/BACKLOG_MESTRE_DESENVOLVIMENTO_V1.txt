@@ -1,0 +1,160 @@
+BACKLOG MESTRE DE DESENVOLVIMENTO — ATENDEE BEAUTY
+Versão: v1 | Atualizado em: 17/11/2026
+Status: plano de execução priorizado; itens ainda não implementados salvo quando explicitamente indicado.
+
+OBJETIVO DO PRIMEIRO LANÇAMENTO
+Entregar uma plataforma SaaS multiempresa para salões de beleza, com contas isoladas por salão, cinco perfis de acesso, cadastro de clientes, catálogo de serviços, profissionais, agenda, caixa de conversas e atendimento assistido por IA. WhatsApp oficial e cobrança real dependem de decisões e habilitações externas ainda pendentes.
+
+REGRA DE EXECUÇÃO
+Construir em camadas, validar cada camada com testes automatizados e não avançar para dados reais enquanto houver falha crítica/alta de segurança. Nenhum módulo pode ignorar tenant_id, autorização no backend, auditoria aplicável ou regras de integridade.
+
+PRIORIDADES
+P0 = bloqueador para qualquer produção com dados reais.
+P1 = necessário para primeiro lançamento controlado.
+P2 = melhoria posterior, não bloqueia piloto fechado se houver mitigação aprovada.
+
+ÉPICO 0 — GOVERNANÇA, REPOSITÓRIO E PROCESSO (P0)
+0.1 Criar repositório privado e estrutura de solução .NET modular.
+Aceite: main protegida; commits revisados; branches; tags de release; nenhum segredo no histórico; README de execução e política de contribuição.
+0.2 Configurar CI.
+Aceite: restore/build; testes; análise estática; análise de dependências; verificação de segredos; artefatos versionados; falha em etapa obrigatória bloqueia merge.
+0.3 Estabelecer ambientes dev/test/staging/prod.
+Aceite: credenciais e bancos separados; dados sintéticos; produção não é acessível pelo pipeline de testes.
+0.4 Manter ADRs e inventário de dependências.
+Aceite: decisões relevantes justificadas; dependências com versão fixada e política de atualização.
+
+ÉPICO 1 — IDENTIDADE E AUTENTICAÇÃO (P0)
+1.1 Escolher provedor de identidade maduro ou ASP.NET Core Identity após comparação de MFA, recuperação, sessões, custo e operação.
+Aceite: decisão documentada; sem autenticação caseira; contas administrativas e operacionais separadas.
+1.2 Implementar login, logout, MFA, recuperação e revogação.
+Aceite: MFA obrigatório para Administrador Atendee, Proprietário e Gerente; erros não enumeram contas; sessão segura; revogação testada.
+1.3 Implementar convites de funcionários.
+Aceite: token aleatório, hash no banco, expiração, uso único, vínculo imutável ao tenant do convite.
+1.4 Implementar desativação e alterações de papel.
+Aceite: sessão revogada; histórico preservado; último proprietário protegido contra remoção acidental; mudanças auditadas.
+
+ÉPICO 2 — MULTIEMPRESA E AUTORIZAÇÃO (P0 ABSOLUTO)
+2.1 Implementar cadastro e ciclo de vida do tenant.
+Aceite: estados pending_verification/setup_required/trial/active/past_due/suspended/closing/closed; transições validadas no backend.
+2.2 Criar contexto confiável de tenant no backend.
+Aceite: tenant deriva da identidade validada; tenant_id do navegador nunca define escopo.
+2.3 Implementar PostgreSQL RLS.
+Aceite: todas as tabelas tenant-scoped têm política RLS; FORCE RLS onde apropriado; role da aplicação não é superuser, BYPASSRLS nem owner de tabela.
+2.4 Implementar autorização RBAC e autorização por objeto.
+Aceite: todas as rotas e comandos cobertos por matriz; deny-by-default; teste de escalada por papel e IDOR.
+2.5 Testar isolamento em conexão/pool, cache, filas, storage, exports, relatórios e restore.
+Aceite: tenants A/B alternados no pool sem vazamento; testes automatizados negativos passam em todas as superfícies.
+
+ÉPICO 3 — CADASTRO E CONFIGURAÇÃO DO SALÃO (P1)
+3.1 Cadastro do salão e ativação de proprietário.
+Aceite: verificação de contato; termos; fluxo idempotente; mensagens de erro não revelam dados existentes.
+3.2 Configurações: nome, fuso horário, horários de funcionamento, regras de cancelamento e políticas.
+Aceite: validação de timezone; persistência auditável; timezone nunca inferido do servidor.
+3.3 Gestão de equipe e convites.
+Aceite: proprietário e gerente autorizado podem convidar somente papéis inferiores permitidos no mesmo tenant.
+
+ÉPICO 4 — CATÁLOGO E PROFISSIONAIS (P1)
+4.1 CRUD de serviços.
+Aceite: duração, preço em centavos, buffers, status e moeda; não aceitar valores negativos ou flutuantes.
+4.2 CRUD de profissionais e especialidades.
+Aceite: usuário profissional sempre vinculado ao mesmo tenant; sem acesso a dados de outros profissionais fora das permissões.
+4.3 Associação profissional-serviço e disponibilidade.
+Aceite: só agenda profissionais habilitados; exceções, pausas, folgas e horários são verificáveis.
+
+ÉPICO 5 — CLIENTES E PRIVACIDADE (P1)
+5.1 Cadastro e normalização de clientes.
+Aceite: unicidade conforme regra tenant-scoped; telefone normalizado; duplicidade tratada sem revelar dados entre salões.
+5.2 Consentimentos e preferências.
+Aceite: finalidade, versão, canal, origem, data, retirada e trilha auditável.
+5.3 Solicitações de acesso, correção, exportação e exclusão.
+Aceite: fluxo rastreável; retenção e exceções legais documentadas; exportação reautenticada e auditada.
+
+ÉPICO 6 — AGENDA E AGENDAMENTOS (P0 PARA INTEGRIDADE; P1 FUNCIONAL)
+6.1 Consulta de disponibilidade.
+Aceite: considera timezone, horário comercial, serviço, profissional, buffers, exceções e conflitos.
+6.2 Criar/remarcar/cancelar agendamento transacional.
+Aceite: bloqueio contra sobreposição no banco; idempotency key; histórico append-only; resultado confirmado somente após commit.
+6.3 Estados e check-in/conclusão/no-show.
+Aceite: transições válidas; autor, timestamp e motivo registrados; ações críticas auditáveis.
+6.4 Concorrência e horário de verão.
+Aceite: testes simultâneos; teste DST/timezones; uma única reserva válida para recurso/intervalo incompatível.
+
+ÉPICO 7 — CONVERSAS E CANAIS (P1; WhatsApp oficial bloqueado até pré-requisito externo)
+7.1 Caixa de entrada interna com operador humano.
+Aceite: conversas tenant-scoped; atribuição; status; histórico; acesso por perfil; handoff auditado.
+7.2 Interface de adaptador de canal.
+Aceite: domínio não conhece SDK/HTTP de provedor; adaptadores substituíveis e testáveis.
+7.3 Webhooks e deduplicação.
+Aceite: assinatura verificada; event_id/message_id único; payload mínimo persistido; reprocessamento idempotente.
+7.4 WhatsApp Cloud API.
+Aceite: só habilitar após organização/conta compatível sem exigir uso do Facebook pessoal do usuário, revisão das permissões e dos termos atuais; conexão e token protegidos; ambiente de teste antes do piloto.
+
+ÉPICO 8 — ORQUESTRAÇÃO DE IA (P1)
+8.1 Ferramentas allowlisted de negócio.
+Aceite: IA só chama list_services, list_professionals, get_availability, create_booking, reschedule_booking, cancel_booking, handoff_to_human e business_info; validação no servidor.
+8.2 Proteção contra prompt injection e vazamento.
+Aceite: conteúdo de cliente/documentos é dado não confiável; sem SQL/código/chamadas arbitrárias; sem dados cross-tenant; segredos e prompts internos não revelados.
+8.3 Limites de custo e fallback.
+Aceite: tokens/tempo/custo por tenant; logs sem prompt completo por padrão; falha transfere para humano e não inventa sucesso.
+8.4 Testes de precisão operacional.
+Aceite: IA não inventa preços, duração, disponibilidade, profissionais ou confirmação de reserva.
+
+ÉPICO 9 — FRANQUIA, CRÉDITOS E COBRANÇA (P1 antes de monetização)
+9.1 Assinaturas e planos.
+Aceite: estados, ciclo, inadimplência, suspensão e reativação; sem cobrar excedente sem autorização expressa.
+9.2 Ledger de créditos e consumo.
+Aceite: append-only; saldo derivado; ajustes por lançamento compensatório; reconciliação com provedores.
+9.3 Alertas 50/80/100% e bloqueios.
+Aceite: avisos idempotentes; ao esgotar, restringir campanhas/custos extras e preservar atendimento essencial conforme política aprovada.
+9.4 Gateway de pagamento.
+Aceite: webhooks verificados/deduplicados; dados de cartão não armazenados; ambiente sandbox e conciliação.
+9.5 Regras comerciais finais.
+Aceite: validar franquia de R$20 e preço de R$147 com custos reais do piloto antes de fixar no produto.
+
+ÉPICO 10 — ADMINISTRAÇÃO DA PLATAFORMA E SUPORTE (P0)
+10.1 Painel global com metadados de tenants e saúde do serviço.
+Aceite: sem abrir conteúdo privado por rotina.
+10.2 Break-glass.
+Aceite: justificativa, tenant/recurso, janela de expiração, aprovação adequada, alerta ao proprietário e audit trail.
+10.3 Auditoria e ações administrativas.
+Aceite: ação sensível registra ator, escopo, motivo, request_id, resultado e timestamp; sem alteração de logs por operadores comuns.
+
+ÉPICO 11 — OPERAÇÃO, BACKUP E SEGURANÇA (P0)
+11.1 Monitoramento e alertas.
+Aceite: API, banco, worker, filas, espaço, memória, CPU, erros, custos e abuso por tenant.
+11.2 Backup e restore.
+Aceite: backup criptografado fora do host; restauração integral e por tenant testadas; RPO/RTO registrados.
+11.3 Hardening e patching.
+Aceite: firewall mínimo, PostgreSQL privado, TLS, MFA admin, atualização controlada, rotação de segredos.
+11.4 Pentest/revisão independente.
+Aceite: nenhuma descoberta crítica/alta aberta antes de produção com dados reais.
+11.5 Resposta a incidentes.
+Aceite: procedimento de contenção, revogação, rotação, preservação de evidência, comunicação e revisão pós-incidente.
+
+ORDEM RECOMENDADA DE MARCOS
+M0: repositório, CI, solução e skeleton local (atual marco de preparação).
+M1: autenticação, tenant e RLS em prova de conceito; demonstrar isolamento A/B.
+M2: cadastro de salão, usuários, papéis e permissões.
+M3: serviços, profissionais, clientes e disponibilidade.
+M4: agendamento transacional e testes de concorrência.
+M5: caixa de conversas e adaptador de canal simulado.
+M6: orquestração IA com ferramentas restritas e handoff.
+M7: WhatsApp Cloud API, condicionado à conta/organização aprovada.
+M8: planos, ledger, consumo, pagamentos e conciliação.
+M9: hardening, carga, backup/restore, pentest e piloto fechado.
+
+DEFINIÇÃO DE PRONTO (DoD) PARA CADA HISTÓRIA
+- Critérios funcionais satisfeitos.
+- Autorização e tenant scope verificados no servidor.
+- Testes positivos e negativos escritos e aprovados.
+- Auditoria e idempotência avaliadas quando aplicáveis.
+- Logs sem segredos/PII excessiva.
+- Migração reversível/compatível e testada, ou plano de recuperação aprovado.
+- Documentação/API atualizada.
+- Sem vulnerabilidade crítica/alta aberta relacionada.
+
+BLOQUEADORES EXTERNOS REGISTRADOS
+- Integração WhatsApp oficial: não configurar com Facebook pessoal do usuário; manter adaptador simulado até haver opção organizacional compatível.
+- Pagamento: escolher provedor e modelo de cobrança antes de monetização.
+- Política de privacidade/termos/retencão: revisão jurídica antes de clientes reais.
+- Hosting: servidor Windows conhecido tem 8 GB RAM e é um único domínio de falha; não assumir capacidade de produção sem carga, backup externo e plano de recuperação.

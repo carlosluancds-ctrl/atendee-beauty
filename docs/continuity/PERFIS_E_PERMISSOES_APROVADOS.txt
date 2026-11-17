@@ -1,0 +1,36 @@
+PERFIS E NÍVEIS DE ACESSO — APROVADOS
+Data: 2026-11-17
+
+O usuário aprovou os cinco perfis propostos para o Atendee Beauty:
+
+1. ADMINISTRADOR ATENDEE
+   - Administração global da plataforma.
+   - Gestão de empresas/tenants, planos, cobrança, suporte e controles globais.
+   - Acesso administrativo deve ser restrito, auditado e protegido por autenticação forte.
+
+2. PROPRIETÁRIO
+   - Administra a própria empresa/salão.
+   - Gerencia dados da empresa, equipe, serviços, profissionais, agenda, configurações e assinatura.
+   - Não acessa dados de outros tenants.
+
+3. GERENTE
+   - Administra a operação do salão conforme permissões concedidas pelo proprietário.
+   - Gerencia equipe, serviços, horários e agenda dentro do próprio tenant.
+
+4. RECEPCIONISTA
+   - Atende clientes e gerencia conversas e agendamentos conforme permissões concedidas.
+   - Acesso limitado aos dados necessários para atendimento.
+
+5. PROFISSIONAL
+   - Consulta sua própria agenda e informações necessárias para executar seus atendimentos.
+   - Não acessa dados administrativos ou de outros profissionais sem permissão.
+
+REGRAS TRANSVERSAIS
+- Todos os perfis de salão pertencem a um tenant e suas permissões são sempre limitadas a esse tenant.
+- Aplicar princípio do menor privilégio.
+- Permissões devem ser verificadas no backend; ocultar botões na interface não é controle de segurança suficiente.
+- Ações administrativas e alterações sensíveis devem ser auditáveis.
+- O perfil de administrador Atendee deve ser separado das contas e dados operacionais dos salões.
+
+STATUS
+Os cinco perfis foram aprovados pelo usuário. Detalhamento fino das permissões por módulo ainda será desenhado antes da implementação.

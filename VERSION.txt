@@ -1,0 +1,5 @@
+Atendee Beauty Starter Kit v7
+Prepared: 2026-11-17
+Base: Starter Kit v6
+Change: PostgreSQL 18.7 Linux CI workflow and post-rollback connection-pool reuse assertion.
+Validation status: source/static review only in this environment; CI workflow not executed yet.

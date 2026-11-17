@@ -1,0 +1,91 @@
+ESPECIFICAÇÃO DOS FLUXOS DE AGENDAMENTO, WHATSAPP E IA — ATENDEE BEAUTY
+Versão: v1 | Data: 17/11/2026
+Status: fluxos lógicos para orientar implementação; integrações externas ainda não conectadas.
+
+1. AGENDAMENTO MANUAL E POR IA
+Estados sugeridos:
+pending_confirmation, confirmed, checked_in, in_service, completed, cancelled, no_show.
+Estados terminais não devem ser reabertos sem ação explícita e evento auditável.
+
+Fluxo:
+1. Identificar tenant a partir da sessão ou da conexão de canal mapeada no servidor.
+2. Normalizar telefone e localizar/criar cliente dentro do tenant.
+3. Obter serviços ativos, duração, preço, buffers e profissionais habilitados.
+4. Consultar disponibilidade considerando horário comercial, exceções, pausas, férias, buffers e conflitos.
+5. Apresentar opções disponíveis sem reservar ainda, salvo se o fluxo explicitamente criar hold temporário.
+6. Confirmar a intenção do cliente e validar novamente disponibilidade na transação.
+7. Criar agendamento com idempotency key; aplicar restrições no banco para impedir sobreposição indevida.
+8. Registrar appointment_event e outbox event na mesma transação.
+9. Confirmar ao cliente somente após commit bem-sucedido.
+10. Notificar profissional/recepção por canal autorizado.
+
+Regras:
+- Não prometer horário antes da gravação confirmada.
+- Se duas pessoas tentarem o mesmo horário, apenas uma reserva vence; a outra recebe opções atualizadas.
+- Remarcação cancela/substitui de forma transacional e mantém histórico.
+- Cancelamento exige política configurada e registra autor, motivo e timestamp.
+- IA nunca pode inventar serviço, preço, profissional, duração ou disponibilidade.
+- IA deve consultar funções de domínio; não escreve diretamente no banco.
+- Em baixa confiança, conflito, pedido fora da política ou dado ambíguo, transferir para recepção.
+- Não enviar mensagem de confirmação em caso de timeout sem verificar estado final por correlation/idempotency key.
+
+2. CONVERSAS E MENSAGENS
+- Conversation é tenant-scoped e ligada a uma conexão/canal e, quando possível, a um cliente do mesmo tenant.
+- Mensagens recebidas e enviadas têm identificador externo, estado e timestamps.
+- Persistir a mensagem recebida antes de processamento assíncrono.
+- Deduplicar por provedor + external_message_id.
+- Ordenar processamento por conversa quando necessário; lidar com mensagens atrasadas.
+- Estados de envio: queued, sending, sent, delivered, read, failed, unknown.
+- Timeout do provedor gera estado unknown até reconciliação; não reenviar cegamente.
+- Retentativas usam idempotência e backoff.
+- Mensagens e conversas seguem política de retenção e privacidade definida.
+- Conteúdo de mensagem não deve ir para logs operacionais.
+
+3. WHATSAPP CLOUD API — ADAPTADOR
+- A integração fica atrás de interface interna ChannelProvider; lógica de agenda não depende do provedor.
+- Cada tenant terá conexão própria, identificada por IDs públicos do provedor e referência a segredo protegido.
+- Token nunca é mostrado ao salão nem a funcionário; reconexão/rotação substitui o segredo.
+- Webhook valida autenticidade conforme documentação vigente do provedor.
+- Verificação inicial de webhook e eventos de mensagens são endpoints distintos e testados.
+- Mapear phone_number_id / identificador de conexão para tenant por tabela interna confiável.
+- Nunca confiar no tenant_id do corpo do webhook.
+- Persistir evento bruto mínimo e normalizado, deduplicar, responder rapidamente e processar em worker.
+- Monitorar validade do token, qualidade/estado do número, falhas e limites de envio.
+- Regras de janela de atendimento, templates, consentimento e políticas comerciais devem ser obtidas da documentação Meta vigente no momento da implementação; não codificar valores tarifários ou políticas antigas.
+- O onboarding oficial Meta permanece pendente até haver caminho de organização/conta compatível com a decisão do usuário de não usar seu Facebook pessoal.
+
+4. ORQUESTRAÇÃO DE IA
+- IA é componente de sugestão/linguagem; regras críticas pertencem ao backend.
+- Criar ferramentas explícitas: list_services, list_professionals, get_availability, create_booking, reschedule_booking, cancel_booking, handoff_to_human, get_business_info.
+- Cada ferramenta valida tenant, permissões, estado e argumentos no servidor.
+- Não permitir SQL, execução de código, chamadas arbitrárias ou acesso genérico a ferramentas.
+- Limitar ferramentas, tempo, tokens, tamanho de entrada/saída e custo por tenant.
+- Aplicar proteção contra prompt injection: mensagens de clientes, documentos e respostas externas são dados não confiáveis, nunca instruções de sistema.
+- Não revelar prompts internos, segredos, dados de outros clientes ou políticas administrativas.
+- Para cancelamento, remarcação, campanhas e ações com impacto, exigir confirmação explícita do cliente ou operador conforme política.
+- Versionar prompt/configuração por tenant, com validação e possibilidade de rollback.
+- Medir custo por chamada e associar ao tenant; não armazenar conteúdo integral por padrão.
+- Fallback seguro: se IA/provedor falhar, informar indisponibilidade e oferecer atendimento humano; nunca inventar conclusão.
+
+5. TRANSFERÊNCIA PARA HUMANO
+- Cliente pode pedir atendente humano a qualquer momento.
+- Regras de risco/baixa confiança podem iniciar handoff.
+- Registrar responsável, motivo, horário e estado.
+- Enquanto conversa estiver em atendimento humano, IA não envia mensagens autônomas, exceto se operador reativar.
+- Operador pode devolver a conversa à IA com resumo validado e aviso.
+- SLA e fila de espera devem ser visíveis ao salão.
+
+6. CAMPANHAS E CONSENTIMENTO
+- Campanhas em massa são módulo separado, não consequência automática do atendimento.
+- Exigir base legal/consentimento aplicável, registro de opt-in/opt-out e listas de supressão.
+- Respeitar templates, janela, limites e políticas do provedor.
+- Prévia, público, custo estimado e confirmação humana antes do envio.
+- Rate limit e limites financeiros por tenant.
+- Ao atingir limite de créditos, bloquear campanhas e funções de custo adicional, preservando atendimento essencial.
+
+7. EVENTOS E IDEMPOTÊNCIA
+- Eventos de domínio: AppointmentCreated, AppointmentRescheduled, AppointmentCancelled, MessageReceived, MessageSendRequested, MessageStatusUpdated, ConversationAssigned, AiHandoffRequested, CreditConsumed.
+- Outbox grava evento na mesma transação do dado de negócio.
+- Consumidor mantém inbox/deduplication key e estado de processamento.
+- Reprocessamento deve ser seguro e auditado.
+- Eventos com falha definitiva vão para dead-letter; reprocessar exige permissão e motivo.

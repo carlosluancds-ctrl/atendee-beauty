@@ -1,0 +1,10 @@
+MARCO V14 — TESTES DE DOMÍNIO REPRODUZÍVEIS
+Data: 17/11/2026
+
+- Incluído no Starter Kit v4 o projeto tests/Atendee.Domain.Checks, sem dependências NuGet externas.
+- Executado no Windows Server 2022 com SDK 10.0.404: RESULT 15/15 checks passed.
+- Os 15 casos cobrem normalização de nome/slug, estado inicial, identificador, validação de slug e fuso horário, timestamp UTC, TenantId vazio, papel inválido, limites e caracteres de nome, vínculo do usuário ao tenant, ativação e desativação.
+- Correção de transparência: um resumo anterior informou 14 checks; a contagem real, verificada individualmente neste runner nomeado, é 15.
+- O script de RLS teve o tratamento de sinais ajustado para garantir cleanup ao interromper.
+- Validação estática do harness: bash -n aprovado e YAML Compose parseado. Não houve execução Docker/PostgreSQL.
+- A cópia temporária dos testes foi removida após a execução; PostgreSQL 14 permaneceu parado e desabilitado; nenhuma porta ficou ouvindo.

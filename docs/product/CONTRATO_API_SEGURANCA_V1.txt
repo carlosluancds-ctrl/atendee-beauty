@@ -1,0 +1,113 @@
+CONTRATO DE API E REQUISITOS DE SEGURANÇA — ATENDEE BEAUTY
+Versão: v1 | Data: 17/11/2026
+Status: orientação de projeto; rotas são exemplos lógicos, não endpoints implementados.
+
+1. CONVENÇÕES
+- API versionada: /api/v1.
+- JSON UTF-8; datas ISO 8601; instantes UTC; timezone local explícito para agenda.
+- IDs UUID opacos; nunca usar IDs sequenciais previsíveis em recursos expostos.
+- Erros com problem details e código estável; nunca stack trace, SQL ou segredo.
+- Toda resposta mutável inclui correlation/request ID em headers.
+- Paginação obrigatória em listas; limites máximos no servidor.
+- Ordenação e filtros com allowlist.
+- Campos desconhecidos são rejeitados em comandos sensíveis quando isso evita mass assignment.
+
+2. CONTEXTO E AUTORIZAÇÃO
+- Sessão/cookie ou token de provedor validado pelo servidor.
+- Tenant derivado da identidade autenticada, não de query/body/header do cliente.
+- Contexto de tenant configurado para transação de banco e RLS.
+- Toda rota declara permissão atômica requerida.
+- Autorização inclui propriedade do recurso e escopo: por exemplo professional_id próprio para papel professional.
+- Administrador global usa namespace/serviço separado.
+- Não aceitar wildcard de tenant em endpoint operacional.
+
+3. ROTAS LÓGICAS
+Identidade:
+POST /api/v1/auth/login
+POST /api/v1/auth/logout
+POST /api/v1/auth/mfa/challenge
+POST /api/v1/auth/password/forgot
+POST /api/v1/auth/password/reset
+GET  /api/v1/me
+POST /api/v1/invitations
+POST /api/v1/invitations/accept
+POST /api/v1/users/{id}/deactivate
+
+Salão e operação:
+GET/PATCH /api/v1/tenant
+GET/POST /api/v1/customers
+GET/PATCH /api/v1/customers/{id}
+POST /api/v1/customers/{id}/archive
+GET/POST /api/v1/services
+GET/PATCH /api/v1/services/{id}
+GET/POST /api/v1/professionals
+GET/POST /api/v1/availability
+GET/POST /api/v1/appointments
+GET/PATCH /api/v1/appointments/{id}
+POST /api/v1/appointments/{id}/cancel
+POST /api/v1/appointments/{id}/check-in
+POST /api/v1/appointments/{id}/complete
+GET/POST /api/v1/conversations
+POST /api/v1/conversations/{id}/reply
+POST /api/v1/conversations/{id}/assign
+POST /api/v1/conversations/{id}/handoff
+
+Financeiro e uso:
+GET /api/v1/billing/subscription
+GET /api/v1/usage/summary
+GET /api/v1/credits/ledger
+POST /api/v1/credits/purchase
+POST /api/v1/campaigns/preview
+POST /api/v1/campaigns/{id}/confirm-send
+
+Webhooks:
+POST /api/v1/webhooks/whatsapp/{provider_key}
+- Endpoint não confia em tenant informado pelo provedor; resolve conexão pelo identificador assinado e mapeamento interno.
+- Verifica autenticidade, deduplica e persiste antes de responder.
+
+Admin global separado:
+GET /api/v1/platform/tenants
+POST /api/v1/platform/tenants/{id}/suspend
+POST /api/v1/platform/tenants/{id}/reactivate
+GET /api/v1/platform/audit
+POST /api/v1/platform/break-glass/requests
+
+4. CONTROLES HTTP OBRIGATÓRIOS
+- HTTPS apenas; HSTS em produção.
+- CORS com origens exatas.
+- CSRF em métodos mutáveis se autenticação por cookie.
+- Rate limit global e por tenant/usuário/IP/rota.
+- Limite de corpo, upload, paginação, duração e concorrência.
+- Content-Type validado; proteção contra content sniffing.
+- Validação server-side de todos os campos e normalização de contatos.
+- Consultas parametrizadas; sem SQL dinâmico construído com input.
+- Proteção contra SSRF em integrações; allowlist de destinos quando aplicável.
+- Uploads privados, antivírus/validação de tipo e tamanho, nomes aleatórios.
+- Reautenticação em exportações e ações de alto risco.
+- Idempotency-Key em criação de agendamento, pagamentos, créditos e envio de mensagens.
+- Auditoria para mutações sensíveis.
+
+5. IDEMPOTÊNCIA E CONCORRÊNCIA
+- Idempotency key escopada por tenant + usuário + endpoint.
+- Armazenar hash do pedido, estado e resposta final por janela de retenção definida.
+- Repetição com mesmo key e payload igual devolve o resultado original.
+- Mesmo key com payload diferente retorna conflito.
+- Operação financeira só pode confirmar uma vez.
+- Webhooks deduplicados pelo ID externo do evento.
+- Criar/alterar agenda em transação com restrição de conflito no banco.
+
+6. PRIVACIDADE E ERROS
+- Respostas de erro não revelam existência de conta, tenant, cliente ou recurso fora do escopo.
+- Logs registram metadados mínimos e correlation ID, nunca tokens, senhas, conteúdo integral de mensagem ou dados de cartão.
+- Exportação registra solicitante, escopo, motivo, horário e resultado.
+- Exclusão segue política de retenção e obrigações aplicáveis; não apagar silenciosamente ledger/auditoria.
+- Evitar cache compartilhado de dados tenant-scoped; se usado, tenant_id obrigatório na chave.
+
+7. CRITÉRIOS DE ACEITE
+- Testes negativos de autorização em todas as rotas por papel.
+- Testes cross-tenant com UUIDs conhecidos de outros tenants.
+- Testes de mass assignment, IDOR, CSRF, XSS, SSRF, SQL injection, brute force e enumeração.
+- Testes de rate limiting, tamanho máximo e paginação.
+- Testes de repetição concorrente de agendamento, pagamento e webhook.
+- Testes de expiração/revogação de sessão.
+- Contrato OpenAPI revisado e versionado; breaking changes exigem nova versão e migração compatível.

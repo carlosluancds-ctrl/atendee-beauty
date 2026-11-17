@@ -1,0 +1,31 @@
+ATENDEE BEAUTY — RESULTADO DO MARCO V17
+Data: 17/11/2026
+
+OBJETIVO
+Continuar a partir do backup v16, reabrir o Starter Kit v7 e revisar o portão de CI PostgreSQL 18.7 antes de qualquer implementação de autenticação.
+
+ENTREGAS
+- Revisão estática documentada em Atendee_Beauty_Starter_Kit_v7/docs/CI_WORKFLOW_REVIEW_V1.md.
+- Conferidos novamente o workflow, o runner de integração, as migrations e os limites de segurança.
+- Registradas as verificações executáveis disponíveis nesta sessão.
+
+VALIDAÇÕES DESTA SESSÃO
+- YAML do workflow: PASS.
+- Bash embutido no workflow (`bash -n`): PASS.
+- `scripts/test-rls.sh` (`bash -n`): PASS.
+- `actions/checkout@v7` e `actions/setup-dotnet@v6`: linhas atuais compatíveis com a documentação oficial consultada em 17/11/2026.
+
+NÃO EXECUTADO
+- .NET build/restore: não executado; dotnet indisponível.
+- Docker/PostgreSQL: não executado; Docker indisponível.
+- CI GitHub Actions: não executada; não havia remote Git nem conexão autenticada ao repositório nesta sessão.
+- PostgreSQL 18.7/RLS/pool: NÃO VALIDADO EM RUNTIME.
+
+STATUS
+REVISÃO ESTÁTICA APROVADA. PORTÃO DE RUNTIME ABERTO/PENDENTE.
+
+PRÓXIMA AÇÃO BLOQUEADORA
+Conectar o repositório GitHub autorizado, executar o workflow `PostgreSQL 18 persistence integration` em Linux e revisar logs completos. Não avançar para autenticação/MFA antes de todos os PASS, sem SKIP.
+
+SEGURANÇA
+Nenhuma conexão, instalação, reinício ou alteração foi feita no Windows Server 2022. Nenhuma credencial real foi adicionada ao pacote.

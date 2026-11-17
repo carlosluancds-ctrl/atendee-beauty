@@ -1,0 +1,21 @@
+ATENDEE BEAUTY — PACOTE DE CONTINUIDADE
+Data do registro: 17/11/2026
+
+Este pacote registra decisões e estado conhecido para retomar o projeto em outra máquina ou conversa.
+
+COMO RETOMAR
+1. Extraia este ZIP.
+2. Anexe o ZIP ou seus arquivos à nova conversa.
+3. Diga: "Vamos continuar o Atendee Beauty a partir deste backup."
+4. Antes de alterar qualquer servidor, confira o ambiente atual e compare com este registro.
+
+IMPORTANTE
+- É um registro de planejamento e diagnóstico, não uma aplicação completa.
+- Não contém senhas, tokens, chaves de API ou chaves de criptografia.
+- Propostas comerciais e tarifas precisam ser revalidadas antes do lançamento.
+- O ZIP ainda não foi enviado ao Proton Drive; faça o upload pelo site drive.proton.me.
+
+
+COMO RETOMAR EM OUTRA CONTA/VPS
+Anexe este ZIP à nova conversa e envie somente: CONTINUAR ATENDEE
+O arquivo COMANDO_CONTINUIDADE.txt contém as instruções completas para recuperar o projeto.

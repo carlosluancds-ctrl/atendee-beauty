@@ -1,0 +1,36 @@
+ATENDEE BEAUTY — RESULTADO DO MARCO V16
+Data: 2026-11-17
+
+OBJETIVO
+Preparar a execução repetível da validação real de persistência, RLS e pool de conexões em PostgreSQL 18.7, fora do servidor Windows de produção.
+
+ENTREGAS
+- Atendee_Beauty_Starter_Kit_v7 criado a partir do v6, sem remover os marcos anteriores.
+- Workflow .github/workflows/postgres18-persistence.yml: runner Ubuntu, actions/checkout v7, actions/setup-dotnet v6, .NET SDK 10.0.404, restore locked-mode, build Release, checks de domínio, PostgreSQL 18.7 descartável e testes EF Core/Npgsql.
+- Senhas de administrador, app login e migrator geradas aleatoriamente durante o job; não armazenadas no repositório nem no pacote.
+- Banco de laboratório atendee_rls_lab é criado do zero para cada execução; template de papéis e migration de exemplo são aplicados no job.
+- Teste adicional: após rollback e descarte dos escopos A/B, o runner exige reuso da mesma conexão física PostgreSQL no novo escopo A e confirma leitura do dado de A.
+- Runbook docs/POSTGRES18_CI_EXECUTION_V1.md e plano atualizado em docs/NEXT_IMPLEMENTATION_STEP.md.
+
+VALIDAÇÕES DESTA ETAPA
+- Arquivos e alterações inspecionados estaticamente.
+- Versões atuais dos actions oficiais e existência da tag oficial postgres:18.7-bookworm conferidas em fontes oficiais em 2026-11-17.
+- YAML parseado com sucesso.
+- Sintaxe Bash dos dois blocos de execução do workflow validada com bash -n.
+- Verificado que o workflow usa imagem postgres:18.7-bookworm, gera senhas aleatórias, não contém senha estática e inclui limpeza do container com if: always().
+
+LIMITAÇÕES
+- O ambiente atual não possui dotnet nem docker.
+- Não foi possível compilar o Starter Kit v7.
+- Não foi executado o workflow GitHub Actions.
+- Não houve conexão com PostgreSQL, aplicação de migration ou teste real de RLS, permissões e pool.
+- A validação bem-sucedida registrada para o Starter Kit v6 permanece evidência histórica apenas para aquela versão; não comprova build nem execução do v7.
+
+STATUS
+PREPARADO, NÃO VALIDADO EM RUNTIME.
+
+PRÓXIMO PASSO BLOQUEADOR
+Executar o workflow em runner Linux com o Starter Kit v7 como raiz do repositório. Todos os checks devem passar e o runner de persistência não pode emitir SKIP. Registrar URL/ID e data da execução. Corrigir qualquer falha antes de implementar autenticação/MFA e ICurrentTenantContext de produção.
+
+SEGURANÇA / SERVIDOR
+Nenhum acesso, reinício, instalação ou alteração foi realizado no Windows Server 2022. Nenhum serviço, banco, firewall, Docker, volume ou dado de produção foi alterado. Nenhuma credencial real foi incluída no ZIP.

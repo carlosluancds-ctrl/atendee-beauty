@@ -1,0 +1,33 @@
+COMANDO DE CONTINUIDADE — ATENDEE BEAUTY
+
+COMANDO SIMPLES
+CONTINUAR ATENDEE
+
+COMO USAR EM OUTRA CONTA OU EM OUTRA VPS
+1. Anexe este arquivo ZIP à nova conversa.
+2. Envie apenas o comando: CONTINUAR ATENDEE
+3. O assistente deverá ler primeiro este arquivo e os demais documentos do ZIP, recuperar as decisões e o estado do projeto e então confirmar o último ponto registrado antes de propor o próximo passo.
+
+INSTRUÇÃO COMPLETA PARA A NOVA CONVERSA
+Estou anexando o backup de continuidade do projeto Atendee Beauty.
+Leia e analise todos os arquivos deste ZIP antes de prosseguir. Use as decisões comerciais, técnicas e o histórico registrados nele como referência.
+Quero continuar exatamente de onde paramos, sem refazer etapas já concluídas e sem perder decisões anteriores.
+
+Regras de trabalho:
+1. Trabalhe passo a passo e explique cada etapa em linguagem simples.
+2. Antes de alterar o servidor, verifique o ambiente e o estado atual.
+3. Preserve configurações, dados, volumes, credenciais e instalações existentes.
+4. Não reinstale componentes que já estejam funcionando.
+5. Não reinicie o servidor nem faça alterações destrutivas sem minha autorização.
+6. Considere os recursos disponíveis da VPS antes de instalar qualquer componente.
+7. Registre decisões e mudanças para o próximo backup ZIP.
+8. Nunca inclua senhas, tokens ou chaves secretas no ZIP.
+
+Primeiro, confirme o que foi recuperado do backup, identifique o último ponto do projeto e informe o próximo passo recomendado.
+
+CONTEXTO DO PRODUTO
+Atendee Beauty é uma recepcionista IA para salões e clínicas de estética, com WhatsApp, atendimento e agendamentos, em arquitetura multiempresa.
+
+ATUALIZAÇÃO DE CONTEXTO DE 2026-11-17
+O usuário informou que já possui um número WhatsApp Business para testes. Não foi informado o número em si; não solicitar nem incluir dados sensíveis desnecessários.
+A integração ainda não foi implantada. A próxima etapa de descoberta deve continuar pela configuração/conta Meta Business e validação da estratégia oficial WhatsApp Cloud API, conforme o histórico do projeto.

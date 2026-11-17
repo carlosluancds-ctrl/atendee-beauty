@@ -1,0 +1,34 @@
+REFERÊNCIAS TÉCNICAS ATUALIZADAS — 17/11/2026
+
+1. OWASP Multi-Tenant Security Cheat Sheet
+https://cheatsheetseries.owasp.org/cheatsheets/Multi_Tenant_Security_Cheat_Sheet.html
+Consultado em 17/11/2026. Recomenda derivar tenant de identidade verificada, isolar cache/filas/arquivos, aplicar limites por tenant, revalidar contexto em trabalho assíncrono e testar restore por tenant. Também alerta contra papéis de banco que ignorem RLS.
+
+2. PostgreSQL 18 — Row Security Policies
+https://www.postgresql.org/docs/current/ddl-rowsecurity.html
+Consultado em 17/11/2026. RLS aplica políticas por linha; sem política, o comportamento após ativação é default-deny para operações normais. Superusers e BYPASSRLS ignoram RLS; proprietários normalmente ignoram, exceto com FORCE ROW LEVEL SECURITY.
+
+3. PostgreSQL — Versioning Policy
+https://www.postgresql.org/support/versioning/
+Consultado em 17/11/2026. Versão principal 18 suportada; a página lista minor atual 18.7 e suporte até 14/11/2030. Atualizar sempre para o patch corrente aprovado.
+
+4. OWASP ASVS 5.0.0
+https://asvs.owasp.org/
+https://owasp.org/projects/asvs
+Consultado em 17/11/2026. ASVS 5.0.0 consta como versão estável e serve de base de requisitos e verificação técnica para aplicações web e serviços.
+
+5. OWASP API Security Top 10
+https://owasp.org/API-Security/
+https://devguide.owasp.org/en/07-training-education/07-api-top-ten/
+Consultado em 17/11/2026. A edição apresentada no material consultado inclui BOLA, autenticação quebrada, autorização de propriedades/funções, consumo irrestrito, SSRF, má configuração e consumo inseguro de APIs.
+
+6. Microsoft .NET Support Policy
+https://dotnet.microsoft.com/en-us/platform/support/policy
+https://learn.microsoft.com/en-us/dotnet/core/install/windows
+Consultado em 17/11/2026. .NET 10 LTS está ativo, patch 10.0.15 em 10/11/2026, fim de suporte 14/11/2028. .NET 11 STS foi lançado em 10/11/2026 e também está ativo; a recomendação do projeto permanece .NET 10 LTS para privilegiar a linha LTS. Microsoft lista Windows Server 2022 como compatível com .NET 10 e .NET 11.
+
+DECISÃO TÉCNICA REGISTRADA:
+- Manter ASP.NET Core 10 LTS como stack inicial recomendada.
+- Usar sempre o patch de segurança atual da linha .NET 10, validado no momento de build/deploy.
+- Manter PostgreSQL 18 no patch menor atual suportado, também validado antes da instalação.
+- Não trocar versões principais automaticamente; testar compatibilidade em staging e planejar atualização.

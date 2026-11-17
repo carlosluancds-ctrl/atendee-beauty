@@ -1,0 +1,30 @@
+MARCO V13 — PREPARAÇÃO DO TESTE POSTGRESQL 18.7
+Data: 17/11/2026
+
+1. Revisão do Starter Kit v2
+- Foram inspecionados os scripts SQL de POC e os avisos de segurança existentes.
+- O SQL foi reforçado para verificar papel runtime sem LOGIN/INHERIT/SUPERUSER/BYPASSRLS, ausência de associação ao papel owner, RLS ENABLE + FORCE, política única no schema de laboratório, falha fechada sem contexto, isolamento em SELECT/INSERT/UPDATE/DELETE, alteração indevida de tenant_id e reset de contexto transaction-local.
+- Os scripts continuam explicitamente classificados como POC descartável, não migração de produção.
+
+2. Harness de teste preparado
+- Foi adicionado `compose.rls.yaml` com imagem oficial `postgres:18.7-bookworm`.
+- O script `scripts/test-rls.sh` gera senha aleatória em memória, não publica porta no host e remove container/volume ao terminar.
+- O script recusa executar quando Docker reporta modo Windows. Deve ser executado em host Linux/CI separado.
+
+3. Verificação atual do servidor `runnervm9zap3`
+- Docker reporta `OSType=windows`, 0 containers.
+- PostgreSQL 14.24 client/server binaries existem; serviço `postgresql-x64-14` continua `Stopped` e `Disabled`.
+- PostgreSQL 14 atingiu EOL em 12/11/2026; 14.25 foi a versão final anunciada. A versão instalada é 14.24. Não iniciar nem usar essa instalação.
+- Não foi instalado nem executado PostgreSQL 18 neste servidor.
+
+4. Estado de validação
+- Build .NET 10: aprovado anteriormente com 0 warnings e 0 errors.
+- Smoke local API: HTTP 200.
+- 14 invariantes de domínio: aprovados no runner temporário.
+- RLS PostgreSQL 18.7: NÃO EXECUTADO; depende de host Linux Docker/CI.
+- O harness foi validado apenas estaticamente nesta etapa; não afirmar que os scripts SQL passaram em servidor PostgreSQL.
+
+5. Segurança e limites
+- Não houve instalação, mudança de serviço, configuração Docker/WSL, regra de firewall, porta publicada, mudança IIS ou alteração persistente no Windows Server.
+- O contexto `app.tenant_id` é um parâmetro customizado de sessão; um processo com SQL arbitrário pode tentar alterá-lo. Não é proteção contra SQL injection. Backend confiável precisa derivar tenant da identidade autenticada e executar consultas parametrizadas. RLS é defesa em profundidade.
+- Próximo passo: executar a suíte em host Linux Docker/CI e depois adicionar testes EF Core/Npgsql com pool de conexões reutilizadas.

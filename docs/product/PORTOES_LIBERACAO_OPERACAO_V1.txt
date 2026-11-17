@@ -1,0 +1,68 @@
+PORTÕES DE LIBERAÇÃO, OPERAÇÃO E CONTINUIDADE — ATENDEE BEAUTY
+Versão: v1 | Data: 17/11/2026
+Status: política operacional proposta para desenvolvimento e lançamento.
+
+1. AMBIENTES
+- Desenvolvimento: dados sintéticos, chaves fictícias, acesso restrito.
+- Teste/CI: bancos descartáveis e dados sintéticos; sem conexão aos números reais de salão.
+- Staging: configuração semelhante à produção, credenciais separadas, acesso limitado.
+- Produção: somente após portões de segurança, backup, monitoramento, revisão e autorização operacional.
+- Nunca copiar produção integral para desenvolvimento; usar dados minimizados e mascarados.
+
+2. ESTRATÉGIA DE ENTREGA
+- Alterações pequenas, revisáveis e versionadas.
+- Pull request/revisão para código e infraestrutura; não publicar diretamente por edição manual no servidor.
+- CI: build, testes, SAST, dependências, varredura de segredo, testes de migração e testes de isolamento.
+- CD: aprovação humana de release; implantação gradual quando tecnicamente viável.
+- Migrações compatíveis com versão anterior quando possível: expand → migrate/backfill → contract.
+- Feature flags para funcionalidades de risco; desligamento emergencial documentado.
+- Plano de rollback com artefato anterior e compatibilidade do banco.
+
+3. SEGREDOS E ACESSOS OPERACIONAIS
+- Identidade individual para administrador e operador técnico.
+- MFA e privilégio mínimo; sem conta administrativa compartilhada.
+- Separar conta de implantação da identidade que atende requisições.
+- Credenciais distintas para desenvolvimento, staging e produção.
+- Rotação de chaves em suspeita de exposição e rotina periódica definida.
+- Logs e backup não contêm segredo em texto puro.
+- Acesso de fornecedor/consultor temporário, limitado e auditado.
+
+4. OBSERVABILIDADE
+- Health check de API, banco, worker, webhook e armazenamento.
+- Métricas de latência, taxa de erro, conexões, fila, backlog, consumo por tenant e falhas de provedor.
+- Alertas para login anômalo, tentativa cross-tenant, privilégio alterado, break-glass, crescimento de fila e consumo anormal.
+- Logs estruturados com request_id, tenant_id validado, ator, rota, resultado e duração, evitando PII desnecessária.
+- Painel administrativo mostra metadados/saúde; conteúdo privado exige fluxo especial.
+
+5. BACKUP E RECUPERAÇÃO
+- Backup criptografado e cópia externa independente do host.
+- Frequência, retenção, RPO/RTO e custo serão definidos antes de produção.
+- Backup de banco, arquivos e configuração; chaves de restauração protegidas separadamente.
+- Teste de restauração completo antes do lançamento e em periodicidade acordada.
+- Procedimento de restauração de tenant isolado; não restaurar snapshot global por cima da produção viva.
+- Plano de perda de host, corrupção, ransomware e indisponibilidade de região/provedor.
+
+6. RECURSOS DO SERVIDOR ATUAL
+- Ambiente conhecido: Windows Server 2022, cerca de 8 GB de RAM, ~3,6 GB livres no diagnóstico anterior, Docker em modo Windows sem containers Linux e sem nested virtualization exposta.
+- Direção: protótipo/dev/staging nativo Windows com .NET e PostgreSQL, sem exigir Docker Linux/WSL2.
+- Não instalar até fazer novo inventário de serviços, CPU/RAM/disco, firewall, backup atual, domínio/TLS e privilégios.
+- A máquina é um único domínio de falha. Antes de produção, decidir se banco e backups precisam de serviço externo ou host separado; não assumir alta disponibilidade em um único servidor.
+- Medir com teste de carga e observar RAM/IO antes de definir limite de tenants. Não vender capacidade baseada em estimativa.
+- Não armazenar único backup no mesmo servidor ou no mesmo volume do banco.
+
+7. CRITÉRIOS PARA DEFINIR PRODUÇÃO
+- Capacidade real medida com carga representativa.
+- Disponibilidade, suporte, backup externo e restauração cumpridos.
+- Firewall, TLS, hardening Windows, PostgreSQL e processo de patching revistos.
+- Isolamento multi-tenant validado.
+- Plano de incidentes e contatos definidos.
+- Custos recorrentes, provedor de dados, IA, Meta e pagamento calculados.
+- Política de privacidade, contrato e obrigações legais revisadas.
+- Teste de segurança independente concluído e descobertas críticas/altas corrigidas.
+
+8. GOVERNANÇA DE INCIDENTES
+- Identificar, conter, preservar evidência, erradicar, recuperar e revisar.
+- Rotacionar segredos comprometidos e revogar sessões.
+- Avaliar escopo por tenant e dados afetados.
+- Comunicação ao titular/cliente e autoridades conforme obrigações legais aplicáveis, após avaliação jurídica.
+- Registrar cronologia, decisão, impacto e ação corretiva.

@@ -1,0 +1,35 @@
+ATENDEE BEAUTY — DECISÕES COMERCIAIS
+
+MODELO
+- Plataforma multiempresa (multi-tenant).
+- Cada salão conecta seu próprio número de WhatsApp.
+- Conversas, clientes, agenda, serviços, profissionais, configurações e consumo devem ficar isolados por salão.
+
+PLANO INICIAL
+- Mensalidade proposta: R$ 147,00 por salão/mês.
+- Inclui recepcionista com IA, atendimento automatizado, apoio a agendamentos, histórico e franquia de consumo da API do WhatsApp.
+- Franquia Meta inicialmente proposta: R$ 20,00 por salão/mês. É uma hipótese para o piloto, não uma tarifa oficial nem decisão validada por dados de uso.
+
+FRANQUIA E CRÉDITOS
+- Saldo não utilizado da franquia mensal acumula para o mês seguinte enquanto a assinatura estiver ativa.
+- Ao consumir todo o saldo disponível, o salão poderá comprar créditos adicionais.
+- Não haverá cobrança automática de excedente sem autorização.
+- Avisos propostos em 50%, 80% e 100% do saldo.
+- Ao atingir 100%, restringir campanhas e recursos que gerem custos adicionais até a recarga; definir o que permanece disponível para não interromper indevidamente atendimentos essenciais.
+
+CANCELAMENTO E VALIDADE
+- Princípio adotado: franquia acumula enquanto a assinatura estiver ativa; créditos adicionais são contabilizados separadamente.
+- Política final de validade, reembolso e uso de créditos comprados no cancelamento ainda precisa ser formalizada nos termos comerciais.
+
+CUSTOS SEPARADOS
+- Tarifas da Meta/WhatsApp.
+- Uso do provedor/modelo de IA.
+- Infraestrutura/servidor.
+- Pagamentos, impostos, suporte e operação.
+
+PENDÊNCIAS
+- Definir valores e pacotes de recarga.
+- Verificar se R$ 20 de franquia é adequado após medir um salão piloto.
+- Definir custo de IA incluído e limites de uso.
+- Formalizar cancelamento e créditos comprados.
+- Validar tarifas oficiais da Meta na data de lançamento e por país/categoria.

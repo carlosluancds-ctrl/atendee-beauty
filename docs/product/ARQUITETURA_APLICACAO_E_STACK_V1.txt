@@ -1,0 +1,119 @@
+ARQUITETURA DE APLICAÇÃO E TECNOLOGIA — ATENDEE BEAUTY
+Versão: proposta técnica v1
+Data: 17/11/2026
+Status: recomendação técnica fundamentada no ambiente conhecido; validar versões, compatibilidade de pacotes e capacidade antes de instalar.
+
+1. DIREÇÃO ARQUITETURAL
+Adotar inicialmente um MONÓLITO MODULAR, não microserviços.
+Motivos:
+- Menor complexidade operacional para equipe pequena.
+- Menos serviços, portas, credenciais, filas e pontos de falha.
+- Transações de banco mais simples para agenda, créditos e faturamento.
+- Possibilidade de separar módulos em serviços independentes no futuro, se escala real justificar.
+- O processo de background pode ser executado como serviço separado, mas no mesmo repositório e com contratos internos claros.
+
+2. STACK RECOMENDADA PARA PROTÓTIPO E PRIMEIRA PRODUÇÃO
+Backend: ASP.NET Core 10 LTS / C#.
+Banco: PostgreSQL 18.x, mantendo sempre o último patch suportado da versão principal.
+Interface: React + TypeScript, build estático servido pelo IIS ou pela camada web da aplicação.
+Processamento assíncrono: worker .NET separado, com fila durável baseada em padrão transactional outbox no PostgreSQL no início.
+Hospedagem inicial: avaliar execução nativa Windows Server 2022, sem Docker Linux/WSL2; não instalar até revisar requisitos, backups, firewall, domínio e capacidade.
+Arquivos: armazenamento de objetos privado, preferencialmente fora do disco local do servidor, com URLs assinadas curtas e verificação de autorização.
+Segredos: cofre de segredos/gerenciador do provedor quando disponível; alternativa temporária com DPAPI/criptografia de envelope e chave fora do banco, após análise.
+Observabilidade: logs estruturados, métricas, health checks e alertas; sem conteúdo sensível nos logs.
+
+Base técnica externa consultada em 17/11/2026:
+- Microsoft informa .NET 10 como LTS ativo e suporte até novembro de 2028; .NET 10 é compatível com Windows Server 2022.
+- O projeto PostgreSQL lista a série 18 como suportada e o instalador Windows EDB indica testes em Windows Server 2022.
+- A escolha acima é compatível com a direção de evitar dependência de containers Linux no servidor atual. Compatibilidade de drivers, extensões e bibliotecas deverá ser confirmada no protótipo.
+
+3. ORGANIZAÇÃO DO CÓDIGO
+Separar por módulos de negócio, mantendo fronteiras explícitas:
+- IdentityAccess: login, MFA, sessões, convites e autorização.
+- Tenants: cadastro, estado, configuração e limites de cada salão.
+- Customers: clientes, consentimentos e privacidade.
+- Catalog: serviços, preços, profissionais e disponibilidade.
+- Scheduling: agenda, reservas, conflitos, cancelamentos e eventos.
+- Conversations: conversas, mensagens e atribuição de atendimento.
+- Channels: adaptadores de WhatsApp e outros canais.
+- AIOrchestration: regras, prompts versionados, limites, políticas e integração com provedores IA.
+- Billing: planos, assinatura, faturas e pagamentos.
+- UsageCredits: ledger de consumo, franquia, créditos e alertas.
+- Notifications: e-mail, avisos internos e notificações.
+- AuditSecurity: auditoria, eventos de segurança e break-glass.
+- PlatformAdmin: administração global separada.
+
+Cada módulo deve ser dono de suas regras e serviços. Evitar que a interface ou outro módulo escreva diretamente em tabelas alheias. Mudanças entre módulos passam por serviços internos/contratos e eventos.
+
+4. CAMADAS E LIMITES
+- Web/API: autenticação, validação de entrada, rate limits e autorização de endpoint.
+- Application: casos de uso, regras de negócio e transações.
+- Domain: entidades, invariantes e regras que não dependem de infraestrutura.
+- Infrastructure: PostgreSQL, provedores externos, filas, armazenamento e observabilidade.
+- Worker: processamento assíncrono idempotente.
+- Frontend: interface; nunca decide permissões nem calcula saldos oficiais.
+
+5. AUTENTICAÇÃO E SESSÕES
+- Preferir provedor de identidade maduro ou ASP.NET Core Identity bem configurado; decisão final depende de avaliação de MFA, recuperação de conta, proteção contra credential stuffing e suporte operacional.
+- MFA obrigatório para Administrador Atendee; exigir para Proprietário e Gerente na produção.
+- Cookies de sessão Secure, HttpOnly e SameSite apropriado; proteção CSRF nas operações autenticadas por cookie.
+- Rotação e revogação de sessão em troca de senha, desligamento, suspeita de comprometimento e alteração de privilégios.
+- Reautenticação para exportações, alteração de titularidade, dados de pagamento, credenciais e ações irreversíveis.
+- Não implementar autenticação própria do zero.
+
+6. PROCESSAMENTO ASSÍNCRONO E INTEGRAÇÕES
+- Usar transactional outbox: a alteração de negócio e o evento pendente são gravados na mesma transação.
+- Worker busca eventos pendentes, processa com idempotência e registra tentativas, resultado e próxima execução.
+- Webhooks verificam assinatura/autenticidade, persistem event_id, deduplicam e respondem rápido; trabalho pesado fica no worker.
+- Retry com backoff e limite; fila de falhas (dead-letter) e ferramenta de reprocessamento auditada.
+- Cada evento contém tenant_id obtido de mapeamento confiável do servidor; não aceitar tenant_id arbitrário do payload externo.
+- Adaptadores de canal isolam dependência do provedor; começar com WhatsApp Cloud API quando o caminho de conta/organização estiver resolvido.
+
+7. AGENDA E CONSISTÊNCIA
+- Todos os horários são armazenados em UTC; tenant mantém timezone IANA/Windows mapeado de forma consistente para exibição e regras locais.
+- Agendamento é criado em transação: validar tenant, serviço, profissional, duração, disponibilidade, buffer e conflito.
+- Restrições no banco evitam sobreposição indevida; não depender apenas de consulta prévia da aplicação.
+- Requisições de criação/remarcação aceitam idempotency key para repetição segura.
+- Histórico de alterações em appointment_events, append-only.
+- Regras de feriados, pausas, recorrência, tolerância e cancelamento ficam configuráveis por salão, com defaults explícitos.
+
+8. FINANCEIRO E MEDIÇÃO
+- Valores em centavos e moeda explícita.
+- Ledger de crédito e consumo append-only; saldo calculado a partir de lançamentos, com snapshots reconciliáveis.
+- Não executar cobrança de excedente automático sem autorização do salão.
+- Custos Meta/IA estimados e reais são eventos separados, com origem e versão da tabela de custo.
+- Reconciliar periodicamente eventos internos com dados do provedor.
+- Toda alteração manual de saldo exige motivo, autor e lançamento compensatório; nunca editar ou apagar lançamentos antigos.
+
+9. SEGURANÇA DE INFRAESTRUTURA
+- Não expor PostgreSQL à internet pública; aceitar conexões apenas da aplicação/hosts autorizados.
+- Firewall com portas mínimas; acesso administrativo por VPN ou bastion e MFA.
+- TLS externo; TLS interno quando aplicável.
+- Conta de serviço sem privilégios administrativos.
+- IIS/Kestrel com identidade de serviço restrita; diretórios de upload fora da raiz pública.
+- Patches de Windows, .NET, PostgreSQL e dependências em janela controlada.
+- Ambientes dev/test/prod e segredos separados.
+- Backups criptografados fora do host e testes de restauração.
+- Monitorar disco, RAM, CPU, conexões, fila, falhas de login, latência e erros.
+- Plano de resposta a incidente, contatos e procedimento de rotação de segredos.
+
+10. DECISÕES AINDA NÃO FECHADAS
+- Hospedagem final: servidor atual versus VPS/serviços gerenciados; a máquina atual tem recursos limitados e deve ser reavaliada antes de produção.
+- Provedor de identidade.
+- Provedor de e-mail e armazenamento de objetos.
+- Serviço de pagamentos.
+- Política de retenção e privacidade.
+- Provedor de IA e regras de tratamento de dados.
+- Modelo de faturamento e onboarding Meta.
+- Alta disponibilidade, RPO/RTO e orçamento de infraestrutura.
+
+11. PORTÕES ANTES DE PRODUÇÃO
+- Threat model e revisão de arquitetura.
+- Testes de isolamento multi-tenant e RLS automatizados.
+- Testes de autorização por papel e IDOR.
+- Testes de carga, concorrência e agenda.
+- Testes de idempotência e reprocessamento de webhooks.
+- Testes de backup e restauração.
+- Verificação de dependências e análise estática.
+- Revisão de segurança independente antes de receber dados reais.
+- Checklist operacional, monitoramento e plano de rollback.

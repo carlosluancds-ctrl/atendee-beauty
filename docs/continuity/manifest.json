@@ -1,0 +1,22 @@
+{
+  "backup_version": "v19",
+  "updated_at": "2026-11-17",
+  "new_decision": "Cada usuário operacional fica vinculado a apenas um salão; sem login operacional multi-salão na primeira versão.",
+  "security_baseline": "Baseline profissional de arquitetura e segurança; inclui OWASP ASVS 5.0.0, OWASP multi-tenant e NIST SSDF como referências.",
+  "milestone": "Starter Kit v7: restore bloqueado, build Release e checks de domínio aprovados localmente; CI PostgreSQL 18.7/RLS/pool ainda pendente.",
+  "validation_status": {
+    "starter_kit_v6_dotnet_release_build": "passed historically; 0 warnings, 0 errors; SDK 10.0.404",
+    "starter_kit_v6_domain_checks": "passed historically; 15/15",
+    "starter_kit_v7_workflow_yaml": "passed static review in v16/v17",
+    "starter_kit_v7_workflow_bash": "passed bash -n in v16/v17",
+    "starter_kit_v7_dotnet_restore_locked": "passed locally in isolated validation copy after aligning Microsoft.EntityFrameworkCore.Relational 10.0.15",
+    "starter_kit_v7_dotnet_release_build": "passed locally; 6 projects, 0 warnings, 0 errors; SDK 10.0.404",
+    "starter_kit_v7_domain_checks": "passed locally; 15/15",
+    "starter_kit_v7_persistence_runner": "compiled successfully; not executed against PostgreSQL",
+    "starter_kit_v7_postgresql_18_rls_runtime": "not run; Docker daemon is Windows and Linux GitHub Actions workflow is pending",
+    "github_ci_execution": "pending; gh CLI is not authenticated and private repository has not been accessed"
+  },
+  "included_starter_kit": "v7 scaffold at repository root",
+  "next_blocking_step": "Authenticate GitHub CLI on the authorized computer, confirm the private repository, publish the repository root, run PostgreSQL 18 persistence integration on Linux and review every PASS with no SKIP before production authentication/MFA.",
+  "latest_review_report": "docs/continuity/RESULTADO_VALIDACAO_LOCAL_V7_V19.txt"
+}

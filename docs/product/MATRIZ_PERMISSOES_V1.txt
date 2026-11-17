@@ -1,0 +1,108 @@
+MATRIZ DE PERMISSÕES — ATENDEE BEAUTY
+Versão: proposta técnica inicial v1
+Data: 17/11/2026
+Status: padrão de projeto para orientar implementação e testes. Não representa funcionalidades já implementadas.
+
+PRINCÍPIOS
+1. Negar por padrão: qualquer ação não concedida explicitamente é proibida.
+2. O backend verifica usuário, tenant, papel, permissão, propriedade do recurso e estado do registro em toda operação.
+3. A interface apenas oculta ações; ela nunca é uma barreira de segurança.
+4. Um usuário operacional pertence a um único salão.
+5. Profissionais acessam somente os dados de clientes estritamente necessários aos seus próprios atendimentos.
+6. Nenhum usuário de salão acessa outro tenant, mesmo conhecendo IDs ou URLs.
+7. Exclusões de registros operacionais serão, por padrão, arquivamentos/cancelamentos lógicos, preservando trilha de auditoria.
+8. Ações financeiras, exportações, mudanças de permissão e acesso excepcional exigem auditoria.
+
+PAPÉIS
+- ADMINISTRADOR ATENDEE: identidade global separada; administra a plataforma. Não é um papel de salão.
+- PROPRIETÁRIO: autoridade máxima dentro de um salão; administra operação, equipe, integrações e assinatura.
+- GERENTE: administra a operação do salão dentro das permissões concedidas; não pode transferir propriedade nem alterar titularidade/faturamento legal.
+- RECEPCIONISTA: atende clientes e opera agenda, sem acesso administrativo, segredos, custos internos ou gestão de usuários.
+- PROFISSIONAL: consulta e atualiza somente a própria agenda e os dados mínimos necessários ao atendimento.
+
+MATRIZ RESUMIDA POR MÓDULO
+Legenda: Total = criar/consultar/alterar conforme regras; Operação = funções de rotina limitadas; Próprio = somente recursos atribuídos ao usuário; Leitura = consulta sem alteração; Não = sem acesso.
+
+Módulo | Admin Atendee | Proprietário | Gerente | Recepcionista | Profissional
+Painel global da plataforma | Total | Não | Não | Não | Não
+Painel do salão | Suporte restrito/metadados | Total | Total | Operacional | Próprio
+Dados e perfil do salão | Suporte técnico mínimo, sem editar titularidade | Total | Editar dados operacionais permitidos | Leitura de dados necessários | Não
+Usuários e convites | Administração global de contas da plataforma | Total | Gerir equipe se autorizado pelo proprietário | Não | Não
+Papéis e permissões | Gerir papéis globais | Total, inclusive delegação dentro dos limites | Sem elevar privilégios; permissões delegadas | Não | Não
+Clientes | Sem acesso ao conteúdo por padrão | Total | Total | Operação | Próprios atendimentos, dados mínimos
+Prontuário/ficha de atendimento | Sem acesso por padrão | Total conforme necessidade e política | Total conforme necessidade e política | Dados necessários ao agendamento | Apenas ficha de atendimento atribuída e necessária
+Serviços e preços | Metadados de suporte | Total | Total | Leitura e seleção | Leitura do que executa
+Profissionais/equipe | Metadados de suporte | Total | Operação, sem transferir propriedade | Leitura necessária à agenda | Próprio perfil profissional
+Agenda | Metadados técnicos | Total | Total | Criar/editar/cancelar conforme política | Ver própria agenda; atualizar status do próprio atendimento
+Conversas WhatsApp | Sem conteúdo por padrão; acesso excepcional controlado | Total | Total | Atendimento e transferência | Não, salvo mensagem estritamente vinculada ao próprio atendimento, se habilitada
+Configuração da IA | Sem conteúdo por padrão | Total | Ajustes operacionais permitidos | Não | Não
+Número e integração WhatsApp | Suporte técnico sem revelar segredo | Total | Estado/conexão sem visualizar tokens | Estado de funcionamento | Não
+Campanhas/mensagens em massa | Administração de limites globais | Total, sujeito a consentimento e limites | Operação se autorizado | Não | Não
+Franquia, consumo e créditos | Total na plataforma | Leitura e gestão do próprio salão | Leitura operacional | Sem valores financeiros; pode ver bloqueio/limite funcional | Não
+Assinatura e pagamentos | Total da plataforma | Total do próprio salão | Leitura, sem trocar titular/pagador | Não | Não
+Relatórios operacionais | Plataforma agregada sem conteúdo pessoal por padrão | Total | Total | Relatórios de atendimento limitados | Próprios atendimentos
+Exportação de dados | Acesso excepcional auditado | Total do próprio salão, com confirmação reforçada | Apenas se delegado e auditado | Não | Não
+Auditoria | Global, com acesso controlado | Auditoria do próprio salão | Auditoria operacional permitida | Próprias ações, se disponível | Próprias ações, se disponível
+Exclusão/encerramento do salão | Fluxo global de plataforma, com aprovação interna | Solicitar/confirmar encerramento do próprio salão | Não | Não | Não
+Suporte | Gerir chamados | Abrir/acompanhar | Abrir/acompanhar | Abrir/acompanhar | Abrir/acompanhar
+
+REGRAS DETALHADAS
+A. Administrador Atendee
+- Acesso global a tenants, planos, cobrança da plataforma, limites, saúde do serviço e suporte.
+- Não deve abrir conversas, fichas de clientes ou conteúdo de salão por rotina.
+- Suporte com acesso a conteúdo deve usar fluxo break-glass: justificativa obrigatória, escopo e duração limitados, aprovação adicional quando viável, registro imutável de quem acessou o quê e alerta ao proprietário.
+- Não pode consultar segredos em texto puro. Operações de conexão devem usar mecanismos de rotação/reconexão.
+- Ações de alto impacto (suspender tenant, alterar plano, crédito manual, reativar acesso) exigem motivo e trilha de auditoria.
+
+B. Proprietário
+- Pode administrar usuários do próprio tenant e conceder apenas papéis inferiores ao seu.
+- Não pode criar Administrador Atendee nem atribuir papel global.
+- Alterações de titularidade, dados legais e método de pagamento devem exigir reautenticação e confirmação.
+- Pode exportar dados do próprio tenant mediante confirmação reforçada e registro.
+
+C. Gerente
+- Pode gerenciar operação diária e equipe se o proprietário habilitar.
+- Não pode remover o proprietário, transferir propriedade, alterar titularidade da assinatura, ver segredos, mudar limites globais ou acessar outros tenants.
+- Não pode conceder papel igual ou superior ao próprio.
+
+D. Recepcionista
+- Pode criar/atualizar clientes, marcar, remarcar e cancelar agendamentos segundo regras do salão.
+- Não pode exportar base, ver custos Meta/IA, administrar créditos, alterar plano, credenciais ou permissões.
+- Cancelamentos e alterações relevantes guardam autor, data, motivo e estado anterior.
+
+E. Profissional
+- Vê somente agenda própria e dados mínimos dos clientes associados aos atendimentos atribuídos.
+- Não vê histórico completo de conversas, campanhas, faturamento, dados de outros profissionais ou exportações.
+- Pode atualizar status do atendimento e registrar notas de atendimento permitidas.
+- Não pode alterar preços, permissões, credenciais ou agenda de outros profissionais.
+
+PERMISSÕES ATÔMICAS SUGERIDAS
+Usar nomes estáveis no backend, por exemplo:
+tenant.read, tenant.update
+user.invite, user.read, user.update, user.deactivate
+role.assign_lesser, permission.delegate
+customer.create, customer.read, customer.update, customer.archive, customer.export
+appointment.create, appointment.read, appointment.update, appointment.cancel, appointment.check_in, appointment.complete
+service.read, service.manage
+professional.read, professional.manage
+conversation.read, conversation.reply, conversation.assign
+whatsapp.connection.manage, whatsapp.connection.status
+ai_config.read, ai_config.manage
+campaign.create, campaign.send
+billing.read, billing.manage
+credit.read, credit.adjust
+report.read, report.export
+audit.read
+support.ticket.create, support.ticket.manage
+platform.tenant.manage, platform.plan.manage, platform.billing.manage
+support.break_glass.request, support.break_glass.approve
+
+CONDIÇÕES DE ACEITE OBRIGATÓRIAS
+- Teste automatizado prova que usuário do salão A não lê, altera, apaga nem exporta registros do salão B.
+- Teste cobre endpoints, buscas, relatórios, arquivos, filas, webhooks, cache e exportações.
+- Teste prova que profissional A não acessa agenda de profissional B nem clientes sem atendimento atribuído.
+- Teste prova que gerente não eleva o próprio papel nem cria proprietário/admin.
+- Teste prova que recepcionista não acessa cobrança, créditos ou segredos.
+- Teste prova que Administrador Atendee não acessa conteúdo privado sem fluxo break-glass.
+- Testar usuário desativado, sessão revogada, token expirado, convite vencido e tentativa de IDOR.
+- Qualquer falha nesses testes bloqueia publicação.

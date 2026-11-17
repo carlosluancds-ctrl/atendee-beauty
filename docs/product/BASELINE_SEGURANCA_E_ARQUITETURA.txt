@@ -1,0 +1,79 @@
+BASELINE DE ARQUITETURA E SEGURANÇA — ATENDEE BEAUTY
+Data: 17/11/2026
+Status: decisões arquiteturais iniciais aprovadas para orientar o projeto; detalhes de implementação serão validados antes de codificar.
+
+OBJETIVO
+Construir um SaaS multiempresa profissional, seguro, resiliente e auditável. Segurança será requisito de arquitetura e de aceite, não uma etapa posterior. Nenhuma solução pode prometer proteção absoluta.
+
+1. IDENTIDADE E ACESSO
+- Adotar controle de acesso baseado em papéis (RBAC) e princípio do menor privilégio.
+- Negar por padrão: toda permissão deve ser concedida explicitamente.
+- Cada conta operacional pertence a um único salão/tenant.
+- Administrador Atendee é identidade global separada, com autenticação reforçada e auditoria.
+- Exigir MFA para Administrador Atendee e recomendar/exigir para Proprietário e Gerente conforme o fluxo de autenticação escolhido.
+- Revogar sessões e credenciais após desligamento, perda de dispositivo ou suspeita de comprometimento.
+- Revalidar autorização no backend em cada operação; a interface nunca é a barreira de segurança.
+
+2. ISOLAMENTO MULTIEMPRESA
+- Toda entidade de negócio deve ser classificada como global, tenant-scoped ou user-scoped.
+- Para dados pertencentes a salões, usar PostgreSQL com tenant_id e Row-Level Security (RLS) como defesa adicional, caso a validação da stack confirme essa opção.
+- A aplicação deve derivar o tenant do usuário autenticado e de seu vínculo ativo; nunca confiar em tenant_id enviado pelo navegador.
+- O papel normal de requisições não pode ser superuser nem possuir BYPASSRLS.
+- Usar contexto de tenant limitado à transação e testar reutilização de conexões.
+- Toda nova tabela deve ser classificada e ter teste de isolamento correspondente.
+- Operações globais de suporte/administração serão explícitas, separadas, limitadas e auditadas.
+
+3. DADOS, SEGREDOS E COMUNICAÇÃO
+- TLS em todas as conexões externas.
+- Criptografia em repouso para discos, backups e armazenamento de segredos, conforme recursos do provedor.
+- Senhas com algoritmo moderno de hash próprio para senhas; tokens e chaves de alta entropia armazenados com hash quando possível ou em cofre de segredos quando precisam ser recuperáveis.
+- Nunca colocar senhas, tokens, chaves privadas, segredos Meta ou chaves de criptografia em código, logs, ZIPs de continuidade ou repositórios.
+- Minimizar dados pessoais coletados e limitar sua exposição em telas, logs e exportações.
+- Definir retenção, exclusão e exportação de dados antes do lançamento.
+
+4. APLICAÇÃO E API
+- Validar entradas no servidor, usar consultas parametrizadas e proteção contra CSRF, XSS, SSRF, IDOR e abuso de APIs.
+- Rate limiting por IP, usuário, tenant e operação sensível, com limites globais contra esgotamento.
+- Sessões seguras, cookies HttpOnly/Secure/SameSite quando aplicável, expiração e revogação.
+- CORS restrito a origens autorizadas; cabeçalhos de segurança; erros sem exposição de detalhes internos.
+- Dependências fixadas e atualizadas com revisão; análise de vulnerabilidades e inventário de componentes.
+- Separar ambientes de desenvolvimento, teste e produção e não reutilizar credenciais entre eles.
+
+5. INTEGRIDADE E CONFIABILIDADE
+- Operações críticas devem ser transacionais e idempotentes.
+- Impedir agendamentos duplicados com restrições e validação transacional no banco, não apenas na interface.
+- Cobranças, créditos e consumo devem ter livro-razão (ledger) auditável, sem edição destrutiva do histórico.
+- Webhooks devem validar assinatura/autenticidade, deduplicar eventos e tolerar repetição e atraso.
+- Tarefas assíncronas devem carregar contexto de tenant confiável e revalidar autorização no processamento.
+- Isolar limites de uso por tenant para evitar que um salão prejudique os demais.
+
+6. AUDITORIA E MONITORAMENTO
+- Registrar autenticações, falhas, alterações de permissões, ações administrativas, operações financeiras e eventos de segurança.
+- Não registrar senhas, tokens, conteúdo integral de mensagens ou dados pessoais desnecessários.
+- Proteger logs contra alteração indevida, restringir leitura e definir retenção.
+- Alertar sobre tentativas repetidas, acessos negados suspeitos, falhas de isolamento e picos anormais.
+- Separar auditoria do salão da auditoria global da plataforma.
+
+7. BACKUP E CONTINUIDADE
+- Backups automáticos criptografados, com cópia fora do servidor principal.
+- Definir RPO/RTO e retenção de acordo com custo e criticidade antes da produção.
+- Testar restauração periodicamente; backup não testado não será considerado proteção suficiente.
+- Planejar recuperação granular por tenant sem sobrescrever dados atuais de outros salões.
+- ZIPs de continuidade do projeto nunca incluirão segredos operacionais.
+
+8. QUALIDADE E SEGURANÇA NO DESENVOLVIMENTO
+- Adotar OWASP ASVS 5.0.0 como referência de requisitos e verificação de segurança da aplicação.
+- Adotar NIST SSDF como referência de processo de desenvolvimento seguro.
+- Testes automatizados de autorização e isolamento entre tenants serão bloqueadores de publicação.
+- Revisar migrações, permissões, dependências e mudanças de infraestrutura antes de produção.
+- Implantar mudanças em etapas, com backup, plano de reversão e verificação posterior.
+
+REFERÊNCIAS DE BASE
+- OWASP ASVS 5.0.0: https://asvs.owasp.org/
+- OWASP Multi-Tenant Security Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Multi_Tenant_Security_Cheat_Sheet.html
+- NIST SP 800-218 SSDF: https://csrc.nist.gov/pubs/sp/800/218/final
+
+RESSALVAS
+- Estas são decisões e requisitos de arquitetura, não prova de que o sistema já esteja implementado ou auditado.
+- A escolha final de hospedagem, linguagem, framework, banco, provedor de identidade e integração WhatsApp depende da validação técnica do ambiente e dos requisitos operacionais.
+- Nenhum sistema é invulnerável; o objetivo é reduzir probabilidade e impacto, detectar incidentes e recuperar com segurança.

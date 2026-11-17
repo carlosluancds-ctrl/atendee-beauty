@@ -1,0 +1,155 @@
+MODELO DE AMEAÇAS — ATENDEE BEAUTY
+Versão: v1 | Data de referência: 17/11/2026
+Estado: modelo de desenho inicial; deve ser revisado quando houver protótipo, endpoints reais e infraestrutura final.
+
+1. OBJETIVO E ESCOPO
+Identificar ameaças que possam comprometer confidencialidade, integridade, disponibilidade, privacidade ou isolamento entre salões. O modelo cobre a aplicação SaaS, painel administrativo, API, banco, worker, WhatsApp, IA, pagamentos, arquivos, backups e pipeline de implantação.
+
+2. ATIVOS A PROTEGER
+A1. Credenciais, sessões, MFA e contas administrativas.
+A2. Dados de clientes: nome, telefone, preferências, histórico de atendimento e dados pessoais.
+A3. Agenda: horários, serviços, profissionais, cancelamentos e presença.
+A4. Conversas e mensagens recebidas/enviadas.
+A5. Segredos de integração: tokens Meta/WhatsApp, chaves IA, chaves de pagamento, credenciais de e-mail e criptografia.
+A6. Dados financeiros: assinatura, cobrança, consumo, franquia, créditos e ledger.
+A7. Configurações e instruções da IA por salão.
+A8. Backups, exportações e arquivos anexados.
+A9. Código-fonte, pipeline CI/CD, artefatos de build e configuração de infraestrutura.
+A10. Logs de auditoria e evidências de segurança.
+
+3. ATORES E CENÁRIOS DE ABUSO
+- Atacante anônimo da internet tentando explorar a aplicação.
+- Atacante com senha reutilizada, sessão roubada ou dispositivo comprometido.
+- Funcionário malicioso ou conta de salão comprometida tentando acessar clientes, agenda ou dados de outro salão.
+- Proprietário de um salão tentando elevar privilégios ou manipular créditos/consumo.
+- Cliente malicioso enviando spam, payloads, prompt injection ou links maliciosos pelo WhatsApp.
+- Atacante tentando forjar, repetir ou alterar webhooks de provedores.
+- Administrador/suporte interno comprometido ou agindo fora da autorização.
+- Tenant abusivo consumindo filas, CPU, memória, conexões, IA ou mensagens para degradar o serviço de outros.
+- Dependência, pacote, fornecedor ou pipeline comprometido.
+- Erro operacional: migração incorreta, segredo exposto, backup inutilizável ou restauração sobre o tenant errado.
+
+4. FRONTEIRAS DE CONFIANÇA
+TB1. Navegador/dispositivo do usuário → proxy/IIS/API.
+TB2. API autenticada → camada de aplicação e autorização.
+TB3. Aplicação → PostgreSQL com RLS e roles separadas.
+TB4. API → outbox/worker/fila e consumidores.
+TB5. Worker → Meta/WhatsApp, IA, pagamentos, e-mail e serviços externos.
+TB6. Aplicação → armazenamento privado de objetos e backups.
+TB7. Painel administrativo global → dados e controles multiempresa.
+TB8. Pipeline de desenvolvimento → artefatos e servidor de produção.
+TB9. Sistema compartilhado → recursos e limites de cada tenant.
+
+5. ANÁLISE STRIDE E CONTROLES
+
+S — SPOOFING (falsificação de identidade)
+Ameaças:
+- Credential stuffing, phishing, roubo de sessão ou recuperação de senha abusada.
+- Falsificação de webhook para inserir mensagens ou instruções falsas.
+- Worker ou serviço interno se passar por tenant autorizado.
+Controles:
+- MFA obrigatório para Administração Atendee, Proprietário e Gerente.
+- Provedor de identidade maduro; cookies seguros; proteção contra brute force.
+- Tokens de recuperação/convite de uso único e armazenados como hash.
+- Verificação de assinatura/autenticidade de webhooks conforme documentação vigente do provedor.
+- Identidade de serviço distinta, escopos mínimos e tenant validado no consumidor.
+Testes:
+- MFA bypass, credential stuffing, replay de token, sessão revogada e assinatura de webhook inválida.
+
+T — TAMPERING (alteração indevida)
+Ameaças:
+- Alterar tenant_id, customer_id, appointment_id, preço, saldo ou papel no body/header/query.
+- Mass assignment para gravar campos administrativos.
+- Modificar saldo histórico ou apagar eventos de auditoria.
+- Corrida entre duas reservas para o mesmo horário.
+- Alterar estado de conversa ou resultado de IA via payload malicioso.
+Controles:
+- Tenant obtido da sessão e resolvido no servidor.
+- DTOs allowlisted; comandos específicos; validação server-side.
+- Chaves estrangeiras compostas tenant_id + id.
+- Ledger append-only e correções por lançamentos compensatórios.
+- Transações, idempotência e constraints no banco para agenda/financeiro.
+- Auditoria append-only com acesso restrito.
+Testes:
+- Mass assignment, troca de IDs, alteração cruzada, corrida de agenda, alteração de ledger e reprocessamento de comandos.
+
+R — REPUDIATION (negação de ação)
+Ameaças:
+- Funcionário nega ter alterado preço, horário, permissões ou cancelado agendamento.
+- Administrador nega ter consultado conteúdo privado.
+- Dificuldade em reconstruir cobrança ou crédito manual.
+Controles:
+- Auditoria com ator, tenant, ação, recurso, resultado, timestamp, request_id, motivo e origem.
+- Break-glass com justificativa, escopo, expiração, aprovação e notificação.
+- Logs centralizados, acesso restrito, retenção definida e proteção contra alteração.
+- Não registrar segredos nem conteúdo sensível desnecessário.
+Testes:
+- Verificar que mutações críticas sempre criam evento e que operadores comuns não conseguem editar/excluir auditoria.
+
+I — INFORMATION DISCLOSURE (exposição de informação)
+Ameaças:
+- IDOR/BOLA permitindo consultar dados de outro salão por UUID.
+- Vazamento em cache, arquivo, exportação, log, relatório, busca ou fila.
+- Exposição de tokens Meta/IA, prompts internos, mensagens ou backups.
+- Suporte/admin acessando conversa sem necessidade.
+- Erro de restauração trazendo dados de todos os salões para um ambiente/tenant.
+Controles:
+- Autorização por objeto e tenant em todas as camadas.
+- RLS em toda tabela tenant-scoped, role da aplicação sem BYPASSRLS.
+- Contexto RLS transaction-local, limpo e reestabelecido para cada transação.
+- Cache tenant-aware; arquivos privados; autorização antes de URL assinada.
+- Segredos em vault/criptografia de envelope; logs minimizados.
+- Break-glass temporário, mínimo e auditado.
+- Restore por tenant testado em ambiente isolado.
+Testes:
+- Teste cruzado A↔B em APIs, RLS, cache, storage, relatórios, exports, background jobs e restores.
+
+D — DENIAL OF SERVICE (negação de serviço)
+Ameaças:
+- Flood de login, webhooks, mensagens, campanhas ou consultas caras.
+- Um salão consome toda a fila, pool de conexões, memória ou orçamento IA.
+- Arquivos grandes, paginação ilimitada ou payloads recursivos.
+Controles:
+- Rate limits por IP, usuário, tenant, endpoint e limite global.
+- Quotas e concorrência por tenant em filas, workers e chamadas externas.
+- Limites de tamanho, timeout, paginação, upload, tokens IA e custo.
+- Circuit breakers, backpressure, dead-letter e prioridades de fila.
+- Monitoramento de capacidade e alertas.
+Testes:
+- Testes de carga e abuso por tenant, rajadas, fila cheia, timeout e recuperação.
+
+E — ELEVATION OF PRIVILEGE (elevação de privilégio)
+Ameaças:
+- Gerente atribui papel proprietário ou administrador global.
+- Usuário operacional acessa endpoints de plataforma.
+- Papel de banco ou serviço ignora RLS.
+- Falha de break-glass permite acesso contínuo.
+Controles:
+- Separação de identidade global e operacional.
+- RBAC deny-by-default e delegação só para papel inferior autorizado.
+- Papel de aplicação PostgreSQL sem superuser, sem BYPASSRLS e sem ownership de tabelas.
+- Migrações com credencial separada, nunca usada no tráfego normal.
+- MFA, aprovação dupla e expiração para ações críticas.
+Testes:
+- Escalada de papéis, endpoints globais, privilégios de banco e expiração do break-glass.
+
+6. RISCOS PRIORITÁRIOS (ANTES DE QUALQUER PRODUÇÃO COM DADOS REAIS)
+CRÍTICO:
+- Vazamento cross-tenant em API, RLS, cache, fila, storage ou backup.
+- Comprometimento de administrador global ou segredos de integração.
+- Manipulação de ledger/cobrança ou alteração de agenda sem integridade.
+ALTO:
+- Roubo de conta de proprietário/gerente.
+- Reexecução de webhooks ou mensagens/cobranças duplicadas.
+- Exaustão de recursos por um tenant.
+- Acesso indevido de suporte a conteúdo pessoal.
+MÉDIO:
+- Exposição de metadados em logs/erros.
+- Falhas de retenção/exclusão e solicitações de privacidade.
+- Degradação por dependência externa ou falha temporária de provedor.
+
+7. HIPÓTESES E LIMITAÇÕES
+- O modelo presume aplicação compartilhada e banco PostgreSQL compartilhado com tenant_id/RLS.
+- O modelo não substitui pentest, revisão de código, avaliação de hospedagem, análise jurídica ou auditoria independente.
+- O risco residual só poderá ser classificado após medir o sistema real e verificar controles implantados.
+- Cada nova integração, módulo ou canal exige atualização deste modelo.

@@ -1,0 +1,31 @@
+VALIDAÇÃO DO STARTER KIT E DO DOMÍNIO — ATENDEE BEAUTY
+Data: 17/11/2026
+Servidor verificado: runnervm9zap3 (Windows Server 2022)
+Escopo: compilação da estrutura inicial .NET, teste de endpoint local e verificações de invariantes de domínio.
+
+RESULTADOS APROVADOS
+1. O servidor tem SDK .NET 10.0.404 e runtime Microsoft.NETCore.App / ASP.NET Core 10.0.15.
+2. A propriedade global.json do Starter Kit (10.0.100, rollForward latestFeature) selecionou SDK 10.0.404 corretamente.
+3. Build Release do projeto Atendee.Api.csproj com referências Domain, Application e Infrastructure: SUCESSO, 0 avisos e 0 erros.
+4. Smoke test da API, vinculada somente a 127.0.0.1:5127: GET /health/live retornou HTTP 200 com {"status":"ok"}.
+5. Headers confirmados na resposta: X-Content-Type-Options: nosniff e Cache-Control: no-store.
+6. Foram executadas 14 verificações de invariantes de domínio em uma cópia temporária: criação e normalização de tenant/slug, status inicial, ID válido, rejeição de slug inválido, fuso horário inválido e timestamp não UTC, rejeição de TenantId default, papel inválido, nome longo e caracteres de controle, normalização de display name, vínculo ao tenant e desativação de usuário. Resultado: PASS em todas as 14.
+7. As pastas temporárias de build e smoke test foram removidas. A porta 5127 ficou sem listener após o teste.
+
+AJUSTES DE CÓDIGO QUE ENTRARAM NO STARTER KIT V2
+- TenantId agora expõe IsValid para tratar o valor default de record struct.
+- TenantUser.Create rejeita tenant vazio, papel não definido, nome acima de 120 caracteres, caracteres de controle e timestamp diferente de UTC.
+- Tenant.Create valida nome, slug (sem hífen inicial/final ou duplicado), tamanho e existência do identificador de fuso horário no sistema.
+
+PENDÊNCIAS / LIMITES
+- O build completo validado foi o scaffold v1; as alterações de domínio do v2 foram compiladas e executadas em harness separado. Um build integrado final do v2 continua como próximo teste.
+- Não foi encontrado pacote xUnit, NUnit, MSTest ou Microsoft.NET.Test.Sdk no cache local do NuGet. A suíte formal será adicionada quando uma fonte NuGet confiável estiver disponível; o harness de 14 invariantes é smoke test, não substitui um test runner.
+- O servidor contém somente binários/serviço PostgreSQL 14, parado e desabilitado; não foi iniciado. A baseline do projeto é PostgreSQL 18. O executável psql do PostgreSQL 14 existe em Program Files, mas não foi usado.
+- Os scripts RLS não foram executados. Ainda é necessário um PostgreSQL 18 descartável para validar RLS, políticas e comportamento de pool.
+- Nenhuma autenticação, autorização, integração PostgreSQL, migração ou endpoint de negócio foi implementado.
+
+ALTERAÇÕES NO SERVIDOR
+Somente cópias temporárias de fonte foram criadas em Documents para build/teste e apagadas ao final. Nenhum serviço, banco, firewall, IIS, serviço Docker, diretório de produção ou configuração permanente foi alterado. O endpoint rodou apenas em loopback e foi encerrado.
+
+INTERPRETAÇÃO
+Os resultados provam que o esqueleto .NET v1 compila, que o endpoint de saúde básico responde localmente e que 14 invariantes iniciais de domínio do v2 passam. Eles NÃO provam isolamento multiempresa em banco, segurança da aplicação, proteção de API, prontidão de produção ou capacidade sob carga.

@@ -1,0 +1,51 @@
+RESULTADO_PERSISTENCIA_EFCORE_NPGSQL_V15.txt
+Data: 17/11/2026
+
+MARCO CONCLUÍDO
+Foi criada e validada uma camada inicial de persistência EF Core + Npgsql para uma entidade demonstrativa tenant-scoped (`tenant_notes`).
+
+VERSÕES RESOLVIDAS
+- .NET SDK usado na validação: 10.0.404.
+- Microsoft.EntityFrameworkCore: 10.0.15.
+- Microsoft.EntityFrameworkCore.Relational: 10.0.15.
+- Npgsql.EntityFrameworkCore.PostgreSQL: 10.0.3.
+- Npgsql: 10.0.3.
+
+RESULTADOS OBSERVADOS NO WINDOWS SERVER 2022
+- Restore completo da solução: aprovado.
+- Restore em modo lockfile (`dotnet restore --locked-mode`): aprovado.
+- Build Release da solução com seis projetos: aprovado, zero avisos e zero erros.
+- Verificações de domínio: 15/15 aprovadas.
+- Projeto de integração EF/Npgsql: compilou com zero avisos e zero erros.
+- Execução sem `ATENDEE_TEST_CONNECTION_STRING`: retornou SKIP e não abriu conexão com banco.
+- Auditoria NuGet dos projetos Infrastructure e Persistence.Checks: nenhuma vulnerabilidade conhecida reportada pelas fontes configuradas em 17/11/2026.
+
+DESENHO DA PERSISTÊNCIA
+- `TenantDbContext` captura uma única identidade de tenant autenticada por escopo.
+- Contexto EF não é pooled.
+- Repositório de exemplo não recebe tenant_id do chamador.
+- Todas as operações tenant-scoped devem passar por `ITenantTransactionRunner`.
+- O runner limpa estado de sessão, define `atendee_runtime` com `SET LOCAL ROLE`, define tenant usando parâmetro SQL em `set_config(..., true)`, executa operação, salva e conclui transação.
+- Papéis separados: owner, runtime, app login e migrator; app login não recebe grants diretos de tabela.
+- RLS segue como segunda barreira, não como substituto de autorização da aplicação.
+
+NÃO VALIDADO / LIMITAÇÕES IMPORTANTES
+- Ainda NÃO foi executado em PostgreSQL 18.7 real: as políticas RLS, grants, bloqueio de leitura/inserção entre tenants, reutilização de conexão física e rollback seguem sem validação de runtime.
+- Docker do host Windows está em modo Windows containers; não foi alterado para Linux.
+- PostgreSQL 14.24 foi encontrado com serviço Stopped e Disabled; não foi iniciado nem usado.
+- Não houve instalação do PostgreSQL 18, abertura de portas ou alteração persistente do servidor.
+- Autenticação/MFA e implementação de produção de `ICurrentTenantContext` ainda não existem.
+- A API ainda não ativa a persistência no startup.
+- `tenant_notes` é somente uma fatia demonstrativa; tabelas comerciais e operacionais precisam de migrações e políticas RLS próprias.
+- A GUC `app.tenant_id` é contexto, não segredo. SQL arbitrário executado sob o runtime role pode potencialmente trocar o valor. SQL injection continua sendo risco crítico; usar consultas parametrizadas, autorizações em cada operação e privilégios mínimos.
+
+ESTADO DO SERVIDOR APÓS A VALIDAÇÃO
+- Pasta temporária `C:\Users\rdp\Documents\AtendeePersistenceValidation_v5` removida.
+- PostgreSQL 14 segue Stopped / Disabled.
+- Portas 5432 e 55432: nenhum listener identificado.
+- Nenhuma implantação ou alteração permanente foi feita.
+
+PRÓXIMO PASSO
+Executar o harness PostgreSQL 18.7 e o runner EF/Npgsql em host Linux de desenvolvimento/CI isolado. Após aprovação, implementar identidade autenticada e o primeiro conjunto de tabelas reais (clientes, serviços, profissionais e agenda), cada uma com tenant_id, chaves compostas, RLS e testes cross-tenant.
+
+O Starter Kit v6 foi incluído neste backup em `Atendee_Beauty_Starter_Kit_v6/`. Nenhuma senha, token, chave de API ou credencial está incluída.

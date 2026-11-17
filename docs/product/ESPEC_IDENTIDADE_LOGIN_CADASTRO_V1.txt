@@ -1,0 +1,95 @@
+ESPECIFICAÇÃO DE IDENTIDADE, LOGIN E CADASTRO — ATENDEE BEAUTY
+Versão: v1 | Data: 17/11/2026
+Status: especificação de produto e segurança para orientar implementação; não implementada.
+
+1. MODELO DE IDENTIDADE
+- Separar identidades globais de Administrador Atendee e identidades operacionais dos salões.
+- Um usuário operacional pertence a exatamente um tenant.
+- Não aceitar tenant_id como autoridade enviado pelo cliente; o tenant é resolvido a partir da sessão autenticada e do registro ativo no servidor.
+- Uma pessoa pode ser proprietária de um salão e também ser usuária operacional desse mesmo salão, mas não pode assumir papel global por isso.
+- Login único por identidade operacional, com unicidade global do identificador primário escolhido (email ou username); evitar contas duplicadas ambíguas.
+- Não permitir que um mesmo identificador seja associado a múltiplos tenants na primeira versão.
+
+2. CADASTRO DE SALÃO
+Estados do tenant: pending_verification, setup_required, trial, active, past_due, suspended, closing, closed.
+Fluxo:
+1. Solicitante informa dados mínimos do salão e contato.
+2. Sistema valida formato, normaliza e verifica unicidade.
+3. Cria tenant pending_verification e convite/identidade do proprietário em estado pendente.
+4. Envia link de verificação com token aleatório de alta entropia; somente hash do token é armazenado.
+5. Token expira, é de uso único e pode ser invalidado.
+6. Após verificar contato, usuário define credencial via fluxo seguro e configura MFA conforme política.
+7. Proprietário aceita termos e conclui dados essenciais do salão.
+8. Tenant passa a setup_required; integrações e configurações são conectadas por fluxo próprio.
+9. Trial/active só após regras comerciais e de cobrança estarem implementadas.
+10. Eventos relevantes são auditados.
+
+Proteções:
+- Limites por IP, e-mail normalizado e sinais antiabuso; não revelar se um e-mail já existe.
+- Respostas genéricas para recuperação e cadastro.
+- CAPTCHA ou desafio adaptativo somente quando houver sinais de abuso, evitando fricção desnecessária.
+- Não ativar salão apenas porque o navegador redirecionou para uma URL de sucesso.
+- Convites e tokens nunca em logs; guardar hash e expiração.
+
+3. LOGIN
+1. Receber credenciais por TLS.
+2. Aplicar rate limit progressivo por IP e identificador.
+3. Verificar credencial usando mecanismo maduro (ASP.NET Core Identity ou provedor externo aprovado; não implementar hash de senha próprio).
+4. Resposta genérica em falha; não indicar se usuário, salão ou senha está incorreto.
+5. Verificar estado da conta e tenant.
+6. Exigir MFA conforme papel/política.
+7. Criar sessão segura; registrar evento de autenticação sem gravar senha, token ou conteúdo sensível.
+8. Na requisição autenticada, carregar usuário, tenant, estado e permissões do servidor.
+9. Se tenant estiver suspenso, limitar acesso conforme política de cobrança e permitir somente ações essenciais como consultar situação, atualizar pagamento ou exportar dados autorizados.
+
+4. SESSÃO E RECUPERAÇÃO
+- Preferir cookies Secure, HttpOnly, SameSite apropriado; proteção CSRF para operações mutáveis.
+- Não guardar tokens de sessão em localStorage.
+- Rotacionar identificador de sessão após login, MFA e mudança de privilégio.
+- Expirar sessões por inatividade e tempo absoluto; política final configurável e testada.
+- Revogar sessões em troca/reset de senha, desativação, suspeita de comprometimento e remoção de papel.
+- Recuperação por link de uso único, curto prazo, armazenado como hash; não revelar existência da conta.
+- MFA com códigos de recuperação armazenados de forma protegida e exibidos uma única vez.
+- Não permitir que suporte administrativo redefina MFA sem fluxo de verificação, justificativa e auditoria.
+
+5. MFA E ACESSO PRIVILEGIADO
+- Administrador Atendee: MFA obrigatório, preferir chave FIDO2/WebAuthn ou passkey; TOTP como alternativa aprovada.
+- Proprietário e Gerente: MFA obrigatório para produção.
+- Recepcionista e Profissional: MFA recomendado; exigir quando risco, localização ou operação sensível justificar.
+- Mudança de papel, exportação, troca de titularidade, alteração de pagamento e gestão de credenciais exigem reautenticação/MFA recente.
+- Ações administrativas privilegiadas usam contas individuais; proibir contas compartilhadas.
+
+6. CONVITES DE FUNCIONÁRIOS
+- Proprietário ou gerente autorizado cria convite com papel permitido.
+- Convite pertence a um tenant e a um papel específico; papel nunca pode ser elevado pelo convidado.
+- Token aleatório de uso único; banco armazena hash, tenant, papel, criador, expiração e estado.
+- Aceitação confirma identidade, termos e cria usuário ligado exclusivamente ao tenant do convite.
+- Convite revogado/expirado não pode ser reutilizado.
+- Alteração posterior de papel é auditada e pode exigir reautenticação do administrador do salão.
+
+7. DESLIGAMENTO E REVOGAÇÃO
+- Desativar usuário imediatamente impede novas autenticações e revoga sessões, refresh tokens, convites e credenciais de integração pessoais.
+- Manter registros de autoria histórica (ex.: quem criou agendamento) sem manter acesso ativo.
+- Reatribuir agenda/conversas pendentes a outro usuário autorizado.
+- Não apagar registros financeiros ou de auditoria por desligamento.
+- Proprietário não pode remover o último proprietário ativo sem processo de transferência confirmado.
+
+8. ADMINISTRADOR ATENDEE
+- Contas globais ficam em tabela/área de identidade separada.
+- MFA forte e controle de dispositivo/sessão.
+- Acesso a conteúdo de salão negado por padrão.
+- Ações globais exigem motivo, audit event, request_id e, para operações críticas, aprovação dupla.
+- Break-glass temporário, limitado ao tenant/recurso e com notificação ao proprietário.
+
+9. EVENTOS DE AUDITORIA OBRIGATÓRIOS
+signup_started, tenant_created, contact_verified, owner_activated, login_succeeded, login_failed, mfa_challenge_failed, password_reset_requested, password_reset_completed, session_revoked, invitation_created, invitation_accepted, invitation_revoked, user_deactivated, role_changed, privilege_escalation_denied, break_glass_requested, break_glass_approved, break_glass_used.
+
+10. TESTES BLOQUEADORES
+- Enumeração de usuários por login/recuperação não é possível.
+- Usuário de um tenant não consegue trocar tenant alterando URL, header, body, ID ou cookie.
+- Convite de tenant A não cria usuário no tenant B.
+- Token expirado, revogado ou usado não funciona.
+- Usuário desativado não mantém sessão funcional.
+- Remoção de papel revoga acesso sem depender de logout manual.
+- MFA obrigatório não pode ser contornado por endpoint alternativo.
+- Administrador Atendee não acessa conteúdo sem break-glass.

@@ -1,0 +1,50 @@
+ATENDEE BEAUTY — ESTADO TÉCNICO CONHECIDO
+
+SERVIDOR VERIFICADO
+- Host: runnervm9zap3.
+- Sistema: Windows Server 2022 Datacenter, build 20348.5870.
+- CPU reportada: AMD EPYC 7763 64-Core Processor.
+- RAM: aproximadamente 8 GB.
+- Espaço livre informado: aproximadamente 72–73 GB em C: e D:.
+- Docker CLI 29.7.2; Docker Compose 5.7.0.
+- Serviço Docker em execução e automático.
+- Docker context selecionado: default.
+- Docker daemon responde em modo Windows (OSType=windows).
+- Nenhum contêiner em execução no diagnóstico.
+- Nenhuma porta 5678, 3000 ou 8080 em LISTEN no diagnóstico.
+- Nenhuma imagem Linux/n8n/WAHA encontrada no daemon Windows.
+
+WSL E VIRTUALIZAÇÃO
+- WSL OptionalFeature e VirtualMachinePlatform habilitados.
+- WSL padrão estava em versão 1; nenhuma distribuição Linux instalada.
+- Kernel WSL2 não encontrado no diagnóstico.
+- VMMonitorModeExtensions=False e SecondLevelAddressTranslationExtensions=False.
+- O hypervisor/provedor não expunha extensões de virtualização aninhada ao guest.
+- Não foi realizado reboot nem instalação de WSL/Ubuntu.
+- Não presumir que WSL2 funcionará sem habilitação de nested virtualization pelo provedor/hypervisor.
+
+DOCKER
+- Contexto desktop-linux apontava para pipe inexistente do Docker Desktop.
+- Contexto alterado para default; daemon Windows voltou a responder.
+- Docker Desktop não foi confirmado como instalado.
+- Não presumir que o Docker Windows executa imagens Linux.
+- Não apagar volumes, dados ou configurações sem backup e autorização.
+
+ZIP ANTIGO
+- Um Atendee.zip analisado anteriormente continha compose.yaml e .env para n8n.
+- compose.yaml definia n8n com volume nomeado n8n_data e porta local 127.0.0.1:5678.
+- .env continha N8N_ENCRYPTION_KEY; o segredo não foi copiado para este pacote.
+- O ZIP antigo não continha WAHA, exportações de workflows nem código-fonte.
+- Alterações feitas anteriormente em outro runner/ambiente não devem ser consideradas alterações no servidor real.
+
+CAMINHOS DISCUTIDOS
+- Usar API oficial WhatsApp Cloud API e n8n, evitando WAHA.
+- A compatibilidade de n8n nativo no Windows precisa ser avaliada; não instalar sem verificar versão e requisitos.
+- Alternativa: manter n8n no servidor atual e hospedar WAHA em Linux externo.
+- Nenhuma dessas alternativas foi implantada até este registro.
+
+SEGURANÇA
+- Antes de alterar servidor, reconfirmar host, sistema operacional, Docker context, containers, volumes, portas, RAM e espaço livre.
+- Preservar volumes e dados do n8n.
+- Não incluir segredos em backups.
+- Não reiniciar servidor sem necessidade e autorização explícita.

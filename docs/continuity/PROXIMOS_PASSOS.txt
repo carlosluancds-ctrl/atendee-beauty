@@ -1,0 +1,81 @@
+ATENDEE BEAUTY — PRÓXIMOS PASSOS
+
+1. Escolher arquitetura WhatsApp:
+   - Preferência discutida: API oficial WhatsApp Cloud API.
+   - Cada salão conecta seu próprio número.
+   - Investigar Embedded Signup e modelo correto de cobrança.
+
+2. Definir arquitetura multi-tenant:
+   - Identificador único por salão.
+   - Separação rigorosa de dados, credenciais, webhooks, clientes, agenda e consumo.
+   - Painel administrativo para cadastro e monitoramento.
+
+3. Testar o plano:
+   - R$ 147/mês.
+   - Franquia Meta proposta de R$ 20/mês.
+   - Acúmulo do saldo não utilizado.
+   - Recarga adicional mediante autorização.
+   - Medir custos reais em um salão piloto antes de fixar a franquia.
+
+4. Validar custos:
+   - Tarifas atuais da Meta por país e categoria.
+   - Custo de IA por conversa/atendimento.
+   - Infraestrutura.
+   - Margem por salão.
+
+5. Retomar diagnóstico técnico:
+   - Confirmar que o servidor conectado continua sendo o correto.
+   - Verificar estado real do Docker e dos arquivos do Atendee.
+   - Não presumir que o estado técnico permaneceu igual.
+
+6. Criar piloto:
+   - Conexão do WhatsApp.
+   - Perguntas frequentes.
+   - Serviços e preços.
+   - Agenda e profissionais.
+   - Agendamento e transferência para atendente humano.
+   - Medição de consumo e custo.
+
+7. Gerar backup a cada marco:
+   - Documentação e decisões.
+   - Código e configurações não secretas.
+   - Exportações de workflows.
+   - Manifesto e instruções de restauração.
+   - Segredos ficam fora do ZIP.
+
+
+ATUALIZAÇÃO 2026-11-17
+- Usuário confirmou que a plataforma será multiempresa desde o início.
+- Usuário não usará seu perfil pessoal do Facebook; integração oficial WhatsApp fica pendente até existir caminho compatível.
+- Usuário começa como pessoa física, sem CNPJ neste momento.
+- Próxima atividade: desenhar módulos, papéis e modelo de dados multiempresa antes de instalar ou alterar o servidor.
+
+
+ATUALIZAÇÃO 2026-11-17
+- Usuário aprovou os cinco perfis: Administrador Atendee, Proprietário, Gerente, Recepcionista e Profissional.
+- Próxima etapa: detalhar permissões por módulo e desenhar modelo de dados multiempresa, antes de qualquer instalação ou alteração do servidor.
+
+MARCO V16 — PREPARAÇÃO DA VALIDAÇÃO POSTGRESQL 18.7 EM CI:
+- Starter Kit v7 adiciona workflow GitHub Actions para Linux com PostgreSQL 18.7 descartável e execução dos testes EF Core/Npgsql como atendee_app_login.
+- Teste adicional confirma reuso da mesma conexão física após rollback.
+- Senhas de admin/login/migrator são aleatórias e geradas em runtime; não há credenciais reais no ZIP.
+- Workflow YAML e Bash foram verificados estaticamente. A execução CI ainda não aconteceu: não há .NET SDK nem Docker neste ambiente.
+- Status: PREPARADO, NÃO VALIDADO EM RUNTIME.
+PRÓXIMA AÇÃO: executar o workflow em um runner Linux e revisar todos os resultados; só depois iniciar autenticação/MFA e o ICurrentTenantContext de produção. Nenhuma alteração no servidor atual foi realizada.
+
+
+MARCO V17 — REVISÃO ESTÁTICA DO WORKFLOW CI:
+- YAML, Bash do workflow e scripts Bash revalidados estaticamente.
+- Dotnet, Docker e remote Git não estão disponíveis nesta sessão; CI e PostgreSQL 18.7/RLS/pool permanecem NÃO EXECUTADOS.
+- Próxima ação obrigatória: conectar repositório GitHub autorizado, rodar o workflow em Linux e registrar URL/ID/logs.
+- Não implementar autenticação/MFA nem alterar o servidor antes de todos os PASS do portão de persistência.
+
+
+MARCO V19 — VALIDAÇÃO LOCAL DO STARTER KIT V7:
+- No SDK .NET 10.0.404, `dotnet restore Atendee.sln --locked-mode` passou após alinhar a referência explícita Microsoft.EntityFrameworkCore.Relational 10.0.15 com os demais pacotes EF Core.
+- `dotnet build Atendee.sln --no-restore --configuration Release` passou com seis projetos, zero avisos e zero erros.
+- `Atendee.Domain.Checks` passou com 15/15 verificações.
+- `Atendee.Persistence.Checks` foi compilado, mas não executado contra banco PostgreSQL.
+- PostgreSQL 18.7/RLS/pool e GitHub Actions continuam pendentes. `gh auth status` informa que não existe sessão autenticada; Docker local continua em modo Windows.
+- Alterações ocorreram apenas na cópia isolada de validação; nenhum serviço/volume/porta de produção foi alterado.
+PRÓXIMO BLOQUEIO: titular autentizar `gh` no computador autorizado, confirmar o repositório privado, publicar esta raiz e executar o workflow em runner Linux. Não iniciar autenticação/MFA antes de todos os PASS de persistência.
