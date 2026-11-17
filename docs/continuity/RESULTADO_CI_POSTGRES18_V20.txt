@@ -1,0 +1,55 @@
+ATENDEE BEAUTY — RESULTADO CI POSTGRESQL 18.7 — MARCO V20
+Data: 17/11/2026
+Status: APROVADO
+
+REPOSITÓRIO E EXECUÇÃO
+- Repositório privado: https://github.com/carlosluancds-ctrl/atendee-beauty
+- Branch: main
+- Commit testado: 6925d2add40544719b7cf16101665b333185b361
+- Workflow: PostgreSQL 18 persistence integration
+- Run ID: 44166541043
+- URL: https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44166541043
+- Runner: GitHub-hosted Ubuntu 26.04
+- PostgreSQL: 18.7 (Debian 18.7-1.pgdg12+2)
+- Conclusion: SUCCESS; job completo; nenhuma etapa crítica ignorada.
+
+RESULTADOS
+1. dotnet restore Atendee.sln --locked-mode: PASS.
+2. dotnet build Atendee.sln --no-restore --configuration Release: PASS; 0 warnings, 0 errors.
+3. Atendee.Domain.Checks: PASS; 15/15.
+4. PostgreSQL 18.7 disposable container startup and health: PASS.
+5. Provision disposable database and restricted roles: PASS.
+6. Atendee.Persistence.Checks: PASS; 9/9.
+7. Disposable container cleanup: PASS.
+
+TESTES DE PERSISTÊNCIA EXECUTADOS
+- Tenant A reads its own note.
+- The Npgsql pool reuses the same PostgreSQL backend for tenants A and B.
+- Tenant B cannot read tenant A's note even when the UUID is known.
+- Tenant B's list query does not expose tenant A's note.
+- RLS WITH CHECK blocks a cross-tenant insert.
+- The application login has no direct table access outside the transaction runner.
+- Failed operation rolls back and releases the transaction.
+- The same physical connection is safely reused after rollback.
+- Tenant A still sees its own note after B and rollback tests.
+
+CORREÇÕES APLICADAS DURANTE O CI
+- Run inicial 44166048437 falhou no provisionamento porque o papel atendee_owner não tinha CREATE no database.
+- A criação do schema foi movida para o administrador do banco, atribuindo o schema ao papel NOLOGIN atendee_owner sem ampliar privilégios do owner.
+- A senha de admin do banco descartável passou a ser registrada com add-mask antes de ser exportada entre etapas.
+- A senha era aleatória, exclusiva do contêiner de teste e não foi reutilizada; o contêiner/volume foram removidos na limpeza do job.
+- A segunda execução passou integralmente.
+
+PRÓXIMA FASE AUTORIZADA PELO GATE
+1. Implementar identidade operacional com ASP.NET Core Identity, sem implementar hash de senha próprio.
+2. Manter identidade do Administrador Atendee separada das identidades operacionais.
+3. Implementar MFA TOTP e recovery codes; obrigatório para Owner e Manager; permitir evolução para passkeys/WebAuthn.
+4. Implementar sessão por cookie Secure, HttpOnly, SameSite e proteção CSRF.
+5. Implementar ICurrentTenantContext confiável: resolver tenant e papel no servidor a partir do usuário autenticado e da associação única ativa; ignorar tenant_id vindo do navegador.
+6. Testar expiração/revogação, usuário desativado, MFA bypass, enumeração e alterações de papel.
+7. Não abrir cadastro público nem enviar convites até o serviço de e-mail e o fluxo de verificação estarem definidos.
+8. Não habilitar o Administrador Atendee no mesmo store operacional; modelo global permanece separado.
+
+LIMITES
+- A aprovação cobre somente o Starter Kit de persistência atual e os testes explicitamente listados. Não prova segurança completa da aplicação, MFA, autorização por todos os módulos nem prontidão para produção.
+- Nenhum deploy foi realizado; nenhum servidor de produção, volume ou dado de cliente foi alterado.

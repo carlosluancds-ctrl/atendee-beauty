@@ -79,3 +79,11 @@ MARCO V19 — VALIDAÇÃO LOCAL DO STARTER KIT V7:
 - PostgreSQL 18.7/RLS/pool e GitHub Actions continuam pendentes. `gh auth status` informa que não existe sessão autenticada; Docker local continua em modo Windows.
 - Alterações ocorreram apenas na cópia isolada de validação; nenhum serviço/volume/porta de produção foi alterado.
 PRÓXIMO BLOQUEIO: titular autentizar `gh` no computador autorizado, confirmar o repositório privado, publicar esta raiz e executar o workflow em runner Linux. Não iniciar autenticação/MFA antes de todos os PASS de persistência.
+
+
+MARCO V20 — PORTÃO POSTGRESQL 18.7 APROVADO:
+- GitHub Actions run 44166541043, commit 6925d2a, terminou SUCCESS.
+- Restore bloqueado, build Release (0 avisos/erros), Domain Checks 15/15 e PostgreSQL 18.7/RLS/EF Core/pool 9/9 passaram, sem SKIP.
+- Banco descartável e volume foram removidos no cleanup.
+- Relatório: docs/continuity/RESULTADO_CI_POSTGRES18_V20.txt.
+PRÓXIMA FASE: implementar ASP.NET Core Identity para identidades operacionais, TOTP/recovery codes, cookies protegidos/CSRF e ICurrentTenantContext resolvido pelo servidor a partir da associação única do usuário. Administrador Atendee permanece separado. Cadastro público/convites aguardam definição de provedor de e-mail. Sem deploy.

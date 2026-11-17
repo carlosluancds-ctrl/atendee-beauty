@@ -1,22 +1,24 @@
 {
-  "backup_version": "v19",
+  "backup_version": "v20",
   "updated_at": "2026-11-17",
-  "new_decision": "Cada usuário operacional fica vinculado a apenas um salão; sem login operacional multi-salão na primeira versão.",
-  "security_baseline": "Baseline profissional de arquitetura e segurança; inclui OWASP ASVS 5.0.0, OWASP multi-tenant e NIST SSDF como referências.",
-  "milestone": "Starter Kit v7: restore bloqueado, build Release e checks de domínio aprovados localmente; CI PostgreSQL 18.7/RLS/pool ainda pendente.",
+  "new_decision": "Usuário operacional pertence a exatamente um salão; identidades globais de Administrador Atendee permanecem separadas.",
+  "security_baseline": "Baseline profissional; OWASP ASVS 5.0.0, OWASP multi-tenant e NIST SSDF.",
+  "milestone": "Starter Kit v7: CI PostgreSQL 18.7 aprovado integralmente em GitHub Actions; 15 domain checks e 9 persistence checks, sem SKIP.",
   "validation_status": {
-    "starter_kit_v6_dotnet_release_build": "passed historically; 0 warnings, 0 errors; SDK 10.0.404",
-    "starter_kit_v6_domain_checks": "passed historically; 15/15",
-    "starter_kit_v7_workflow_yaml": "passed static review in v16/v17",
-    "starter_kit_v7_workflow_bash": "passed bash -n in v16/v17",
-    "starter_kit_v7_dotnet_restore_locked": "passed locally in isolated validation copy after aligning Microsoft.EntityFrameworkCore.Relational 10.0.15",
-    "starter_kit_v7_dotnet_release_build": "passed locally; 6 projects, 0 warnings, 0 errors; SDK 10.0.404",
-    "starter_kit_v7_domain_checks": "passed locally; 15/15",
-    "starter_kit_v7_persistence_runner": "compiled successfully; not executed against PostgreSQL",
-    "starter_kit_v7_postgresql_18_rls_runtime": "not run; Docker daemon is Windows and Linux GitHub Actions workflow is pending",
-    "github_ci_execution": "pending; gh CLI is not authenticated and private repository has not been accessed"
+    "starter_kit_v7_dotnet_restore_locked": "passed in CI run 44166541043",
+    "starter_kit_v7_dotnet_release_build": "passed in CI; 0 warnings, 0 errors",
+    "starter_kit_v7_domain_checks": "passed in CI; 15/15",
+    "starter_kit_v7_postgres_18_7_startup": "passed",
+    "starter_kit_v7_restricted_role_provisioning": "passed after schema ownership correction",
+    "starter_kit_v7_efcore_npgsql_rls_pool": "passed in CI; 9/9",
+    "starter_kit_v7_disposable_database_cleanup": "passed",
+    "github_ci_execution": "passed; https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44166541043",
+    "production_authentication_mfa": "not implemented",
+    "production_tenant_context": "not implemented",
+    "email_verification_and_invitation_delivery": "pending provider selection",
+    "production_deployment": "not authorized or performed"
   },
-  "included_starter_kit": "v7 scaffold at repository root",
-  "next_blocking_step": "Authenticate GitHub CLI on the authorized computer, confirm the private repository, publish the repository root, run PostgreSQL 18 persistence integration on Linux and review every PASS with no SKIP before production authentication/MFA.",
-  "latest_review_report": "docs/continuity/RESULTADO_VALIDACAO_LOCAL_V7_V19.txt"
+  "tested_commit": "6925d2add40544719b7cf16101665b333185b361",
+  "next_blocking_step": "Implement ASP.NET Core Identity for operational identities, TOTP/recovery codes, secure cookie and CSRF, plus a server-resolved single-tenant context. Keep platform admin identity separate. Do not enable public signup/email invitations until email delivery is selected.",
+  "latest_review_report": "docs/continuity/RESULTADO_CI_POSTGRES18_V20.txt"
 }

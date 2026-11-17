@@ -2,7 +2,7 @@
 
 **Repositório privado do produto Atendee Beauty.** Este repositório reúne as decisões de produto, arquitetura, segurança, documentação de continuidade e o Starter Kit técnico atual.
 
-> **Estado em 17/11/2026:** baseline Starter Kit v7. Restore bloqueado, build Release e checks de domínio passaram localmente no SDK 10.0.404 (15/15); o runner de persistência compila. A integração real com PostgreSQL 18.7/RLS/pool e o workflow GitHub Actions ainda não foram executados porque a CLI GitHub não está autenticada. Este repositório não representa uma aplicação pronta para produção.
+> **Estado em 17/11/2026:** Starter Kit v7 validado em GitHub Actions no PostgreSQL 18.7: restore bloqueado, build Release, 15/15 checks de domínio e 9/9 checks de persistência/RLS/pool passaram (run 44166541043). A próxima fase é identidade operacional, MFA e contexto confiável de tenant. A aplicação ainda não está pronta para produção.
 
 ## Conteúdo
 

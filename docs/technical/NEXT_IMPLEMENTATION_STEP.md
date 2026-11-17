@@ -1,12 +1,14 @@
-# Next implementation step — v7
+# Next implementation step — Identity and trusted tenant context
 
-**Local validation recorded in milestone V19:** locked restore and Release build passed with .NET SDK 10.0.404; all 15 domain checks passed. The persistence runner compiled but has not been run against PostgreSQL 18.7. This does not replace the GitHub Actions runtime gate.
+**Persistence gate passed:** GitHub Actions run 44166541043 on commit 6925d2a completed successfully. Locked restore, Release build, 15/15 domain checks, PostgreSQL 18.7 provisioning and 9/9 EF Core/RLS/pool checks passed; the disposable database was removed.
 
-1. Push `Atendee_Beauty_Starter_Kit_v7` as the repository root (or move `.github/workflows/postgres18-persistence.yml` into the root of the existing application repository).
-2. Run the `PostgreSQL 18 persistence integration` GitHub Actions workflow. Do not treat the source-only preparation as a passing test.
-3. Review the complete logs. Require locked restore, Release build, domain checks and every persistence integration check to pass; the persistence runner must not report `SKIP`.
-4. Fix every role, migration, RLS, EF Core or connection-pool failure before proceeding. Preserve the CI run URL/ID and its date in the next continuity checkpoint.
-5. Only after that runtime gate passes, implement authentication/MFA and the production `ICurrentTenantContext`; derive tenant exclusively from the authenticated operational account's single tenant membership.
-6. Then add customer/service/professional/appointment entities and migrations. Each tenant table must include `tenant_id`, composite tenant-aware keys/foreign keys, RLS and cross-tenant tests.
+1. Add the operational identity store using ASP.NET Core Identity. Never implement password hashing directly.
+2. Keep global Atendee platform-administrator identities in a separate model/store boundary.
+3. Require MFA for Owner and Manager. Start with the built-in Identity TOTP provider and one-time recovery codes; keep passkey/WebAuthn as a later enhancement.
+4. Use encrypted Secure, HttpOnly, SameSite cookies with CSRF protection; do not issue bearer tokens into browser localStorage.
+5. Resolve the active tenant and role from the authenticated user's single server-side membership on each request. Ignore tenant_id in browser inputs, headers and URLs.
+6. Revoke access when the account/membership is disabled or its role changes. Test session expiry/revocation, MFA bypass, generic login errors, enumeration and cross-tenant access.
+7. Keep signup, email verification and employee invitation delivery closed until an email provider and operational workflow are selected. Tokens must be high-entropy, single-use, stored as hashes and excluded from logs.
+8. Extend PostgreSQL CI with identity schema and authentication/tenant-resolution tests. Do not deploy before the full security plan, backup/restore and release gates pass.
 
-The current Windows Server must not be switched to Linux containers or have PostgreSQL installed merely to run the lab. The existing PostgreSQL 14 service remains unused. No production server changes are authorized by this test plan.
+No production deployment or production-server changes are authorized by this checkpoint.
