@@ -6,7 +6,10 @@ DO $preflight$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM pg_roles
-        WHERE rolname IN ('atendee_owner', 'atendee_runtime', 'atendee_app_login', 'atendee_migrator')
+        WHERE rolname IN (
+            'atendee_owner', 'atendee_runtime', 'atendee_app_login',
+            'atendee_identity_owner', 'atendee_auth_login', 'atendee_migrator'
+        )
     ) THEN
         RAISE EXCEPTION 'Atendee roles already exist. Review the database manually; do not rerun blindly.';
     END IF;
@@ -19,31 +22,51 @@ CREATE ROLE atendee_runtime
     NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
 CREATE ROLE atendee_app_login
     LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
+
+CREATE ROLE atendee_identity_owner
+    NOLOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE atendee_auth_login
+    LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
+
 CREATE ROLE atendee_migrator
     LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
 
 GRANT atendee_runtime TO atendee_app_login WITH INHERIT FALSE, SET TRUE;
 GRANT atendee_owner TO atendee_migrator WITH INHERIT FALSE, SET TRUE;
+GRANT atendee_identity_owner TO atendee_migrator WITH INHERIT FALSE, SET TRUE;
 
 DO $grant_connect$
 BEGIN
     EXECUTE format(
-        'GRANT CONNECT ON DATABASE %I TO atendee_app_login, atendee_migrator',
+        'GRANT CONNECT ON DATABASE %I TO atendee_app_login, atendee_auth_login, atendee_migrator',
         current_database());
 END
 $grant_connect$;
 
--- Create the schema as the database administrator and assign ownership
--- to the dedicated no-login owner role. Do not grant database CREATE to it.
+-- Create schemas as the database administrator and assign dedicated NOLOGIN owners.
+-- Do not grant database CREATE to either owner role.
 CREATE SCHEMA atendee AUTHORIZATION atendee_owner;
+CREATE SCHEMA identity AUTHORIZATION atendee_identity_owner;
 
 REVOKE ALL ON SCHEMA atendee FROM PUBLIC;
 GRANT USAGE ON SCHEMA atendee TO atendee_runtime;
+
+REVOKE ALL ON SCHEMA identity FROM PUBLIC;
+GRANT USAGE ON SCHEMA identity TO atendee_auth_login;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE atendee_owner IN SCHEMA atendee
     REVOKE ALL ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE atendee_owner IN SCHEMA atendee
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO atendee_runtime;
 
+ALTER DEFAULT PRIVILEGES FOR ROLE atendee_identity_owner IN SCHEMA identity
+    REVOKE ALL ON TABLES FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE atendee_identity_owner IN SCHEMA identity
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO atendee_auth_login;
+ALTER DEFAULT PRIVILEGES FOR ROLE atendee_identity_owner IN SCHEMA identity
+    GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO atendee_auth_login;
+
 -- atendee_app_login has no direct table privileges. The API must SET LOCAL ROLE
--- atendee_runtime inside each tenant transaction before issuing tenant queries.
+-- atendee_runtime inside each tenant transaction before issuing business queries.
+-- atendee_auth_login can access only the identity schema and the narrowly scoped
+-- SECURITY DEFINER membership resolver created by migration 002.
