@@ -131,6 +131,7 @@ try
         Check(true, "Auth login cannot directly read tenant membership tables");
 
         var trusted = scope.ServiceProvider.GetRequiredService<TrustedRequestContext>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
         var middleware = new TenantContextMiddleware(_ =>
         {
             Check(trusted.RequireTenantId().Value == tenantId,
@@ -144,11 +145,12 @@ try
         {
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim("atendee:tenant_id", secondTenantId.ToString()),
-            new Claim("atendee:tenant_role", TenantRole.Professional.ToString())
+            new Claim("atendee:tenant_role", TenantRole.Professional.ToString()),
+            new Claim("amr", "mfa")
         }, "test"));
         http.Request.Headers["X-Tenant-ID"] = secondTenantId.ToString();
         http.Request.QueryString = new QueryString("?tenantId=" + secondTenantId);
-        await middleware.InvokeAsync(http, resolver, trusted);
+        await middleware.InvokeAsync(http, resolver, trusted, userManager);
         Check(http.User.FindFirst("atendee:tenant_id")?.Value == tenantId.ToString(),
             "Stale tenant claims are replaced from the database each request");
     }
