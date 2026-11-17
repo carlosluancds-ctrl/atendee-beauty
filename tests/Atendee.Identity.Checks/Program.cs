@@ -264,13 +264,19 @@ static async Task SeedSecondTenantAsync(string cs, Guid tenantId)
 {
     await using var connection = new NpgsqlConnection(cs);
     await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
     await using var command = new NpgsqlCommand(
         """
         INSERT INTO atendee.tenants(id,name,slug,time_zone_id,status,created_at_utc)
         VALUES(@id,'Second Synthetic Salon','second-' || @id::text,'America/Sao_Paulo',3,now())
-        """, connection);
+        """, connection, transaction);
     command.Parameters.AddWithValue("id", tenantId);
     await command.ExecuteNonQueryAsync();
+    await transaction.CommitAsync();
 }
 
 static async Task<bool> TryInsertSecondMembershipAsync(string cs, Guid tenantId, Guid userId)
