@@ -1,24 +1,52 @@
 {
-  "backup_version": "v20",
-  "updated_at": "2026-11-17",
-  "new_decision": "Usuário operacional pertence a exatamente um salão; identidades globais de Administrador Atendee permanecem separadas.",
-  "security_baseline": "Baseline profissional; OWASP ASVS 5.0.0, OWASP multi-tenant e NIST SSDF.",
-  "milestone": "Starter Kit v7: CI PostgreSQL 18.7 aprovado integralmente em GitHub Actions; 15 domain checks e 9 persistence checks, sem SKIP.",
-  "validation_status": {
-    "starter_kit_v7_dotnet_restore_locked": "passed in CI run 44166541043",
-    "starter_kit_v7_dotnet_release_build": "passed in CI; 0 warnings, 0 errors",
-    "starter_kit_v7_domain_checks": "passed in CI; 15/15",
-    "starter_kit_v7_postgres_18_7_startup": "passed",
-    "starter_kit_v7_restricted_role_provisioning": "passed after schema ownership correction",
-    "starter_kit_v7_efcore_npgsql_rls_pool": "passed in CI; 9/9",
-    "starter_kit_v7_disposable_database_cleanup": "passed",
-    "github_ci_execution": "passed; https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44166541043",
-    "production_authentication_mfa": "not implemented",
-    "production_tenant_context": "not implemented",
-    "email_verification_and_invitation_delivery": "pending provider selection",
-    "production_deployment": "not authorized or performed"
+  "backup_version": "v21-wip-identity",
+  "updated_at": "2026-11-17T21:16:00Z",
+  "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
+  "branch": "wip/operational-identity-v1",
+  "snapshot_commit": "a74089cc1c325d1e7130bcaca6953797ee00d745",
+  "base_branch": "main",
+  "base_commit": "4464001",
+  "previous_security_gate": {
+    "run_id": "44166541043",
+    "status": "success",
+    "domain_checks": "15/15",
+    "postgres_18_7_persistence_checks": "9/9",
+    "build_warnings": 0,
+    "build_errors": 0
   },
-  "tested_commit": "6925d2add40544719b7cf16101665b333185b361",
-  "next_blocking_step": "Implement ASP.NET Core Identity for operational identities, TOTP/recovery codes, secure cookie and CSRF, plus a server-resolved single-tenant context. Keep platform admin identity separate. Do not enable public signup/email invitations until email delivery is selected.",
-  "latest_review_report": "docs/continuity/RESULTADO_CI_POSTGRES18_V20.txt"
+  "identity_stage": {
+    "status": "work_in_progress_not_production_ready",
+    "locked_restore": "passed locally",
+    "release_build": "passed locally with zero warnings/errors",
+    "domain_checks": "15/15 locally",
+    "postgres_identity_migration": "not yet executed in CI at snapshot time",
+    "identity_integration_checks": "not yet executed in PostgreSQL at snapshot time",
+    "github_actions_identity_run": "pending after branch push"
+  },
+  "implemented": [
+    "ASP.NET Core Identity operational store in identity schema",
+    "Separate platform admin boundary (not implemented yet)",
+    "One operational identity to one salon DB constraint",
+    "Unique normalized email",
+    "Server-side tenant membership resolution via restricted SECURITY DEFINER function",
+    "Auth DB role without direct SELECT to tenants or tenant_users",
+    "TOTP using RFC 6238 and Data Protection encryption at rest",
+    "Encrypted one-time recovery codes",
+    "Atomic replay protection in identity.TotpReplayGuards",
+    "Owner and Manager MFA enforcement with amr=mfa",
+    "Secure HttpOnly SameSite Strict __Host cookies",
+    "Antiforgery and auth endpoint IP rate limits",
+    "PostgreSQL identity integration test harness and CI steps"
+  ],
+  "not_ready": [
+    "No production deployment",
+    "No public signup or invitation/email reset flows",
+    "No platform admin identity store",
+    "No WebAuthn/passkey migration",
+    "No complete HTTP/session/revocation/CSRF security integration suite",
+    "Non-Windows production Data Protection protector not configured",
+    "Distributed rate limiting and trusted proxy configuration not configured"
+  ],
+  "next_blocking_step": "Push branch to private GitHub, run the PostgreSQL 18.7 CI including migration 002 and tests/Atendee.Identity.Checks; fix failures, require all tests pass without SKIP before proposing PR to main.",
+  "handoff_file": "docs/continuity/BACKUP_HANDOFF_2026-11-17.md"
 }
