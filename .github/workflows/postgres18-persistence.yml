@@ -42,6 +42,7 @@ jobs:
           fi
 
           ADMIN_TEST_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::${ADMIN_TEST_PASSWORD}"
           printf 'ATENDEE_TEST_POSTGRES_ADMIN_PASSWORD=%s\n' "${ADMIN_TEST_PASSWORD}" >> "${GITHUB_ENV}"
 
           docker run --detach --rm --name atendee-postgres18-ci \

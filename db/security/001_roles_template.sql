@@ -33,9 +33,9 @@ BEGIN
 END
 $grant_connect$;
 
-SET ROLE atendee_owner;
+-- Create the schema as the database administrator and assign ownership
+-- to the dedicated no-login owner role. Do not grant database CREATE to it.
 CREATE SCHEMA atendee AUTHORIZATION atendee_owner;
-RESET ROLE;
 
 REVOKE ALL ON SCHEMA atendee FROM PUBLIC;
 GRANT USAGE ON SCHEMA atendee TO atendee_runtime;
