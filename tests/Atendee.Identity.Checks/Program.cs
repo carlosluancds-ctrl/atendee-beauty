@@ -25,6 +25,7 @@ var keyRing = Path.Combine(Path.GetTempPath(), "atendee-identity-" + Guid.NewGui
 Directory.CreateDirectory(keyRing);
 var services = new ServiceCollection();
 services.AddLogging();
+services.AddAuthentication().AddIdentityCookies();
 services.AddDataProtection().SetApplicationName("AtendeeBeauty").PersistKeysToFileSystem(new DirectoryInfo(keyRing));
 services.AddAtendeeIdentity(identityConnectionString);
 await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
