@@ -92,6 +92,9 @@ try
     var requestToken = antiforgeryJson.GetProperty("requestToken").GetString();
     Ensure(!string.IsNullOrWhiteSpace(requestToken), "Antiforgery request token is issued.");
 
+    Ensure((await client.GetAsync("/api/v1/tenant")).StatusCode == HttpStatusCode.Unauthorized,
+        "Tenant profile endpoint rejects anonymous requests.");
+
     var activationEmail = "activation-http-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     Guid activationUserId;
     await using (var scope = factory.Services.CreateAsyncScope())
@@ -241,6 +244,20 @@ try
     Ensure(meBody.GetProperty("role").GetString() == TenantRole.Receptionist.ToString(),
         "Current-user endpoint returns the persisted membership role.");
 
+    var tenantProfile = await client.GetAsync("/api/v1/tenant");
+    Ensure(tenantProfile.StatusCode == HttpStatusCode.OK,
+        "Authenticated user can read the current tenant profile.");
+    var tenantProfileBody = await tenantProfile.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(tenantProfileBody.GetProperty("tenantId").GetString() == tenantId.ToString() &&
+           tenantProfileBody.GetProperty("name").GetString() == "HTTP Synthetic Salon" &&
+           tenantProfileBody.GetProperty("slug").GetString() == "http-" + tenantId.ToString() &&
+           tenantProfileBody.GetProperty("timeZoneId").GetString() == "America/Sao_Paulo" &&
+           tenantProfileBody.GetProperty("status").GetString() == TenantStatus.Active.ToString(),
+        "Tenant profile is returned from the server-resolved membership and persisted tenant row.");
+    Ensure(tenantProfileBody.GetProperty("membership").GetProperty("role").GetString() ==
+           TenantRole.Receptionist.ToString(),
+        "Tenant profile includes only the caller's persisted membership role.");
+
     var targetEmail = "http-audit-target-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     Guid targetUserId;
     await using (var scope = factory.Services.CreateAsyncScope())
@@ -295,6 +312,8 @@ try
         "Database trigger overwrites a forged TargetTenantId with the target's persisted tenant.");
     Ensure(await AuthLoginCannotReadTenantUsersAsync(identityConnectionString),
         "The authentication database role still has no direct SELECT access to tenant memberships.");
+    Ensure(await AuthLoginCannotReadTenantsAsync(identityConnectionString),
+        "The authentication database role still has no direct SELECT access to tenant profiles.");
     Ensure(await AuthLoginCannotExecuteAuditTargetResolverAsync(identityConnectionString),
         "The authentication database role cannot execute the narrow audit-tenant resolver.");
 
@@ -1404,6 +1423,24 @@ static async Task<bool> AuthLoginCannotReadTenantUsersAsync(string connectionStr
     {
         await using var command = new NpgsqlCommand(
             "SELECT tenant_id FROM atendee.tenant_users LIMIT 1", connection);
+        await command.ExecuteScalarAsync();
+        return false;
+    }
+    catch (PostgresException exception) when
+        (exception.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+    {
+        return true;
+    }
+}
+
+static async Task<bool> AuthLoginCannotReadTenantsAsync(string connectionString)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    try
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT id FROM atendee.tenants LIMIT 1", connection);
         await command.ExecuteScalarAsync();
         return false;
     }

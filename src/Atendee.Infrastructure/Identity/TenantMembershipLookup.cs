@@ -12,4 +12,7 @@ public sealed class TenantMembershipLookup
     public int Role { get; set; }
     public bool IsActive { get; set; }
     public int TenantStatus { get; set; }
+    public string TenantName { get; set; } = string.Empty;
+    public string TenantSlug { get; set; } = string.Empty;
+    public string TenantTimeZoneId { get; set; } = string.Empty;
 }

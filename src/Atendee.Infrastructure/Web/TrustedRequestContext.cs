@@ -26,10 +26,11 @@ public sealed class TrustedRequestContext : ICurrentTenantContext, ICurrentActor
 
     public string? DisplayName => _membership?.DisplayName;
 
-    public TenantId RequireTenantId()
-        => _membership?.TenantId
-            ?? throw new InvalidOperationException(
-                "A trusted authenticated tenant context is not available for this request.");
+    public string? TenantName => _membership?.TenantName;
+
+    public string? TenantSlug => _membership?.TenantSlug;
+
+    public string? TenantTimeZoneId => _membership?.TenantTimeZoneId;
 
     public void Establish(TenantMembershipSnapshot membership)
     {
@@ -43,4 +44,9 @@ public sealed class TrustedRequestContext : ICurrentTenantContext, ICurrentActor
 
         _membership = membership;
     }
+
+    public TenantId RequireTenantId()
+        => _membership?.TenantId
+            ?? throw new InvalidOperationException(
+                "A trusted authenticated tenant context is not available for this request.");
 }

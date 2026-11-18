@@ -21,7 +21,10 @@ public sealed class PostgresTenantMembershipResolver(
             display_name AS "DisplayName",
             role AS "Role",
             is_active AS "IsActive",
-            tenant_status AS "TenantStatus"
+            tenant_status AS "TenantStatus",
+            tenant_name AS "TenantName",
+            tenant_slug AS "TenantSlug",
+            tenant_time_zone_id AS "TenantTimeZoneId"
         FROM atendee.resolve_tenant_membership()
         """;
 
@@ -60,10 +63,13 @@ public sealed class PostgresTenantMembershipResolver(
 
         if (result.IdentityUserId != identityUserId ||
             result.TenantId == Guid.Empty ||
-            string.IsNullOrWhiteSpace(result.DisplayName))
+            string.IsNullOrWhiteSpace(result.DisplayName) ||
+            string.IsNullOrWhiteSpace(result.TenantName) ||
+            string.IsNullOrWhiteSpace(result.TenantSlug) ||
+            string.IsNullOrWhiteSpace(result.TenantTimeZoneId))
         {
             throw new InvalidOperationException(
-                "The stored tenant membership is incomplete or inconsistent.");
+                "The stored tenant membership or tenant profile is incomplete or inconsistent.");
         }
 
         return new TenantMembershipSnapshot(
@@ -72,6 +78,9 @@ public sealed class PostgresTenantMembershipResolver(
             result.DisplayName,
             (TenantRole)result.Role,
             result.IsActive,
-            (TenantStatus)result.TenantStatus);
+            (TenantStatus)result.TenantStatus,
+            result.TenantName,
+            result.TenantSlug,
+            result.TenantTimeZoneId);
     }
 }

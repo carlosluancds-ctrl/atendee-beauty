@@ -64,6 +64,24 @@ public static class OperationalAuthenticationEndpoints
                 current.TenantStatus!.Value.ToString()));
         }).RequireAuthorization();
 
+        endpoints.MapGet("/api/v1/tenant", (TrustedRequestContext current) =>
+        {
+            var tenantId = current.RequireTenantId();
+            return Results.Ok(new
+            {
+                tenantId = tenantId.ToString(),
+                name = current.TenantName!,
+                slug = current.TenantSlug!,
+                timeZoneId = current.TenantTimeZoneId!,
+                status = current.TenantStatus!.Value.ToString(),
+                membership = new
+                {
+                    displayName = current.DisplayName!,
+                    role = current.Role!.Value.ToString()
+                }
+            });
+        }).RequireAuthorization();
+
         var setup = group.MapGroup("/mfa/enrollment")
             .RequireAuthorization(MfaSetupPolicy)
             .RequireRateLimiting("auth-mfa");
