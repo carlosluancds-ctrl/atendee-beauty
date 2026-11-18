@@ -1144,6 +1144,29 @@ try
     Ensure((await managerClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "Manager cannot use the application API before completing MFA.");
 
+    var managerEnrollmentStart = await PostWithCsrfAsync(
+        managerClient, "/api/v1/auth/mfa/enrollment/start", managerToken!, new { });
+    Ensure(managerEnrollmentStart.StatusCode == HttpStatusCode.OK,
+        "Manager can begin the required authenticator enrollment.");
+    string managerEnrollmentCode;
+    await using (var scope = mfaFactory!.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var manager = await users.FindByIdAsync(managerUserId.ToString());
+        Ensure(manager is not null, "Manager identity remains available for authenticator enrollment.");
+        managerEnrollmentCode = await users.GenerateTwoFactorTokenAsync(
+            manager!, users.Options.Tokens.AuthenticatorTokenProvider);
+    }
+    var managerEnrollmentVerify = await PostWithCsrfAsync(
+        managerClient, "/api/v1/auth/mfa/enrollment/verify", managerToken!, new
+        {
+            code = managerEnrollmentCode
+        });
+    Ensure(managerEnrollmentVerify.StatusCode == HttpStatusCode.OK &&
+           (await managerClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
+        "Manager receives an application session only after successful MFA enrollment.");
+
+
     var professionalEmail = "http-role-professional-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string professionalPassword = "Atendee-Professional-Role-2026!";
     var professionalTenantId = Guid.NewGuid();
@@ -1185,6 +1208,29 @@ try
     Ensure(professionalMe.StatusCode == HttpStatusCode.OK &&
            professionalMeBody.GetProperty("role").GetString() == TenantRole.Professional.ToString(),
         "Professional session resolves its current role from server-side membership.");
+
+    await SeedAdditionalMembershipAsync(migratorConnectionString, managerTenantId, professionalUserId, roleId: 4);
+    var managerEligibleMembers = await managerClient.GetAsync("/api/v1/professionals/eligible-members");
+    Ensure(managerEligibleMembers.StatusCode == HttpStatusCode.OK,
+        "Manager can discover eligible Professional memberships in the current salon.");
+    var managerEligibleMembersBody = await managerEligibleMembers.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(managerEligibleMembersBody.GetArrayLength() == 1 &&
+           managerEligibleMembersBody[0].GetProperty("identityUserId").GetGuid() == professionalUserId,
+        "Manager candidate discovery is scoped to its own salon and returns only an unprofiled Professional.");
+    var managerCreateProfessional = await PostWithCsrfAsync(
+        managerClient, "/api/v1/professionals", managerToken!, new
+        {
+            identityUserId = professionalUserId
+        });
+    Ensure(managerCreateProfessional.StatusCode == HttpStatusCode.Created,
+        "Manager can create a profile for an active Professional membership in the current salon.");
+    var managerProfessionalList = await managerClient.GetAsync("/api/v1/professionals");
+    Ensure(managerProfessionalList.StatusCode == HttpStatusCode.OK &&
+           (await managerProfessionalList.Content.ReadFromJsonAsync<JsonElement>()).GetArrayLength() == 1,
+        "Manager can list the professional team for the current salon.");
+    Ensure((await managerClient.GetAsync("/api/v1/services")).StatusCode == HttpStatusCode.OK,
+        "Manager can read the current salon's service catalogue for assignments.");
+
 
     // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
     // logins their own per-IP login budget (4 of 5 permits are used here).
