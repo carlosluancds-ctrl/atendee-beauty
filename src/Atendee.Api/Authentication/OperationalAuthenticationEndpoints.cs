@@ -130,6 +130,12 @@ public static class OperationalAuthenticationEndpoints
             user.Id,
             httpContext.RequestAborted);
 
+        // A provisioned identity without a salon membership may enroll MFA first.
+        // This is the only path to creating the first Owner: the membership is
+        // inserted later, after the database can verify TwoFactorEnabled = true.
+        if (membership is null && !user.TwoFactorEnabled)
+            return await BeginMfaSetupAsync(user, httpContext, auditWriter);
+
         if (membership is null ||
             !membership.IsActive ||
             !TenantAccessPolicy.IsAllowed(
@@ -142,35 +148,7 @@ public static class OperationalAuthenticationEndpoints
 
         var privilegedRole = membership.Role is TenantRole.Owner or TenantRole.Manager;
         if (privilegedRole && !user.TwoFactorEnabled)
-        {
-            // The password was verified but no application session exists yet.
-            // The actor is intentionally null: authentication is not complete.
-            // Audit first so a failed mandatory write issues no setup cookie.
-            await auditWriter.WriteAsync("operational_auth.password_verified_mfa_pending",
-                null, user.Id, httpContext.RequestAborted);
-
-            var claims = new[]
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim("atendee:auth_stage", "mfa_setup")
-            };
-            var principal = new ClaimsPrincipal(
-                new ClaimsIdentity(claims, MfaSetupScheme));
-
-            await httpContext.SignInAsync(
-                MfaSetupScheme,
-                principal,
-                new AuthenticationProperties
-                {
-                    IsPersistent = false,
-                    AllowRefresh = false,
-                    ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(5)
-                });
-
-            httpContext.Response.Headers.CacheControl = "no-store";
-            return Results.Accepted(
-                value: new LoginStateResponse("mfa_setup_required"));
-        }
+            return await BeginMfaSetupAsync(user, httpContext, auditWriter);
 
         if (user.TwoFactorEnabled)
         {
@@ -210,6 +188,38 @@ public static class OperationalAuthenticationEndpoints
 
         httpContext.Response.Headers.CacheControl = "no-store";
         return Results.Ok(new LoginStateResponse("authenticated"));
+    }
+
+    private static async Task<IResult> BeginMfaSetupAsync(
+        OperationalIdentityUser user,
+        HttpContext httpContext,
+        ISecurityAuditWriter auditWriter)
+    {
+        // The actor is intentionally null: password verification is not a
+        // completed application authentication. Audit before issuing setup cookie.
+        await auditWriter.WriteAsync("operational_auth.password_verified_mfa_pending",
+            null, user.Id, httpContext.RequestAborted);
+
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim("atendee:auth_stage", "mfa_setup")
+        };
+        var principal = new ClaimsPrincipal(
+            new ClaimsIdentity(claims, MfaSetupScheme));
+
+        await httpContext.SignInAsync(
+            MfaSetupScheme,
+            principal,
+            new AuthenticationProperties
+            {
+                IsPersistent = false,
+                AllowRefresh = false,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(5)
+            });
+
+        httpContext.Response.Headers.CacheControl = "no-store";
+        return Results.Accepted(value: new LoginStateResponse("mfa_setup_required"));
     }
 
     private static async Task<IResult> CompleteMfaChallengeAsync(
@@ -319,11 +329,11 @@ public static class OperationalAuthenticationEndpoints
             user.Id,
             httpContext.RequestAborted);
 
-        if (membership is null ||
-            !membership.IsActive ||
-            membership.Role is not (TenantRole.Owner or TenantRole.Manager) ||
-            !TenantAccessPolicy.IsAllowed(
-                membership.TenantStatus, membership.Role, TenantCapability.Login))
+        if (membership is not null &&
+            (!membership.IsActive ||
+             membership.Role is not (TenantRole.Owner or TenantRole.Manager) ||
+             !TenantAccessPolicy.IsAllowed(
+                 membership.TenantStatus, membership.Role, TenantCapability.Login)))
         {
             await httpContext.SignOutAsync(MfaSetupScheme);
             return Results.Forbid();
@@ -375,11 +385,11 @@ public static class OperationalAuthenticationEndpoints
             user.Id,
             httpContext.RequestAborted);
 
-        if (membership is null ||
-            !membership.IsActive ||
-            membership.Role is not (TenantRole.Owner or TenantRole.Manager) ||
-            !TenantAccessPolicy.IsAllowed(
-                membership.TenantStatus, membership.Role, TenantCapability.Login))
+        if (membership is not null &&
+            (!membership.IsActive ||
+             membership.Role is not (TenantRole.Owner or TenantRole.Manager) ||
+             !TenantAccessPolicy.IsAllowed(
+                 membership.TenantStatus, membership.Role, TenantCapability.Login)))
         {
             await httpContext.SignOutAsync(MfaSetupScheme);
             return Results.Forbid();
@@ -432,6 +442,17 @@ public static class OperationalAuthenticationEndpoints
             await transaction.CommitAsync(httpContext.RequestAborted);
 
             await httpContext.SignOutAsync(MfaSetupScheme);
+
+            // Before the first salon membership exists, enrollment must not issue
+            // an application cookie. A trusted provisioning transaction can now
+            // attach this MFA-ready identity as the salon Owner.
+            if (membership is null)
+                return Results.Ok(new
+                {
+                    state = "mfa_enrolled_membership_pending",
+                    recoveryCodes = recoveryCodes.ToArray()
+                });
+
             await signInManager.SignInWithClaimsAsync(
                 user,
                 isPersistent: false,

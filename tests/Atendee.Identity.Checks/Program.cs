@@ -117,6 +117,31 @@ try
     await SeedMembershipAsync(migratorConnectionString, tenantId, userId);
     await SeedSecondTenantAsync(migratorConnectionString, secondTenantId);
 
+    Check(await TryDisableMfaAsync(identityConnectionString, userId),
+        "Database rejects disabling MFA on the salon's last active Owner");
+    Check(await TryChangeMembershipAsync(migratorConnectionString, tenantId, userId, "role", 4),
+        "Database rejects demoting the salon's last active Owner");
+    Check(await TryChangeMembershipAsync(migratorConnectionString, tenantId, userId, "is_active", 0),
+        "Database rejects deactivating the salon's last active Owner");
+    Check(await TryDeleteMembershipAsync(migratorConnectionString, tenantId, userId),
+        "Database rejects removing the salon's last active Owner");
+    Check(await TryCreateTenantWithoutOwnerAsync(migratorConnectionString, Guid.NewGuid()),
+        "Database rejects committing a salon without an active MFA-enabled Owner");
+
+    var backupOwnerId = await SeedAdditionalOwnerAsync(migratorConnectionString, tenantId);
+    Check(!await TryChangeMembershipAsync(migratorConnectionString, tenantId, userId, "role", 4),
+        "Database permits Owner demotion when another active MFA-enabled Owner remains");
+    Check(!await TryDisableMfaAsync(identityConnectionString, userId),
+        "Database permits MFA disablement on a demoted non-Owner");
+
+    var concurrentOwnerId = await SeedAdditionalOwnerAsync(migratorConnectionString, tenantId);
+    var concurrentChanges = await Task.WhenAll(
+        TryChangeMembershipAsync(migratorConnectionString, tenantId, backupOwnerId, "role", 4),
+        TryChangeMembershipAsync(migratorConnectionString, tenantId, concurrentOwnerId, "is_active", 0));
+    Check(concurrentChanges.Count(blocked => blocked) == 1 &&
+          await ReadActiveMfaOwnerCountAsync(migratorConnectionString, tenantId) == 1,
+        "Concurrent Owner demotion and deactivation serialize so exactly one active MFA-enabled Owner remains");
+
     await using (var scope = provider.CreateAsyncScope())
     {
         var resolver = scope.ServiceProvider.GetRequiredService<ITenantMembershipResolver>();
@@ -260,22 +285,216 @@ static async Task SeedMembershipAsync(string cs, Guid tenantId, Guid userId)
     await tx.CommitAsync();
 }
 
+static async Task<bool> TryDisableMfaAsync(string cs, Guid userId)
+{
+    await using var connection = new NpgsqlConnection(cs);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    try
+    {
+        await using var command = new NpgsqlCommand(
+            """UPDATE identity."AspNetUsers" SET "TwoFactorEnabled" = false WHERE "Id" = @id""",
+            connection, transaction);
+        command.Parameters.AddWithValue("id", userId);
+        await command.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
+        return false;
+    }
+    catch (PostgresException ex) when (ex.SqlState == "23514")
+    {
+        await transaction.RollbackAsync();
+        return true;
+    }
+}
+
+static async Task<bool> TryChangeMembershipAsync(
+    string cs, Guid tenantId, Guid userId, string column, int value)
+{
+    if (column is not ("role" or "is_active"))
+        throw new ArgumentOutOfRangeException(nameof(column));
+    await using var connection = new NpgsqlConnection(cs);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    try
+    {
+        var sql = column == "role"
+            ? "UPDATE atendee.tenant_users SET role = @value WHERE tenant_id = @tenant AND identity_user_id = @user"
+            : "UPDATE atendee.tenant_users SET is_active = (@value <> 0) WHERE tenant_id = @tenant AND identity_user_id = @user";
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("value", value);
+        command.Parameters.AddWithValue("tenant", tenantId);
+        command.Parameters.AddWithValue("user", userId);
+        await command.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
+        return false;
+    }
+    catch (PostgresException ex) when (ex.SqlState == "23514")
+    {
+        await transaction.RollbackAsync();
+        return true;
+    }
+}
+
+static async Task<bool> TryDeleteMembershipAsync(string cs, Guid tenantId, Guid userId)
+{
+    await using var connection = new NpgsqlConnection(cs);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    try
+    {
+        await using var command = new NpgsqlCommand(
+            "DELETE FROM atendee.tenant_users WHERE tenant_id = @tenant AND identity_user_id = @user",
+            connection, transaction);
+        command.Parameters.AddWithValue("tenant", tenantId);
+        command.Parameters.AddWithValue("user", userId);
+        await command.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
+        return false;
+    }
+    catch (PostgresException ex) when (ex.SqlState == "23514")
+    {
+        await transaction.RollbackAsync();
+        return true;
+    }
+}
+
+static async Task<bool> TryCreateTenantWithoutOwnerAsync(string cs, Guid tenantId)
+{
+    await using var connection = new NpgsqlConnection(cs);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    try
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO atendee.tenants(id,name,slug,time_zone_id,status,created_at_utc)
+            VALUES(@id,'Ownerless Salon','ownerless-' || @id::text,'America/Sao_Paulo',3,now())
+            """, connection, transaction);
+        command.Parameters.AddWithValue("id", tenantId);
+        await command.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
+        return false;
+    }
+    catch (PostgresException ex) when (ex.SqlState == "23514")
+    {
+        await transaction.RollbackAsync();
+        return true;
+    }
+}
+
+static async Task<int> ReadActiveMfaOwnerCountAsync(string cs, Guid tenantId)
+{
+    await using var connection = new NpgsqlConnection(cs);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    await using var command = new NpgsqlCommand(
+        """
+        SELECT count(*)
+          FROM atendee.tenant_users AS membership
+          INNER JOIN identity."AspNetUsers" AS identity_user
+            ON identity_user."Id" = membership.identity_user_id
+         WHERE membership.tenant_id = @tenant
+           AND membership.role = 1
+           AND membership.is_active
+           AND identity_user."TwoFactorEnabled"
+        """, connection, transaction);
+    command.Parameters.AddWithValue("tenant", tenantId);
+    return Convert.ToInt32(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+}
+
+static async Task<Guid> SeedAdditionalOwnerAsync(string cs, Guid tenantId)
+{
+    var ownerId = Guid.NewGuid();
+    await using var connection = new NpgsqlConnection(cs);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    await using (var identity = new NpgsqlCommand(
+        """
+        INSERT INTO identity."AspNetUsers"
+            ("Id","UserName","NormalizedUserName","Email","NormalizedEmail",
+             "EmailConfirmed","PhoneNumberConfirmed","TwoFactorEnabled","LockoutEnabled","AccessFailedCount")
+        VALUES(@id,'backup-owner-' || @id::text,upper('backup-owner-' || @id::text),
+               'backup-owner-' || @id::text || '@example.invalid',
+               upper('backup-owner-' || @id::text || '@example.invalid'),
+               true,false,true,true,0)
+        """, connection, transaction))
+    {
+        identity.Parameters.AddWithValue("id", ownerId);
+        await identity.ExecuteNonQueryAsync();
+    }
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    await using (var membership = new NpgsqlCommand(
+        """
+        INSERT INTO atendee.tenant_users
+            (tenant_id,identity_user_id,display_name,role,is_active,created_at_utc)
+        VALUES(@tenant,@owner,'Backup Owner',1,true,now())
+        """, connection, transaction))
+    {
+        membership.Parameters.AddWithValue("tenant", tenantId);
+        membership.Parameters.AddWithValue("owner", ownerId);
+        await membership.ExecuteNonQueryAsync();
+    }
+    await transaction.CommitAsync();
+    return ownerId;
+}
+
 static async Task SeedSecondTenantAsync(string cs, Guid tenantId)
 {
     await using var connection = new NpgsqlConnection(cs);
     await connection.OpenAsync();
     await using var transaction = await connection.BeginTransactionAsync();
 
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    var ownerId = Guid.NewGuid();
+    await using (var owner = new NpgsqlCommand(
+        """
+        INSERT INTO identity."AspNetUsers"
+            ("Id","UserName","NormalizedUserName","Email","NormalizedEmail",
+             "EmailConfirmed","PhoneNumberConfirmed","TwoFactorEnabled","LockoutEnabled","AccessFailedCount")
+        VALUES(@id,'second-owner-' || @id::text,upper('second-owner-' || @id::text),
+               'second-owner-' || @id::text || '@example.invalid',
+               upper('second-owner-' || @id::text || '@example.invalid'),
+               true,false,true,true,0)
+        """, connection, transaction))
+    {
+        owner.Parameters.AddWithValue("id", ownerId);
+        await owner.ExecuteNonQueryAsync();
+    }
+
     await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
         await role.ExecuteNonQueryAsync();
-
-    await using var command = new NpgsqlCommand(
+    await using (var tenant = new NpgsqlCommand(
         """
         INSERT INTO atendee.tenants(id,name,slug,time_zone_id,status,created_at_utc)
         VALUES(@id,'Second Synthetic Salon','second-' || @id::text,'America/Sao_Paulo',3,now())
-        """, connection, transaction);
-    command.Parameters.AddWithValue("id", tenantId);
-    await command.ExecuteNonQueryAsync();
+        """, connection, transaction))
+    {
+        tenant.Parameters.AddWithValue("id", tenantId);
+        await tenant.ExecuteNonQueryAsync();
+    }
+    await using (var membership = new NpgsqlCommand(
+        """
+        INSERT INTO atendee.tenant_users
+            (tenant_id,identity_user_id,display_name,role,is_active,created_at_utc)
+        VALUES(@tenant,@owner,'Synthetic Owner',1,true,now())
+        """, connection, transaction))
+    {
+        membership.Parameters.AddWithValue("tenant", tenantId);
+        membership.Parameters.AddWithValue("owner", ownerId);
+        await membership.ExecuteNonQueryAsync();
+    }
     await transaction.CommitAsync();
 }
 

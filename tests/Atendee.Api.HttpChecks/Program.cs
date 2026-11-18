@@ -357,7 +357,7 @@ try
         ownerUserId = owner.Id;
     }
 
-    await SeedMembershipAsync(migratorConnectionString, ownerTenantId, ownerUserId, roleId: 1);
+    // The Owner is not attached to a salon until MFA enrollment is complete.
 
     var mfaAntiforgeryResponse = await mfaClient.GetAsync("/api/v1/auth/antiforgery");
     var mfaRequestToken = (await mfaAntiforgeryResponse.Content.ReadFromJsonAsync<JsonElement>())
@@ -438,9 +438,10 @@ try
             "FAIL: Valid TOTP enrollment returned HTTP " + (int)enrollmentVerify.StatusCode +
             " with response: " + failureBody);
     }
-    Ensure(true, "Valid TOTP completes owner MFA enrollment.");
-    var recoveryCodes = (await enrollmentVerify.Content.ReadFromJsonAsync<JsonElement>())
-        .GetProperty("recoveryCodes").EnumerateArray()
+    var enrollmentCompleteBody = await enrollmentVerify.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(enrollmentCompleteBody.GetProperty("state").GetString() == "mfa_enrolled_membership_pending",
+        "A provisioned identity can complete MFA before receiving its first salon membership.");
+    var recoveryCodes = enrollmentCompleteBody.GetProperty("recoveryCodes").EnumerateArray()
         .Select(value => value.GetString()!).ToArray();
     Ensure(recoveryCodes.Length == 10 && recoveryCodes.All(code => !string.IsNullOrWhiteSpace(code)),
         "MFA enrollment returns ten one-time recovery codes.");
@@ -448,12 +449,29 @@ try
     Ensure(enrollmentAudit.Contains("operational_mfa.enrolled"),
         "Successful MFA enrollment is durably audited.");
 
-    var ownerMe = await mfaClient.GetAsync("/api/v1/auth/me");
-    Ensure(ownerMe.StatusCode == HttpStatusCode.OK,
-        "Owner receives an authenticated application session only after MFA enrollment.");
-    var ownerMeBody = await ownerMe.Content.ReadFromJsonAsync<JsonElement>();
-    Ensure(ownerMeBody.GetProperty("role").GetString() == TenantRole.Owner.ToString(),
-        "Owner session carries the persisted owner membership role.");
+    var ownerMeBeforeMembership = await mfaClient.GetAsync("/api/v1/auth/me");
+    Ensure(ownerMeBeforeMembership.StatusCode == HttpStatusCode.Unauthorized,
+        "Pre-membership MFA enrollment does not issue an application session.");
+
+    await SeedMembershipAsync(migratorConnectionString, ownerTenantId, ownerUserId, roleId: 1);
+    var ownerFirstLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
+    {
+        email = ownerEmail,
+        password = ownerPassword
+    });
+    var ownerFirstLoginBody = await ownerFirstLogin.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(ownerFirstLogin.StatusCode == HttpStatusCode.Accepted &&
+           ownerFirstLoginBody.GetProperty("state").GetString() == "mfa_required",
+        "MFA-ready Owner can be attached to the salon and must complete an MFA challenge to sign in.");
+    var ownerFirstChallenge = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/mfa/challenge", mfaRequestToken!, new
+        {
+            code = recoveryCodes[1],
+            useRecoveryCode = true
+        });
+    Ensure(ownerFirstChallenge.StatusCode == HttpStatusCode.OK &&
+           (await mfaClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
+        "Owner receives an application session only after membership provisioning and an MFA challenge.");
 
     var ownerLogout = await PostWithCsrfAsync(
         mfaClient, "/api/v1/auth/logout", mfaRequestToken!, new { });
@@ -541,6 +559,25 @@ try
     Ensure(completeMfaAudit.Contains("operational_mfa.totp_challenge_succeeded"),
         "Successful TOTP challenge is durably audited.");
 
+    var backupOwnerEmail = "http-mfa-backup-owner-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    Guid backupOwnerId;
+    await using (var scope = mfaFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var backupOwner = new OperationalIdentityUser
+        {
+            UserName = backupOwnerEmail,
+            Email = backupOwnerEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(backupOwner, ownerPassword);
+        Ensure(created.Succeeded, "Backup Owner identity is created.");
+        var enabled = await users.SetTwoFactorEnabledAsync(backupOwner, true);
+        Ensure(enabled.Succeeded, "Backup Owner MFA is enabled before membership provisioning.");
+        backupOwnerId = backupOwner.Id;
+    }
+    await SeedAdditionalMembershipAsync(migratorConnectionString, ownerTenantId, backupOwnerId, roleId: 1);
+
     await UpdateMembershipAsync(migratorConnectionString, ownerUserId, roleId: 3, isActive: true);
     var roleChangeAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
     Ensure(roleChangeAudit.Count(type => type == "tenant_membership.role_changed") == 1 &&
@@ -589,9 +626,22 @@ try
            (await promotionClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
         "Receptionist establishes a session before a server-side role change.");
 
+    Ensure(await TryUpdateMembershipAsync(migratorConnectionString, promotionUserId, roleId: 1, isActive: true),
+        "Database blocks promotion to Owner until the identity has completed MFA enrollment.");
+    Ensure((await promotionClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
+        "A blocked Owner promotion leaves the existing receptionist session unchanged.");
+
+    await using (var scope = roleMatrixFactory!.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var receptionist = await users.FindByIdAsync(promotionUserId.ToString());
+        Ensure(receptionist is not null, "Promotion test identity remains available.");
+        var enabled = await users.SetTwoFactorEnabledAsync(receptionist!, true);
+        Ensure(enabled.Succeeded, "Promotion test identity completes MFA before role elevation.");
+    }
     await UpdateMembershipAsync(migratorConnectionString, promotionUserId, roleId: 1, isActive: true);
     Ensure((await promotionClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Forbidden,
-        "Promoting a password-only session to Owner does not grant privileged access.");
+        "A password-only session cannot use Owner privileges even after a server-side MFA-ready promotion.");
 
     using var deactivationClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
@@ -662,7 +712,7 @@ try
     const string managerPassword = "Atendee-Manager-Role-2026!";
     var managerTenantId = Guid.NewGuid();
     Guid managerUserId;
-    await using (var scope = roleMatrixFactory.Services.CreateAsyncScope())
+    await using (var scope = roleMatrixFactory!.Services.CreateAsyncScope())
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
         var manager = new OperationalIdentityUser
@@ -716,7 +766,7 @@ try
     const string professionalPassword = "Atendee-Professional-Role-2026!";
     var professionalTenantId = Guid.NewGuid();
     Guid professionalUserId;
-    await using (var scope = roleMatrixFactory.Services.CreateAsyncScope())
+    await using (var scope = roleMatrixFactory!.Services.CreateAsyncScope())
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
         var professional = new OperationalIdentityUser
@@ -975,6 +1025,28 @@ static async Task SeedMembershipAsync(
     await using var connection = new NpgsqlConnection(connectionString);
     await connection.OpenAsync();
     await using var transaction = await connection.BeginTransactionAsync();
+    Guid? fixtureOwnerId = null;
+    if (roleId != 1)
+    {
+        await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+            await role.ExecuteNonQueryAsync();
+        fixtureOwnerId = Guid.NewGuid();
+        await using (var fixtureOwner = new NpgsqlCommand(
+            """
+            INSERT INTO identity."AspNetUsers"
+                ("Id","UserName","NormalizedUserName","Email","NormalizedEmail",
+                 "EmailConfirmed","PhoneNumberConfirmed","TwoFactorEnabled","LockoutEnabled","AccessFailedCount")
+            VALUES(@id,'http-owner-' || @id::text,upper('http-owner-' || @id::text),
+                   'http-owner-' || @id::text || '@example.invalid',
+                   upper('http-owner-' || @id::text || '@example.invalid'),
+                   true,false,true,true,0)
+            """, connection, transaction))
+        {
+            fixtureOwner.Parameters.AddWithValue("id", fixtureOwnerId.Value);
+            await fixtureOwner.ExecuteNonQueryAsync();
+        }
+    }
+
     await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
         await role.ExecuteNonQueryAsync();
 
@@ -987,6 +1059,19 @@ static async Task SeedMembershipAsync(
         tenant.Parameters.AddWithValue("id", tenantId);
         tenant.Parameters.AddWithValue("status", (short)statusId);
         await tenant.ExecuteNonQueryAsync();
+    }
+
+    if (fixtureOwnerId is not null)
+    {
+        await using var ownerMembership = new NpgsqlCommand(
+            """
+            INSERT INTO atendee.tenant_users
+                (tenant_id,identity_user_id,display_name,role,is_active,created_at_utc)
+            VALUES(@tenant,@owner,'Synthetic MFA Owner',1,true,now())
+            """, connection, transaction);
+        ownerMembership.Parameters.AddWithValue("tenant", tenantId);
+        ownerMembership.Parameters.AddWithValue("owner", fixtureOwnerId.Value);
+        await ownerMembership.ExecuteNonQueryAsync();
     }
 
     await using (var membership = new NpgsqlCommand(
@@ -1029,6 +1114,36 @@ static async Task SeedAdditionalMembershipAsync(
     await membership.ExecuteNonQueryAsync();
 
     await transaction.CommitAsync();
+}
+
+static async Task<bool> TryUpdateMembershipAsync(
+    string connectionString, Guid userId, int roleId, bool isActive)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    try
+    {
+        await using var update = new NpgsqlCommand(
+            """
+            UPDATE atendee.tenant_users
+            SET role = @role, is_active = @active
+            WHERE identity_user_id = @user
+            """, connection, transaction);
+        update.Parameters.AddWithValue("role", roleId);
+        update.Parameters.AddWithValue("active", isActive);
+        update.Parameters.AddWithValue("user", userId);
+        await update.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
+        return false;
+    }
+    catch (PostgresException ex) when (ex.SqlState == "23514")
+    {
+        await transaction.RollbackAsync();
+        return true;
+    }
 }
 
 static async Task UpdateMembershipAsync(

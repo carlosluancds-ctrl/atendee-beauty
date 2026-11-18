@@ -127,6 +127,9 @@ jobs:
           psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
             --username atendee_migrator --dbname atendee_rls_lab \
             --file db/migrations/009_resolve_audit_target_tenant.sql
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
+            --username atendee_migrator --dbname atendee_rls_lab \
+            --file db/migrations/010_enforce_active_mfa_owner.sql
 
           printf '%s\n' \
             "ATENDEE_TEST_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=atendee_rls_lab;Username=atendee_app_login;Password=${APP_TEST_PASSWORD};Pooling=true;Maximum Pool Size=1" \
