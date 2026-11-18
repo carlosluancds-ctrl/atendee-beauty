@@ -188,8 +188,20 @@ try
            membershipRoleAudit[0].EventType == "tenant_membership.role_changed" &&
            membershipRoleAudit[0].ActorId == userId &&
            membershipRoleAudit[0].TargetId == targetUserId &&
+           membershipRoleAudit[0].TargetTenantId == tenantId &&
            membershipRoleAudit[0].ActorId != spoofedActorId,
-        "Database trigger records the server-resolved actor, ignores client-supplied actorId, and writes exactly one membership event.");
+        "Database trigger records the trusted actor and persisted target tenant, ignores client-supplied actorId, and writes exactly one membership event.");
+
+    var forgedTenantId = Guid.NewGuid();
+    _ = await InsertAuditEventWithForgedTenantAsync(identityConnectionString, targetUserId, forgedTenantId);
+    var targetAuditTenants = await ReadAuditTenantTargetsAsync(migratorConnectionString, targetUserId);
+    Ensure(targetAuditTenants.Length == 3 &&
+           targetAuditTenants.All(entry => entry.TargetTenantId == tenantId),
+        "Database trigger overwrites a forged TargetTenantId with the target's persisted tenant.");
+    Ensure(await AuthLoginCannotReadTenantUsersAsync(identityConnectionString),
+        "The authentication database role still has no direct SELECT access to tenant memberships.");
+    Ensure(await AuthLoginCannotExecuteAuditTargetResolverAsync(identityConnectionString),
+        "The authentication database role cannot execute the narrow audit-tenant resolver.");
 
     await using (var scope = factory.Services.CreateAsyncScope())
     {
@@ -230,6 +242,41 @@ try
         "Login failure/success, session revocation and account disablement are durably recorded exactly once each.");
     Ensure(!auditTypes.Contains("operational_mfa.challenge_failed"),
         "Password-only accounts do not produce MFA challenge audit events.");
+
+    var knownIdentityAuditTargets = await ReadAuditTenantTargetsAsync(migratorConnectionString, userId);
+    Ensure(knownIdentityAuditTargets.Length == 6 &&
+           knownIdentityAuditTargets.All(entry => entry.TargetTenantId == tenantId),
+        "All identity-target audit events with a persisted membership receive that exact tenant ID.");
+
+    var orphanEmail = "http-audit-orphan-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    Guid orphanUserId;
+    await using (var scope = factory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var orphan = new OperationalIdentityUser
+        {
+            UserName = orphanEmail,
+            Email = orphanEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(orphan, password);
+        Ensure(created.Succeeded, "Synthetic audit identity without tenant membership is created.");
+        orphanUserId = orphan.Id;
+    }
+
+    await using (var scope = factory.Services.CreateAsyncScope())
+    {
+        var auditWriter = scope.ServiceProvider.GetRequiredService<ISecurityAuditWriter>();
+        await auditWriter.WriteAsync(
+            "operational_auth.login_failed",
+            null,
+            orphanUserId,
+            CancellationToken.None);
+    }
+
+    var orphanAuditTargets = await ReadAuditTenantTargetsAsync(migratorConnectionString, orphanUserId);
+    Ensure(orphanAuditTargets.Length == 1 && orphanAuditTargets[0].TargetTenantId is null,
+        "An identity without persisted membership keeps TargetTenantId NULL; no tenant is inferred.");
 
     var auditMutationDenied = false;
     try
@@ -1013,7 +1060,7 @@ static async Task UpdateMembershipAsync(
     await transaction.CommitAsync();
 }
 
-static async Task<(string EventType, Guid? ActorId, Guid TargetId)[]> ReadMembershipRoleChangeAuditAsync(
+static async Task<(string EventType, Guid? ActorId, Guid TargetId, Guid? TargetTenantId)[]> ReadMembershipRoleChangeAuditAsync(
     string connectionString,
     Guid targetUserId)
 {
@@ -1024,16 +1071,20 @@ static async Task<(string EventType, Guid? ActorId, Guid TargetId)[]> ReadMember
         await role.ExecuteNonQueryAsync();
 
     await using var command = new NpgsqlCommand(
-        @"SELECT ""EventType"", ""ActorIdentityUserId"", ""TargetIdentityUserId""
+        @"SELECT ""EventType"", ""ActorIdentityUserId"", ""TargetIdentityUserId"", ""TargetTenantId""
           FROM identity.""SecurityAuditEvents""
           WHERE ""TargetIdentityUserId"" = @target AND ""EventType"" = 'tenant_membership.role_changed'
           ORDER BY ""OccurredAtUtc"", ""Id""", connection, transaction);
     command.Parameters.AddWithValue("target", targetUserId);
-    var values = new List<(string EventType, Guid? ActorId, Guid TargetId)>();
+    var values = new List<(string EventType, Guid? ActorId, Guid TargetId, Guid? TargetTenantId)>();
     await using (var reader = await command.ExecuteReaderAsync())
     {
         while (await reader.ReadAsync())
-            values.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetGuid(1), reader.GetGuid(2)));
+            values.Add((
+                reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetGuid(1),
+                reader.GetGuid(2),
+                reader.IsDBNull(3) ? null : reader.GetGuid(3)));
     }
 
     await transaction.CommitAsync();
@@ -1085,6 +1136,91 @@ static async Task<(short From, short To, bool HasActor, bool HasIdentityTarget)[
     await transaction.CommitAsync();
     return values.ToArray();
 }
+static async Task<(string EventType, Guid? TargetTenantId)[]> ReadAuditTenantTargetsAsync(
+    string connectionString,
+    Guid targetUserId)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using var command = new NpgsqlCommand(
+        @"SELECT ""EventType"", ""TargetTenantId""
+          FROM identity.""SecurityAuditEvents""
+          WHERE ""TargetIdentityUserId"" = @target
+          ORDER BY ""OccurredAtUtc"", ""Id""", connection, transaction);
+    command.Parameters.AddWithValue("target", targetUserId);
+    var values = new List<(string EventType, Guid? TargetTenantId)>();
+    await using (var reader = await command.ExecuteReaderAsync())
+    {
+        while (await reader.ReadAsync())
+            values.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetGuid(1)));
+    }
+
+    await transaction.CommitAsync();
+    return values.ToArray();
+}
+
+static async Task<Guid> InsertAuditEventWithForgedTenantAsync(
+    string connectionString,
+    Guid targetUserId,
+    Guid forgedTenantId)
+{
+    var eventId = Guid.NewGuid();
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var command = new NpgsqlCommand(
+        """
+        INSERT INTO identity."SecurityAuditEvents"
+            ("Id", "EventType", "ActorIdentityUserId", "TargetIdentityUserId",
+             "OccurredAtUtc", "CorrelationId", "TargetTenantId")
+        VALUES (@id, 'operational_auth.login_failed', NULL, @target, now(), NULL, @tenant)
+        """, connection);
+    command.Parameters.AddWithValue("id", eventId);
+    command.Parameters.AddWithValue("target", targetUserId);
+    command.Parameters.AddWithValue("tenant", forgedTenantId);
+    await command.ExecuteNonQueryAsync();
+    return eventId;
+}
+
+static async Task<bool> AuthLoginCannotReadTenantUsersAsync(string connectionString)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    try
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT tenant_id FROM atendee.tenant_users LIMIT 1", connection);
+        await command.ExecuteScalarAsync();
+        return false;
+    }
+    catch (PostgresException exception) when
+        (exception.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+    {
+        return true;
+    }
+}
+
+static async Task<bool> AuthLoginCannotExecuteAuditTargetResolverAsync(string connectionString)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    try
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT atendee.resolve_audit_target_tenant()", connection);
+        await command.ExecuteScalarAsync();
+        return false;
+    }
+    catch (PostgresException exception) when
+        (exception.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+    {
+        return true;
+    }
+}
+
 static async Task<int> CountAuditEventsWithActorAsync(
     string connectionString,
     Guid targetUserId,
