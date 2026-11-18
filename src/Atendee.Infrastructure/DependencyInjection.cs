@@ -39,8 +39,6 @@ public static class DependencyInjection
             options.Lockout.MaxFailedAccessAttempts = 5;
             options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
 
-            // Password validation uses Identity's mature hasher. A breached-
-            // password blocklist must be added before public enrollment.
             options.Password.RequiredLength = 12;
             options.Password.RequiredUniqueChars = 4;
             options.Password.RequireDigit = false;
@@ -56,6 +54,8 @@ public static class DependencyInjection
         services.AddScoped<ITenantMembershipResolver, PostgresTenantMembershipResolver>();
         services.AddScoped<IOperationalAccountSecurityService, OperationalAccountSecurityService>();
         services.AddScoped<ISecurityAuditWriter, PostgresSecurityAuditWriter>();
+        services.AddScoped<OperationalIdentityActivationService>();
+        services.AddScoped<OperationalIdentityProvisioningService>();
         services.AddScoped<TrustedRequestContext>();
         services.AddScoped<ICurrentTenantContext>(provider =>
             provider.GetRequiredService<TrustedRequestContext>());

@@ -92,6 +92,101 @@ try
     var requestToken = antiforgeryJson.GetProperty("requestToken").GetString();
     Ensure(!string.IsNullOrWhiteSpace(requestToken), "Antiforgery request token is issued.");
 
+    var activationEmail = "activation-http-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    Guid activationUserId;
+    await using (var scope = factory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var pending = new OperationalIdentityUser
+        {
+            UserName = activationEmail,
+            Email = activationEmail,
+            EmailConfirmed = false,
+            TwoFactorEnabled = false,
+            LockoutEnabled = true
+        };
+        var created = await users.CreateAsync(pending);
+        Ensure(created.Succeeded && pending.PasswordHash is null,
+            "A pending activation identity is created without a password or MFA.");
+        activationUserId = pending.Id;
+    }
+
+    var activationToken = ActivationTokenCodec.CreateToken();
+    var activationHash = ActivationTokenCodec.HashToken(activationToken);
+    await using (var activationConnection = new NpgsqlConnection(migratorConnectionString))
+    {
+        await activationConnection.OpenAsync();
+        await using var activationTransaction = await activationConnection.BeginTransactionAsync();
+        await using (var role = new NpgsqlCommand(
+            "SET LOCAL ROLE atendee_identity_owner", activationConnection, activationTransaction))
+            await role.ExecuteNonQueryAsync();
+        await using (var insert = new NpgsqlCommand(
+            """
+            INSERT INTO identity."OperationalIdentityActivationTokens"
+                ("UserId", "TokenHash", "CreatedAtUtc", "ExpiresAtUtc", "ConsumedAtUtc")
+            VALUES (@user_id, @token_hash, @created_at, @expires_at, NULL)
+            """, activationConnection, activationTransaction))
+        {
+            var issuedAt = DateTimeOffset.UtcNow;
+            insert.Parameters.AddWithValue("user_id", activationUserId);
+            insert.Parameters.AddWithValue("token_hash", activationHash);
+            insert.Parameters.AddWithValue("created_at", issuedAt);
+            insert.Parameters.AddWithValue("expires_at", issuedAt.AddMinutes(30));
+            await insert.ExecuteNonQueryAsync();
+        }
+        await activationTransaction.CommitAsync();
+    }
+
+    var rejectedActivationPassword = await PostWithCsrfAsync(
+        client, "/api/v1/auth/activate", requestToken!, new
+        {
+            token = activationToken,
+            password = "short"
+        });
+    Ensure(rejectedActivationPassword.StatusCode == HttpStatusCode.BadRequest,
+        "Activation rejects a password that does not meet Identity policy without consuming the token.");
+
+    var activated = await PostWithCsrfAsync(client, "/api/v1/auth/activate", requestToken!, new
+    {
+        token = activationToken,
+        password = "Atendee-Activation-HTTP-2026!"
+    });
+    Ensure(activated.StatusCode == HttpStatusCode.OK,
+        "A valid one-time activation token confirms the email and sets the password.");
+    var activationBody = await activated.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(activationBody.GetProperty("state").GetString() == "activated_sign_in_required",
+        "Activation explicitly requires a separate sign-in.");
+    var activationCookies = activated.Headers.TryGetValues("Set-Cookie", out var activationSetCookies)
+        ? string.Join("; ", activationSetCookies)
+        : string.Empty;
+    Ensure(!activationCookies.Contains("__Host-Atendee.Auth", StringComparison.Ordinal),
+        "Activation does not issue an authenticated application session.");
+
+    await using (var scope = factory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var activatedUser = await users.FindByIdAsync(activationUserId.ToString());
+        Ensure(activatedUser is not null && activatedUser.EmailConfirmed &&
+               activatedUser.PasswordHash is not null && !activatedUser.TwoFactorEnabled,
+            "Activation confirms email and sets a password while leaving MFA enrollment pending.");
+        Ensure(await users.CheckPasswordAsync(activatedUser!, "Atendee-Activation-HTTP-2026!"),
+            "The activated password is stored through the configured ASP.NET Identity hasher.");
+        var resolver = scope.ServiceProvider.GetRequiredService<ITenantMembershipResolver>();
+        Ensure(await resolver.ResolveAsync(activationUserId, CancellationToken.None) is null,
+            "Activation does not create a salon membership.");
+    }
+
+    var replayedActivation = await PostWithCsrfAsync(client, "/api/v1/auth/activate", requestToken!, new
+    {
+        token = activationToken,
+        password = "Atendee-Activation-HTTP-2026!"
+    });
+    Ensure(replayedActivation.StatusCode == HttpStatusCode.BadRequest &&
+           (await replayedActivation.Content.ReadAsStringAsync()).Contains(
+               "activation_invalid_or_expired", StringComparison.Ordinal),
+        "A consumed activation token is rejected with the generic invalid-or-expired response.");
+
+
     using (var untrustedWebhook = new HttpRequestMessage(
         HttpMethod.Post, "/api/v1/webhooks/untrusted"))
     {

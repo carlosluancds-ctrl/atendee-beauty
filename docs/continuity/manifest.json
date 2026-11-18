@@ -1,28 +1,41 @@
 {
-  "backup_version": "v43-operational-identity-activation-design",
+  "backup_version": "v44-operational-identity-activation-backend",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V43_2026-11-18.md",
-  "latest_repository_commit": "84faf49e76ed695b7c4ebaa99c555271bc226ef3",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V44_2026-11-18.md",
+  "latest_repository_commit": null,
   "latest_code_commit": "5e37dbbcc23ddd40a7cf478b2b2947ad74bfcba5",
+  "pending_repository_commit": "V44 backend implementation prepared from base 86a6a2934063b19998e3d94edc119106a69b411e; push verification pending",
   "latest_ci": {
     "run_id": "44273325577",
     "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44273325577",
     "status": "success",
     "tested_commit": "84faf49e76ed695b7c4ebaa99c555271bc226ef3"
   },
+  "pending_ci": {
+    "workflow": "PostgreSQL 18 persistence integration",
+    "status": "pending V44 push and workflow execution",
+    "must_verify": [
+      "migration 011",
+      "dedicated provisioner role bootstrap",
+      "Identity activation and concurrent replay integration checks",
+      "API HTTP activation, antiforgery and no-session checks"
+    ]
+  },
   "owner_decisions": {
-    "first_owner_provisioning": "approved offline operator command; implemented in V41",
-    "initial_operational_identity": "approved separate protected operator command; recorded in V42",
-    "transactional_email_provider": "Amazon SES API v2 selected as default under owner's autonomy delegation; implementation pending"
+    "first_owner_provisioning": "approved offline operator command; implemented in V41 and unchanged",
+    "initial_operational_identity": "approved separate protected operator command; implemented in V44",
+    "transactional_email_provider": "Amazon SES API v2 selected as default under owner's autonomy delegation"
   },
   "architecture": {
-    "activation_token": "256-bit cryptographically random; single-use; 30-minute expiry; SHA-256 hash stored; atomic redemption",
-    "activation": "password set via ASP.NET Core Identity; email confirmed atomically; no application session issued",
+    "activation_token": "256-bit cryptographically random; single-use; 30-minute expiry; SHA-256 hash stored; re-issue rotates token; atomic redemption",
+    "activation": "password set through ASP.NET Core Identity; email confirmed atomically; no application session issued; user must sign in and enroll MFA before V41 first-Owner provisioning",
     "database_provisioner_role": "atendee_identity_provisioner login; NOINHERIT, NOSUPERUSER, NOBYPASSRLS; SET only to atendee_identity_owner",
-    "email_sdk": "AWS SDK for .NET v4 AWSSDK.SimpleEmailV2",
-    "aws_credentials": "AWS SDK provider chain; prefer IAM roles or temporary federated credentials; no long-lived secrets in source"
+    "activation_token_permissions": "auth login SELECT plus column-level UPDATE only on ConsumedAtUtc; cannot insert or rotate tokens",
+    "email_sdk": "AWS SDK for .NET v4 AWSSDK.SimpleEmailV2 4.1.0.2",
+    "aws_credentials": "AWS SDK provider chain; prefer IAM roles or temporary federated credentials; no long-lived secrets in source",
+    "activation_url": "token carried in URL fragment; frontend must POST token and new password with antiforgery"
   },
   "implemented": [
     "ASP.NET Core Identity operational store",
@@ -39,19 +52,24 @@
     "Secure HttpOnly SameSite Strict cookies",
     "Antiforgery validation and auth IP rate limits",
     "PostgreSQL 18.7 migrations and integration CI",
-    "Offline first-Owner provisioning command (V41)"
+    "Offline first-Owner provisioning command (V41)",
+    "Dedicated offline operational identity create/reissue command",
+    "Dedicated atendee_identity_provisioner database role and migration 011",
+    "Amazon SES API v2 email sender using AWS SDK for .NET v4",
+    "Atomic activation API with one-time token, password hashing, email confirmation and audit",
+    "Identity and HTTP integration tests for activation, rotation, replay and no-session behavior",
+    "Operational identity provisioning runbook"
   ],
   "not_production_ready": [
-    "Initial operational identity creation/activation command not implemented",
-    "Amazon SES sender domain, AWS access and delivery not configured",
-    "Activation token schema/API and password setup flow pending",
+    "V44 PostgreSQL 18.7 CI result pending verification",
+    "Frontend activation page and URL-fragment token exchange pending",
+    "SES sender domain/address, DKIM, SPF/DMARC, production access and IAM credentials not configured",
+    "Migration 011 and provisioner login must be applied/provisioned in the target environment",
     "Platform Admin store, MFA and break-glass pending",
     "WebAuthn/passkey migration pending",
-    "Further HTTP end-to-end session and CSRF acceptance tests pending",
-    "Session revocation/account disablement/audit pipeline completion pending",
     "Non-Windows production Data Protection protector pending",
     "Distributed rate limiting and trusted proxy configuration pending",
     "No production deployment authorized or performed"
   ],
-  "local_worktree": "not_available_on_connected_windows_device; no local Atendee.sln clone found"
+  "local_worktree": "temporary remote snapshot at C:\\Temp\\atendee-work used for locked restore/build; not a persistent clone of the user's workstation"
 }

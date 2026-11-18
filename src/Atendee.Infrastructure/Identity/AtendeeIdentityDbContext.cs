@@ -18,6 +18,8 @@ public sealed class AtendeeIdentityDbContext(
     : IdentityUserContext<OperationalIdentityUser, Guid>(options)
 {
     internal DbSet<SecurityAuditEventRow> SecurityAuditEvents => Set<SecurityAuditEventRow>();
+    internal DbSet<OperationalIdentityActivationTokenRow> OperationalIdentityActivationTokens
+        => Set<OperationalIdentityActivationTokenRow>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -33,6 +35,21 @@ public sealed class AtendeeIdentityDbContext(
         audit.Property(row => row.TargetIdentityUserId).HasColumnName("TargetIdentityUserId").IsRequired();
         audit.Property(row => row.OccurredAtUtc).HasColumnName("OccurredAtUtc").IsRequired();
         audit.Property(row => row.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(64);
+
+        var activation = builder.Entity<OperationalIdentityActivationTokenRow>();
+        activation.ToTable("OperationalIdentityActivationTokens", "identity");
+        activation.HasKey(row => row.UserId).HasName("PK_OperationalIdentityActivationTokens");
+        activation.Property(row => row.UserId).HasColumnName("UserId");
+        activation.Property(row => row.TokenHash).HasColumnName("TokenHash").HasColumnType("bytea").IsRequired();
+        activation.Property(row => row.CreatedAtUtc).HasColumnName("CreatedAtUtc").IsRequired();
+        activation.Property(row => row.ExpiresAtUtc).HasColumnName("ExpiresAtUtc").IsRequired();
+        activation.Property(row => row.ConsumedAtUtc).HasColumnName("ConsumedAtUtc");
+        activation.HasIndex(row => row.TokenHash).IsUnique()
+            .HasDatabaseName("UX_OperationalIdentityActivationTokens_TokenHash");
+        activation.HasOne<OperationalIdentityUser>()
+            .WithMany()
+            .HasForeignKey(row => row.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // The first release intentionally uses one globally unique email per
         // operational identity to prevent ambiguous multi-salon logins.

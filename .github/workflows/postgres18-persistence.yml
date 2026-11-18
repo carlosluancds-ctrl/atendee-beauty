@@ -79,15 +79,20 @@ jobs:
           APP_TEST_PASSWORD="$(openssl rand -hex 32)"
           AUTH_TEST_PASSWORD="$(openssl rand -hex 32)"
           MIGRATOR_TEST_PASSWORD="$(openssl rand -hex 32)"
+          PROVISIONER_TEST_PASSWORD="$(openssl rand -hex 32)"
           echo "::add-mask::${APP_TEST_PASSWORD}"
           echo "::add-mask::${AUTH_TEST_PASSWORD}"
           echo "::add-mask::${MIGRATOR_TEST_PASSWORD}"
+          echo "::add-mask::$PROVISIONER_TEST_PASSWORD"
           export PGPASSWORD="${ATENDEE_TEST_POSTGRES_ADMIN_PASSWORD}"
 
           createdb --host 127.0.0.1 --username postgres atendee_rls_lab
           psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
             --username postgres --dbname atendee_rls_lab \
             --file db/security/001_roles_template.sql
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
+            --username postgres --dbname atendee_rls_lab \
+            --file db/security/002_identity_provisioner_role.sql
 
           psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
             --username postgres --dbname atendee_rls_lab \
@@ -98,6 +103,9 @@ jobs:
           psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
             --username postgres --dbname atendee_rls_lab \
             --command "ALTER ROLE atendee_migrator PASSWORD '${MIGRATOR_TEST_PASSWORD}';"
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
+            --username postgres --dbname atendee_rls_lab \
+            --command "ALTER ROLE atendee_identity_provisioner PASSWORD '$PROVISIONER_TEST_PASSWORD';"
 
           export PGPASSWORD="${MIGRATOR_TEST_PASSWORD}"
           psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
@@ -130,15 +138,19 @@ jobs:
           psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
             --username atendee_migrator --dbname atendee_rls_lab \
             --file db/migrations/010_enforce_active_mfa_owner.sql
+          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
+            --username atendee_migrator --dbname atendee_rls_lab \
+            --file db/migrations/011_operational_identity_activation.sql
 
           printf '%s\n' \
             "ATENDEE_TEST_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=atendee_rls_lab;Username=atendee_app_login;Password=${APP_TEST_PASSWORD};Pooling=true;Maximum Pool Size=1" \
-            "ATENDEE_TEST_IDENTITY_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=atendee_rls_lab;Username=atendee_auth_login;Password=${AUTH_TEST_PASSWORD};Pooling=true;Maximum Pool Size=1" \
+            "ATENDEE_TEST_PROVISIONER_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=atendee_rls_lab;Username=atendee_identity_provisioner;Password=$PROVISIONER_TEST_PASSWORD;Pooling=false" \
+            "ATENDEE_TEST_IDENTITY_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=atendee_rls_lab;Username=atendee_auth_login;Password=${AUTH_TEST_PASSWORD};Pooling=true;Maximum Pool Size=10" \
             "ATENDEE_TEST_MIGRATOR_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=atendee_rls_lab;Username=atendee_migrator;Password=${MIGRATOR_TEST_PASSWORD};Pooling=false" \
             >> "${GITHUB_ENV}"
           printf 'ATENDEE_TEST_POSTGRES_ADMIN_PASSWORD=\n' >> "${GITHUB_ENV}"
 
-          unset APP_TEST_PASSWORD AUTH_TEST_PASSWORD MIGRATOR_TEST_PASSWORD PGPASSWORD
+          unset APP_TEST_PASSWORD AUTH_TEST_PASSWORD MIGRATOR_TEST_PASSWORD PROVISIONER_TEST_PASSWORD PGPASSWORD
 
       - name: Run EF Core and PostgreSQL RLS integration checks
         run: dotnet run --project tests/Atendee.Persistence.Checks/Atendee.Persistence.Checks.csproj --no-build --configuration Release
@@ -155,6 +167,7 @@ jobs:
         run: |
           printf 'ATENDEE_TEST_CONNECTION_STRING=\n' >> "${GITHUB_ENV}"
           printf 'ATENDEE_TEST_IDENTITY_CONNECTION_STRING=\n' >> "${GITHUB_ENV}"
+          printf 'ATENDEE_TEST_PROVISIONER_CONNECTION_STRING=\n' >> "$GITHUB_ENV"
           printf 'ATENDEE_TEST_MIGRATOR_CONNECTION_STRING=\n' >> "${GITHUB_ENV}"
 
       - name: Remove disposable PostgreSQL container

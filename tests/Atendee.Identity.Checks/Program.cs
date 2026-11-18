@@ -17,8 +17,10 @@ using Npgsql;
 
 var identityConnectionString = Environment.GetEnvironmentVariable("ATENDEE_TEST_IDENTITY_CONNECTION_STRING");
 var migratorConnectionString = Environment.GetEnvironmentVariable("ATENDEE_TEST_MIGRATOR_CONNECTION_STRING");
+var provisionerConnectionString = Environment.GetEnvironmentVariable("ATENDEE_TEST_PROVISIONER_CONNECTION_STRING");
 if (string.IsNullOrWhiteSpace(identityConnectionString) ||
-    string.IsNullOrWhiteSpace(migratorConnectionString))
+    string.IsNullOrWhiteSpace(migratorConnectionString) ||
+    string.IsNullOrWhiteSpace(provisionerConnectionString))
     throw new InvalidOperationException("Identity integration checks require disposable PostgreSQL connections; SKIP is not allowed.");
 
 var keyRing = Path.Combine(Path.GetTempPath(), "atendee-identity-" + Guid.NewGuid().ToString("N"));
@@ -30,6 +32,15 @@ services.AddDataProtection().SetApplicationName("AtendeeBeauty").PersistKeysToFi
 services.AddAtendeeIdentity(identityConnectionString);
 await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
 
+var provisionerServices = new ServiceCollection();
+provisionerServices.AddLogging();
+provisionerServices.AddDataProtection().SetApplicationName("AtendeeBeauty")
+    .PersistKeysToFileSystem(new DirectoryInfo(keyRing));
+provisionerServices.AddAtendeeIdentity(provisionerConnectionString!);
+await using var provisionerProvider = provisionerServices.BuildServiceProvider(
+    new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+
+
 var checks = 0;
 void Check(bool condition, string name)
 {
@@ -40,6 +51,104 @@ void Check(bool condition, string name)
 
 try
 {
+    var activationEmail = "activation-check-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    OperationalIdentityActivationIssue issued;
+    await using (var provisionerScope = provisionerProvider.CreateAsyncScope())
+    {
+        var provisioning = provisionerScope.ServiceProvider
+            .GetRequiredService<OperationalIdentityProvisioningService>();
+        issued = await provisioning.CreatePendingAsync(activationEmail);
+        Check(issued.Token.Length == 43 && !issued.IsReissue &&
+              issued.ExpiresAtUtc > DateTimeOffset.UtcNow.AddMinutes(29) &&
+              issued.ExpiresAtUtc <= DateTimeOffset.UtcNow.AddMinutes(31),
+            "Offline provisioner creates a 256-bit, 30-minute pending activation token.");
+        var duplicateRejected = false;
+        try { _ = await provisioning.CreatePendingAsync(activationEmail.ToUpperInvariant()); }
+        catch (InvalidOperationException) { duplicateRejected = true; }
+        Check(duplicateRejected,
+            "Normalized duplicate email cannot create a second operational identity.");
+    }
+
+    byte[] persistedActivationHash;
+    await using (var connection = new NpgsqlConnection(migratorConnectionString))
+    {
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var role = new NpgsqlCommand(
+            "SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+            await role.ExecuteNonQueryAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT \"TokenHash\" FROM identity.\"OperationalIdentityActivationTokens\" WHERE \"UserId\" = @id",
+            connection, transaction);
+        command.Parameters.AddWithValue("id", issued.IdentityUserId);
+        persistedActivationHash = (byte[])(await command.ExecuteScalarAsync())!;
+    }
+    Check(CryptographicOperations.FixedTimeEquals(
+            persistedActivationHash, ActivationTokenCodec.HashToken(issued.Token)),
+        "Database persists only the SHA-256 activation-token hash.");
+
+    OperationalIdentityActivationIssue reissued;
+    await using (var provisionerScope = provisionerProvider.CreateAsyncScope())
+    {
+        var provisioning = provisionerScope.ServiceProvider
+            .GetRequiredService<OperationalIdentityProvisioningService>();
+        reissued = await provisioning.ReissuePendingAsync(activationEmail);
+    }
+    Check(reissued.IsReissue && reissued.Token != issued.Token,
+        "Re-issue rotates the pending activation token.");
+
+    await using (var activationScope = provider.CreateAsyncScope())
+    {
+        var activation = activationScope.ServiceProvider
+            .GetRequiredService<OperationalIdentityActivationService>();
+        Check(await activation.ActivateAsync(issued.Token, "Atendee-Activation-Check-2026!") ==
+              OperationalIdentityActivationResult.InvalidOrExpired,
+            "Previously issued token is invalid immediately after rotation.");
+        Check(await activation.ActivateAsync(reissued.Token, "short") ==
+              OperationalIdentityActivationResult.PasswordPolicyRejected,
+            "Password-policy failure does not consume the current activation token.");
+        async Task<OperationalIdentityActivationResult> RedeemInNewScopeAsync()
+        {
+            await using var concurrentScope = provider.CreateAsyncScope();
+            var concurrentActivation = concurrentScope.ServiceProvider
+                .GetRequiredService<OperationalIdentityActivationService>();
+            return await concurrentActivation.ActivateAsync(
+                reissued.Token, "Atendee-Activation-Check-2026!");
+        }
+
+        var concurrentResults = await Task.WhenAll(
+            RedeemInNewScopeAsync(),
+            RedeemInNewScopeAsync());
+        Check(concurrentResults.Count(result => result == OperationalIdentityActivationResult.Activated) == 1 &&
+              concurrentResults.Count(result => result == OperationalIdentityActivationResult.InvalidOrExpired) == 1,
+            "Concurrent activation attempts serialize and exactly one request redeems the token.");
+
+        Check(await activation.ActivateAsync(reissued.Token, "Atendee-Activation-Check-2026!") ==
+              OperationalIdentityActivationResult.InvalidOrExpired,
+            "A consumed activation token is rejected on replay.");
+    }
+
+    await using (var identityScope = provider.CreateAsyncScope())
+    {
+        var users = identityScope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var activatedUser = await users.FindByEmailAsync(activationEmail);
+        Check(activatedUser is not null && activatedUser.EmailConfirmed &&
+              activatedUser.PasswordHash is not null && !activatedUser.TwoFactorEnabled &&
+              await users.CheckPasswordAsync(activatedUser, "Atendee-Activation-Check-2026!"),
+            "Activation sets an Identity-hashed password and confirmed email without enrolling MFA.");
+    }
+
+    var confirmedReissueRejected = false;
+    await using (var provisionerScope = provisionerProvider.CreateAsyncScope())
+    {
+        var provisioning = provisionerScope.ServiceProvider
+            .GetRequiredService<OperationalIdentityProvisioningService>();
+        try { _ = await provisioning.ReissuePendingAsync(activationEmail); }
+        catch (InvalidOperationException) { confirmedReissueRejected = true; }
+    }
+    Check(confirmedReissueRejected,
+        "Confirmed operational identities cannot receive another activation link.");
+
     var userId = Guid.NewGuid();
     var tenantId = Guid.Empty;
     var secondTenantId = Guid.NewGuid();

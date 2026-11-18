@@ -8,7 +8,7 @@ BEGIN
         SELECT 1 FROM pg_roles
         WHERE rolname IN (
             'atendee_owner', 'atendee_runtime', 'atendee_app_login',
-            'atendee_identity_owner', 'atendee_auth_login', 'atendee_migrator'
+            'atendee_identity_owner', 'atendee_auth_login', 'atendee_identity_provisioner', 'atendee_migrator'
         )
     ) THEN
         RAISE EXCEPTION 'Atendee roles already exist. Review the database manually; do not rerun blindly.';
@@ -28,17 +28,21 @@ CREATE ROLE atendee_identity_owner
 CREATE ROLE atendee_auth_login
     LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
 
+CREATE ROLE atendee_identity_provisioner
+    LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
+
 CREATE ROLE atendee_migrator
     LOGIN NOINHERIT NOSUPERUSER NOBYPASSRLS;
 
 GRANT atendee_runtime TO atendee_app_login WITH INHERIT FALSE, SET TRUE;
 GRANT atendee_owner TO atendee_migrator WITH INHERIT FALSE, SET TRUE;
 GRANT atendee_identity_owner TO atendee_migrator WITH INHERIT FALSE, SET TRUE;
+GRANT atendee_identity_owner TO atendee_identity_provisioner WITH INHERIT FALSE, SET TRUE;
 
 DO $grant_connect$
 BEGIN
     EXECUTE format(
-        'GRANT CONNECT ON DATABASE %I TO atendee_app_login, atendee_auth_login, atendee_migrator',
+        'GRANT CONNECT ON DATABASE %I TO atendee_app_login, atendee_auth_login, atendee_identity_provisioner, atendee_migrator',
         current_database());
 END
 $grant_connect$;

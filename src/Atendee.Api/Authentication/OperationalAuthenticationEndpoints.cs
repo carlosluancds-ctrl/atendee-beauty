@@ -42,6 +42,10 @@ public static class OperationalAuthenticationEndpoints
             .AllowAnonymous()
             .RequireRateLimiting("auth-login");
 
+        group.MapPost("/activate", ActivateAsync)
+            .AllowAnonymous()
+            .RequireRateLimiting("auth-activation");
+
         group.MapPost("/mfa/challenge", CompleteMfaChallengeAsync)
             .AllowAnonymous()
             .RequireRateLimiting("auth-mfa");
@@ -69,6 +73,28 @@ public static class OperationalAuthenticationEndpoints
         setup.MapPost("/cancel", (Delegate)CancelMfaEnrollmentAsync);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> ActivateAsync(
+        ActivationRequest request,
+        HttpContext httpContext,
+        OperationalIdentityActivationService activationService)
+    {
+        httpContext.Response.Headers.CacheControl = "no-store";
+
+        var result = await activationService.ActivateAsync(
+            request.Token,
+            request.Password,
+            httpContext.RequestAborted);
+
+        return result switch
+        {
+            OperationalIdentityActivationResult.Activated =>
+                Results.Ok(new ActivationStateResponse("activated_sign_in_required")),
+            OperationalIdentityActivationResult.PasswordPolicyRejected =>
+                Results.BadRequest(new { error = "password_policy_failed" }),
+            _ => Results.BadRequest(new { error = "activation_invalid_or_expired" })
+        };
     }
 
     private static async Task<IResult> LoginAsync(
@@ -507,6 +533,8 @@ public static class OperationalAuthenticationEndpoints
             new { error = "invalid_credentials_or_account_state" },
             statusCode: StatusCodes.Status401Unauthorized);
 
+    private sealed record ActivationRequest(string? Token, string? Password);
+    private sealed record ActivationStateResponse(string State);
     private sealed record LoginRequest(string Email, string Password);
     private sealed record MfaChallengeRequest(string Code, bool UseRecoveryCode = false);
     private sealed record MfaEnrollmentVerifyRequest(string Code);
