@@ -611,3 +611,12 @@ select { font: inherit; }
 @media (max-width: 760px) {
   .professional-grid { grid-template-columns: 1fr; }
 }
+
+.professional-readonly-list {
+  margin: 9px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+.professional-permission-note { margin-top: 12px !important; }
