@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using Atendee.Api.Authentication;
 using Atendee.Api.Services;
+using Atendee.Api.Tenants;
 using Atendee.Api.Professionals;
 using Atendee.Infrastructure;
 using Atendee.Infrastructure.Web;
@@ -305,6 +306,7 @@ if (identityEnabled)
 {
     app.MapOperationalAuthentication();
     app.MapTenantServices();
+    app.MapTenantOnboarding();
     app.MapTenantProfessionals();
 }
 

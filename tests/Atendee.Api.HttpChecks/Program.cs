@@ -583,7 +583,7 @@ try
     Ensure(ownerMeBeforeMembership.StatusCode == HttpStatusCode.Unauthorized,
         "Pre-membership MFA enrollment does not issue an application session.");
 
-    await SeedMembershipAsync(migratorConnectionString, ownerTenantId, ownerUserId, roleId: 1);
+    await SeedMembershipAsync(migratorConnectionString, ownerTenantId, ownerUserId, roleId: 1, statusId: 0);
     var ownerFirstLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
     {
         email = ownerEmail,
@@ -602,6 +602,31 @@ try
     Ensure(ownerFirstChallenge.StatusCode == HttpStatusCode.OK &&
            (await mfaClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
         "Owner receives an application session only after membership provisioning and an MFA challenge.");
+
+    var pendingTenantProfile = await mfaClient.GetAsync("/api/v1/tenant");
+    var pendingTenantProfileBody = await pendingTenantProfile.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(pendingTenantProfile.StatusCode == HttpStatusCode.OK &&
+           pendingTenantProfileBody.GetProperty("status").GetString() == TenantStatus.PendingVerification.ToString() &&
+           pendingTenantProfileBody.GetProperty("currentMemberRole").GetString() == TenantRole.Owner.ToString(),
+        "The authenticated Owner can read the current salon profile resolved from server-side membership.");
+
+    var completedOnboarding = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/tenant/onboarding/complete", mfaRequestToken!, new { });
+    var completedOnboardingBody = await completedOnboarding.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(completedOnboarding.StatusCode == HttpStatusCode.OK &&
+           completedOnboardingBody.GetProperty("status").GetString() == TenantStatus.SetupRequired.ToString() &&
+           completedOnboardingBody.GetProperty("onboardingCompleted").GetBoolean(),
+        "An email-confirmed, MFA-authenticated active Owner moves the salon from PendingVerification to SetupRequired.");
+
+    var onboardingAudit = await ReadTenantStatusAuditAsync(migratorConnectionString, ownerTenantId);
+    Ensure(onboardingAudit.Length == 1 && onboardingAudit[0].From == 0 && onboardingAudit[0].To == 1,
+        "The onboarding transition is audited once by the PostgreSQL tenant-status trigger.");
+
+    var repeatedOnboarding = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/tenant/onboarding/complete", mfaRequestToken!, new { });
+    Ensure(repeatedOnboarding.StatusCode == HttpStatusCode.OK &&
+           (await ReadTenantStatusAuditAsync(migratorConnectionString, ownerTenantId)).Length == 1,
+        "Repeating onboarding completion is idempotent and does not create a second status audit event.");
 
     var createSalonService = await PostWithCsrfAsync(mfaClient, "/api/v1/services", mfaRequestToken!, new
     {
