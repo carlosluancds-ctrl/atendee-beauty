@@ -41,7 +41,7 @@ void Check(bool condition, string name)
 try
 {
     var userId = Guid.NewGuid();
-    var tenantId = Guid.NewGuid();
+    var tenantId = Guid.Empty;
     var secondTenantId = Guid.NewGuid();
     var email = "identity-check-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     string secret;
@@ -68,6 +68,22 @@ try
         var user = new OperationalIdentityUser { UserName = email, Email = email, EmailConfirmed = true };
         var created = await users.CreateAsync(user, "Atendee-Test-2026!");
         Check(created.Succeeded, "Synthetic operational identity is created");
+        var provisioner = new FirstOwnerProvisioningService(migratorConnectionString);
+        var rejectedSlug = "mfa-required-" + Guid.NewGuid().ToString("N");
+        await ExpectProvisioningFailureAsync(() => provisioner.ProvisionAsync(
+            new FirstOwnerProvisioningRequest(
+                user.Id, "Must Not Exist", rejectedSlug, "America/Sao_Paulo", "Synthetic Owner")),
+            "First-Owner provisioning rejects an identity before MFA enrollment");
+        var authLoginProvisioner = new FirstOwnerProvisioningService(identityConnectionString);
+        var authLoginSlug = "auth-role-denied-" + Guid.NewGuid().ToString("N");
+        await ExpectProvisioningFailureAsync(() => authLoginProvisioner.ProvisionAsync(
+            new FirstOwnerProvisioningRequest(
+                user.Id, "Must Not Exist", authLoginSlug, "America/Sao_Paulo", "Synthetic Owner")),
+            "The application authentication database role cannot run trusted provisioning");
+        Check(!await TenantSlugExistsAsync(migratorConnectionString, authLoginSlug),
+            "Rejected application-role provisioning leaves no tenant row behind");
+        Check(!await TenantSlugExistsAsync(migratorConnectionString, rejectedSlug),
+            "Rejected pre-MFA provisioning leaves no tenant row behind");
         Check(await users.CheckPasswordAsync(user, "Atendee-Test-2026!"), "Correct password is accepted");
         Check(!await users.CheckPasswordAsync(user, "Wrong-password-2026!"), "Incorrect password is rejected");
 
@@ -114,7 +130,28 @@ try
         userId = user.Id;
     }
 
-    await SeedMembershipAsync(migratorConnectionString, tenantId, userId);
+    var firstOwnerProvisioner = new FirstOwnerProvisioningService(migratorConnectionString);
+    var provisionedTenant = await firstOwnerProvisioner.ProvisionAsync(
+        new FirstOwnerProvisioningRequest(
+            userId,
+            "Synthetic Salon",
+            "first-owner-" + Guid.NewGuid().ToString("N"),
+            "America/Sao_Paulo",
+            "Synthetic Owner"));
+    tenantId = provisionedTenant.TenantId;
+    Check(await ReadTenantStatusAsync(migratorConnectionString, tenantId) == (int)TenantStatus.PendingVerification,
+        "First-Owner provisioning creates the salon in PendingVerification without choosing a later lifecycle state");
+    Check(provisionedTenant.OwnerIdentityUserId == userId,
+        "Trusted tool creates the salon and binds only the requested MFA-ready identity as Owner");
+    await SetTenantStatusAsync(migratorConnectionString, tenantId, (int)TenantStatus.Active);
+
+    var repeatedSlug = "repeat-provision-" + Guid.NewGuid().ToString("N");
+    await ExpectProvisioningFailureAsync(() => firstOwnerProvisioner.ProvisionAsync(
+        new FirstOwnerProvisioningRequest(
+            userId, "Must Not Exist", repeatedSlug, "America/Sao_Paulo", "Synthetic Owner")),
+        "First-Owner provisioning rejects an identity that already has a salon membership");
+    Check(!await TenantSlugExistsAsync(migratorConnectionString, repeatedSlug),
+        "Repeated provisioning leaves no second tenant row behind");
     await SeedSecondTenantAsync(migratorConnectionString, secondTenantId);
 
     await using (var scope = provider.CreateAsyncScope())
@@ -252,40 +289,64 @@ static async Task AssertDirectMembershipReadDeniedAsync(string cs)
         throw new InvalidOperationException("Membership resolver returned rows without transaction-local authenticated identity context.");
 }
 
-static async Task SeedMembershipAsync(string cs, Guid tenantId, Guid userId)
+async Task ExpectProvisioningFailureAsync(Func<Task<FirstOwnerProvisioningResult>> action, string description)
+{
+    try
+    {
+        _ = await action();
+    }
+    catch (InvalidOperationException)
+    {
+        checks++;
+        Console.WriteLine("PASS " + description);
+        return;
+    }
+
+    throw new InvalidOperationException("FAIL: " + description);
+}
+
+static async Task<bool> TenantSlugExistsAsync(string cs, string slug)
 {
     await using var connection = new NpgsqlConnection(cs);
     await connection.OpenAsync();
-    await using var tx = await connection.BeginTransactionAsync();
-    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, tx))
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
         await role.ExecuteNonQueryAsync();
-
-    await using (var tenant = new NpgsqlCommand(
-        """
-        INSERT INTO atendee.tenants(id,name,slug,time_zone_id,status,created_at_utc)
-        VALUES(@id,'Synthetic Salon','identity-' || @id::text,'America/Sao_Paulo',3,now())
-        """,
-        connection, tx))
-    {
-        tenant.Parameters.AddWithValue("id", tenantId);
-        await tenant.ExecuteNonQueryAsync();
-    }
-
-    await using (var membership = new NpgsqlCommand(
-        """
-        INSERT INTO atendee.tenant_users
-            (tenant_id,identity_user_id,display_name,role,is_active,created_at_utc)
-        VALUES(@tenant,@user,'Synthetic Owner',1,true,now())
-        """, connection, tx))
-    {
-        membership.Parameters.AddWithValue("tenant", tenantId);
-        membership.Parameters.AddWithValue("user", userId);
-        await membership.ExecuteNonQueryAsync();
-    }
-
-    await tx.CommitAsync();
+    await using var command = new NpgsqlCommand(
+        "SELECT EXISTS (SELECT 1 FROM atendee.tenants WHERE slug = @slug)",
+        connection, transaction);
+    command.Parameters.AddWithValue("slug", slug);
+    return Equals(await command.ExecuteScalarAsync(), true);
 }
 
+static async Task<int> ReadTenantStatusAsync(string cs, Guid tenantId)
+{
+    await using var connection = new NpgsqlConnection(cs);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    await using var command = new NpgsqlCommand(
+        "SELECT status FROM atendee.tenants WHERE id = @tenant",
+        connection, transaction);
+    command.Parameters.AddWithValue("tenant", tenantId);
+    return Convert.ToInt32(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+}
+static async Task SetTenantStatusAsync(string cs, Guid tenantId, int status)
+{
+    await using var connection = new NpgsqlConnection(cs);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+    await using var command = new NpgsqlCommand(
+        "UPDATE atendee.tenants SET status = @status WHERE id = @tenant",
+        connection, transaction);
+    command.Parameters.AddWithValue("status", status);
+    command.Parameters.AddWithValue("tenant", tenantId);
+    await command.ExecuteNonQueryAsync();
+    await transaction.CommitAsync();
+}
 static async Task<bool> TryDisableMfaAsync(string cs, Guid userId)
 {
     await using var connection = new NpgsqlConnection(cs);
