@@ -109,9 +109,14 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   await page.getByRole("button", { name: "Criar serviço" }).click();
   const serviceCreateRequest = await serviceCreateRequestPromise;
   const serviceCreateResponse = await serviceCreateResponsePromise;
-  if (!serviceCreateResponse.ok())
+  if (!serviceCreateResponse.ok()) {
+    const headers = await serviceCreateRequest.allHeaders();
     throw new Error("Real service-create API returned HTTP " + serviceCreateResponse.status() +
-      "; request body: " + serviceCreateRequest.postData());
+      "; request body: " + serviceCreateRequest.postData() +
+      "; content-type present: " + Boolean(headers["content-type"]) +
+      "; antiforgery header present: " + Boolean(headers["x-csrf-token"]) +
+      "; auth cookie present: " + Boolean(headers.cookie?.includes("__Host-Atendee.Auth")));
+  }
   await expect(page.getByRole("heading", { name: "Corte E2E" })).toBeVisible();
   await logout(page);
 
