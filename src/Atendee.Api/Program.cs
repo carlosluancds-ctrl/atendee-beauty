@@ -265,6 +265,10 @@ app.UseRateLimiter();
 
 if (identityEnabled)
 {
+    // Authentication must establish the current claims principal before
+    // antiforgery validates a request token bound to that principal.
+    app.UseAuthentication();
+
     app.Use(async (context, next) =>
     {
         var method = context.Request.Method;
@@ -303,7 +307,6 @@ if (identityEnabled)
         await next();
     });
 
-    app.UseAuthentication();
     app.UseMiddleware<TenantContextMiddleware>();
     app.UseAuthorization();
 }
