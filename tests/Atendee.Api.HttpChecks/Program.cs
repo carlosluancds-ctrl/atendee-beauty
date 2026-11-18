@@ -640,18 +640,39 @@ try
             currency = "BRL",
             bufferBeforeMinutes = 5,
             bufferAfterMinutes = 15,
-            isActive = false
+            isActive = true
         })
     };
     updateSalonService.Headers.Add("X-CSRF-TOKEN", mfaRequestToken!);
     using var updateSalonServiceResponse = await mfaClient.SendAsync(updateSalonService);
     Ensure(updateSalonServiceResponse.StatusCode == HttpStatusCode.OK,
-        "Owner can update a service and archive it without hard deletion.");
+        "Owner can update the service's commercial and scheduling fields.");
     var updatedSalonService = await updateSalonServiceResponse.Content.ReadFromJsonAsync<JsonElement>();
-    Ensure(updatedSalonService.GetProperty("isActive").GetBoolean() == false &&
+    Ensure(updatedSalonService.GetProperty("isActive").GetBoolean() &&
            updatedSalonService.GetProperty("priceMinorUnits").GetInt64() == 8000 &&
            updatedSalonService.GetProperty("durationMinutes").GetInt32() == 50,
-        "Service update persists validated fields and the inactive state.");
+        "Service update persists validated fields while preserving active state.");
+
+    var archiveSalonService = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/services/{salonServiceId}")
+    {
+        Content = JsonContent.Create(new
+        {
+            name = "Corte de cabelo",
+            durationMinutes = 50,
+            priceMinorUnits = 8000L,
+            currency = "BRL",
+            bufferBeforeMinutes = 5,
+            bufferAfterMinutes = 15,
+            isActive = false
+        })
+    };
+    archiveSalonService.Headers.Add("X-CSRF-TOKEN", mfaRequestToken!);
+    using var archiveSalonServiceResponse = await mfaClient.SendAsync(archiveSalonService);
+    Ensure(archiveSalonServiceResponse.StatusCode == HttpStatusCode.OK,
+        "Owner can archive a service without hard deletion.");
+    var archivedSalonService = await archiveSalonServiceResponse.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(!archivedSalonService.GetProperty("isActive").GetBoolean(),
+        "Archiving changes the active flag without deleting the service.");
     var serviceAudit = await ReadServiceAuditAsync(migratorConnectionString, ownerTenantId, salonServiceId);
     Ensure(serviceAudit.Contains("service.created") &&
            serviceAudit.Contains("service.updated") &&
