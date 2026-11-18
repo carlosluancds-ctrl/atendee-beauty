@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Atendee.Api.Authentication;
+using Atendee.Api.Services;
 using Atendee.Infrastructure;
 using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.Antiforgery;
@@ -302,6 +303,7 @@ app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
 if (identityEnabled)
 {
     app.MapOperationalAuthentication();
+    app.MapTenantServices();
 }
 
 app.Run();

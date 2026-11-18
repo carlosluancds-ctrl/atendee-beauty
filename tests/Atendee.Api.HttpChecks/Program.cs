@@ -258,6 +258,22 @@ try
            TenantRole.Receptionist.ToString(),
         "Tenant profile includes only the caller's persisted membership role.");
 
+    var receptionistServices = await client.GetAsync("/api/v1/services");
+    Ensure(receptionistServices.StatusCode == HttpStatusCode.OK,
+        "Receptionist can read the tenant service catalogue when tenant status allows ReadData.");
+    var receptionistCreate = await PostWithCsrfAsync(client, "/api/v1/services", requestToken!, new
+    {
+        name = "Unauthorized service",
+        durationMinutes = 30,
+        priceMinorUnits = 5000L,
+        currency = "BRL",
+        bufferBeforeMinutes = 0,
+        bufferAfterMinutes = 0,
+        isActive = true
+    });
+    Ensure(receptionistCreate.StatusCode == HttpStatusCode.Forbidden,
+        "Receptionist cannot create or manage salon services.");
+
     var targetEmail = "http-audit-target-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     Guid targetUserId;
     await using (var scope = factory.Services.CreateAsyncScope())
@@ -586,6 +602,62 @@ try
     Ensure(ownerFirstChallenge.StatusCode == HttpStatusCode.OK &&
            (await mfaClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
         "Owner receives an application session only after membership provisioning and an MFA challenge.");
+
+    var createSalonService = await PostWithCsrfAsync(mfaClient, "/api/v1/services", mfaRequestToken!, new
+    {
+        name = "Corte de cabelo",
+        durationMinutes = 45,
+        priceMinorUnits = 7500L,
+        currency = "BRL",
+        bufferBeforeMinutes = 5,
+        bufferAfterMinutes = 10,
+        isActive = true
+    });
+    Ensure(createSalonService.StatusCode == HttpStatusCode.Created,
+        "Owner can create a tenant-scoped service with explicit duration, minor-unit price, currency and buffers.");
+    var createdSalonService = await createSalonService.Content.ReadFromJsonAsync<JsonElement>();
+    var salonServiceId = createdSalonService.GetProperty("id").GetGuid();
+    Ensure(createdSalonService.GetProperty("priceMinorUnits").GetInt64() == 7500 &&
+           createdSalonService.GetProperty("currency").GetString() == "BRL" &&
+           createdSalonService.GetProperty("durationMinutes").GetInt32() == 45,
+        "Service API preserves integer money, explicit ISO currency and duration.");
+    var ownerServiceList = await mfaClient.GetAsync("/api/v1/services");
+    Ensure(ownerServiceList.StatusCode == HttpStatusCode.OK,
+        "Owner can list services belonging to the current salon.");
+    var ownerServicesJson = await ownerServiceList.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(ownerServicesJson.GetArrayLength() == 1 &&
+           ownerServicesJson[0].GetProperty("id").GetGuid() == salonServiceId,
+        "Tenant service list contains the created service.");
+    var receptionistCrossTenantService = await client.GetAsync($"/api/v1/services/{salonServiceId}");
+    Ensure(receptionistCrossTenantService.StatusCode == HttpStatusCode.NotFound,
+        "A user from another salon cannot read a service by a known foreign UUID.");
+    var updateSalonService = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/services/{salonServiceId}")
+    {
+        Content = JsonContent.Create(new
+        {
+            name = "Corte de cabelo",
+            durationMinutes = 50,
+            priceMinorUnits = 8000L,
+            currency = "BRL",
+            bufferBeforeMinutes = 5,
+            bufferAfterMinutes = 15,
+            isActive = false
+        })
+    };
+    updateSalonService.Headers.Add("X-CSRF-TOKEN", mfaRequestToken!);
+    using var updateSalonServiceResponse = await mfaClient.SendAsync(updateSalonService);
+    Ensure(updateSalonServiceResponse.StatusCode == HttpStatusCode.OK,
+        "Owner can update a service and archive it without hard deletion.");
+    var updatedSalonService = await updateSalonServiceResponse.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(updatedSalonService.GetProperty("isActive").GetBoolean() == false &&
+           updatedSalonService.GetProperty("priceMinorUnits").GetInt64() == 8000 &&
+           updatedSalonService.GetProperty("durationMinutes").GetInt32() == 50,
+        "Service update persists validated fields and the inactive state.");
+    var serviceAudit = await ReadServiceAuditAsync(migratorConnectionString, ownerTenantId, salonServiceId);
+    Ensure(serviceAudit.Contains("service.created") &&
+           serviceAudit.Contains("service.updated") &&
+           serviceAudit.Contains("service.archived"),
+        "Service creation, update and archive are durably audited by a database trigger.");
 
     var ownerLogout = await PostWithCsrfAsync(
         mfaClient, "/api/v1/auth/logout", mfaRequestToken!, new { });
@@ -1341,6 +1413,33 @@ static async Task<string[]> ReadSecurityAuditTypesAsync(string connectionString,
 
     await transaction.CommitAsync();
     return values.ToArray();
+}
+
+static async Task<string[]> ReadServiceAuditAsync(
+    string connectionString,
+    Guid tenantId,
+    Guid serviceId)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using var command = new NpgsqlCommand(
+        "SELECT event_type FROM atendee.tenant_audit_events WHERE tenant_id = @tenant AND resource_id = @service ORDER BY occurred_at_utc, event_id",
+        connection, transaction);
+    command.Parameters.AddWithValue("tenant", tenantId);
+    command.Parameters.AddWithValue("service", serviceId);
+    var events = new List<string>();
+    await using (var reader = await command.ExecuteReaderAsync())
+    {
+        while (await reader.ReadAsync())
+            events.Add(reader.GetString(0));
+    }
+
+    await transaction.CommitAsync();
+    return events.ToArray();
 }
 
 static async Task<(short From, short To, bool HasActor, bool HasIdentityTarget)[]> ReadTenantStatusAuditAsync(

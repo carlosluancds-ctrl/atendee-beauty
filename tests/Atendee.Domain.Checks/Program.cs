@@ -1,9 +1,17 @@
 using Atendee.Domain.Primitives;
+using Atendee.Domain.Catalog;
 using Atendee.Domain.Tenants;
 
 var nowUtc = new DateTimeOffset(2026, 11, 17, 12, 0, 0, TimeSpan.Zero);
 var checks = new (string Name, Action Run)[]
 {
+    ("service name is trimmed and currency normalized", () => { var service = SalonService.Create(Guid.NewGuid(), "  Corte  ", 45, 7500, "brl", 5, 10, true, nowUtc); Assert(service.Name == "Corte" && service.Currency == "BRL"); }),
+    ("service price is an integer minor-unit amount", () => Assert(SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "BRL", 0, 0, true, nowUtc).PriceMinorUnits == 7500)),
+    ("invalid ISO currency is rejected", () => Throws<ArgumentException>(() => SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "ZZZ", 0, 0, true, nowUtc))),
+    ("negative service price is rejected", () => Throws<ArgumentOutOfRangeException>(() => SalonService.Create(Guid.NewGuid(), "Corte", 45, -1, "BRL", 0, 0, true, nowUtc))),
+    ("zero service duration is rejected", () => Throws<ArgumentOutOfRangeException>(() => SalonService.Create(Guid.NewGuid(), "Corte", 0, 7500, "BRL", 0, 0, true, nowUtc))),
+    ("negative service buffer is rejected", () => Throws<ArgumentOutOfRangeException>(() => SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "BRL", -1, 0, true, nowUtc))),
+    ("service update preserves creation timestamp and changes update timestamp", () => { var service = SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "BRL", 0, 0, true, nowUtc); var updated = service.Update("Corte premium", 60, 9000, "BRL", 5, 10, false, nowUtc.AddMinutes(1)); Assert(updated.CreatedAtUtc == nowUtc && updated.UpdatedAtUtc == nowUtc.AddMinutes(1) && !updated.IsActive); }),
     ("tenant name is trimmed", () => Assert(Tenant.Create("  Atendee Beauty  ", "atendee-beauty", "America/Sao_Paulo", nowUtc).Name == "Atendee Beauty")),
     ("slug is normalized", () => Assert(Tenant.Create("Salon", "Atendee-Beauty", "America/Sao_Paulo", nowUtc).Slug == "atendee-beauty")),
     ("new tenant starts pending verification", () => Assert(Tenant.Create("Salon", "salon", "America/Sao_Paulo", nowUtc).Status == TenantStatus.PendingVerification)),

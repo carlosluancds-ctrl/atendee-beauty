@@ -25,6 +25,7 @@ public sealed class TenantDbContext : DbContext
 
     public Guid BoundTenantId => _boundTenantId.Value;
     internal DbSet<TenantNoteRow> TenantNotes => Set<TenantNoteRow>();
+    internal DbSet<TenantServiceRow> TenantServices => Set<TenantServiceRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +37,23 @@ public sealed class TenantDbContext : DbContext
         notes.Property(row => row.Body).HasColumnName("body").HasMaxLength(1000).IsRequired();
         notes.Property(row => row.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
         notes.HasIndex(row => new { row.TenantId, row.CreatedAtUtc });
+
+        var services = modelBuilder.Entity<TenantServiceRow>();
+        services.ToTable("services", "atendee");
+        services.HasKey(row => new { row.TenantId, row.Id });
+        services.Property(row => row.TenantId).HasColumnName("tenant_id").IsRequired();
+        services.Property(row => row.Id).HasColumnName("service_id").IsRequired();
+        services.Property(row => row.Name).HasColumnName("name").HasMaxLength(120).IsRequired();
+        services.Property(row => row.DurationMinutes).HasColumnName("duration_minutes").IsRequired();
+        services.Property(row => row.PriceMinorUnits).HasColumnName("price_minor_units").IsRequired();
+        services.Property(row => row.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength().IsRequired();
+        services.Property(row => row.BufferBeforeMinutes).HasColumnName("buffer_before_minutes").IsRequired();
+        services.Property(row => row.BufferAfterMinutes).HasColumnName("buffer_after_minutes").IsRequired();
+        services.Property(row => row.IsActive).HasColumnName("is_active").IsRequired();
+        services.Property(row => row.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        services.Property(row => row.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+        services.HasIndex(row => new { row.TenantId, row.IsActive, row.Name, row.Id });
+        services.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
 
         // Defense in depth only. PostgreSQL RLS remains the database boundary.
         notes.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
@@ -57,6 +75,15 @@ public sealed class TenantDbContext : DbContext
 
     private void ValidateTenantOwnership()
     {
+        foreach (EntityEntry<TenantServiceRow> entry in ChangeTracker.Entries<TenantServiceRow>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
+                entry.Entity.TenantId != _boundTenantId.Value)
+            {
+                throw new InvalidOperationException("A tenant-scoped service does not belong to this DbContext tenant.");
+            }
+        }
+
         foreach (EntityEntry<TenantNoteRow> entry in ChangeTracker.Entries<TenantNoteRow>())
         {
             if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
