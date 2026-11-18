@@ -645,6 +645,25 @@ try
         "A password-only session is denied after a server-side MFA-ready Owner promotion (HTTP " +
         (int)promotedOwnerSession.StatusCode + ").");
 
+    // A fresh host isolates the role-matrix clients from the per-IP login budget
+    // consumed by the preceding account/MFA scenarios.
+    roleMatrixKeyRing = Path.Combine(Path.GetTempPath(), "atendee-role-matrix-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(roleMatrixKeyRing);
+    roleMatrixFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    {
+        web.UseContentRoot(apiContentRoot);
+        web.UseEnvironment("Development");
+        web.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Identity"] = identityConnectionString,
+                ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                ["DataProtection:KeyRingPath"] = roleMatrixKeyRing
+            });
+        });
+    });
+
     using var deactivationClient = roleMatrixFactory!.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
@@ -690,25 +709,6 @@ try
         "A membership deactivation is audited by the database trigger exactly once.");
     Ensure((await deactivationClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "Deactivating membership invalidates the existing tenant session on its next request.");
-
-    // A fresh host isolates the role-matrix clients from the per-IP login budget
-    // consumed by the preceding account/MFA scenarios.
-    roleMatrixKeyRing = Path.Combine(Path.GetTempPath(), "atendee-role-matrix-" + Guid.NewGuid().ToString("N"));
-    Directory.CreateDirectory(roleMatrixKeyRing);
-    roleMatrixFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
-    {
-        web.UseContentRoot(apiContentRoot);
-        web.UseEnvironment("Development");
-        web.ConfigureAppConfiguration((_, configuration) =>
-        {
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:Identity"] = identityConnectionString,
-                ["ConnectionStrings:Tenant"] = tenantConnectionString,
-                ["DataProtection:KeyRingPath"] = roleMatrixKeyRing
-            });
-        });
-    });
 
     var managerEmail = "http-role-manager-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string managerPassword = "Atendee-Manager-Role-2026!";
