@@ -176,6 +176,32 @@ if (identityEnabled)
     builder.Services.Configure<SecurityStampValidatorOptions>(options =>
     {
         options.ValidationInterval = TimeSpan.Zero;
+        options.OnRefreshingPrincipal = context =>
+        {
+            // Security-stamp refresh rebuilds the principal from persisted user
+            // claims. Preserve only the signed, session-scoped authentication
+            // method markers so an MFA-authenticated Owner/Manager does not
+            // lose amr=mfa on the first request after a refresh.
+            var refreshedIdentity = context.NewPrincipal?.Identities
+                .FirstOrDefault(identity => identity.IsAuthenticated);
+            if (refreshedIdentity is not null && context.CurrentPrincipal is not null)
+            {
+                foreach (var authenticationMethod in context.CurrentPrincipal
+                    .FindAll("amr")
+                    .Select(claim => claim.Value)
+                    .Where(value => value is "pwd" or "mfa")
+                    .Distinct(StringComparer.Ordinal))
+                {
+                    if (!refreshedIdentity.HasClaim("amr", authenticationMethod))
+                    {
+                        refreshedIdentity.AddClaim(new System.Security.Claims.Claim(
+                            "amr", authenticationMethod));
+                    }
+                }
+            }
+
+            return Task.CompletedTask;
+        };
     });
 
     builder.Services.AddAuthorization(options =>
