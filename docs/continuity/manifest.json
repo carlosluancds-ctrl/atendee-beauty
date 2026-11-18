@@ -1,48 +1,49 @@
 {
-  "backup_version": "v63-fullstack-browser-e2e-approved",
+  "backup_version": "v64-antiforgery-session-regression-in-progress",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V63_2026-11-18.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V64_2026-11-18.md",
   "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V63_2026-11-18.md",
-  "latest_implementation_commit": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
-  "latest_documentation_parent_commit": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
+  "latest_implementation_commit": "aa38361ed16017a9642145400a94d9b3a4088286",
+  "latest_documentation_parent_commit": "aa38361ed16017a9642145400a94d9b3a4088286",
   "latest_ci": {
-    "v61_run": "44303068000",
-    "v61_status": "success",
-    "v61_implementation_sha": "a2169023009bf240e9ad4a3ca39fdd6be29305df",
-    "v62_run": "44309710988",
-    "v62_status": "success",
-    "v62_implementation_sha": "6ab1560e452776c6f1d4ccfc8900a4f04b47f48f",
-    "v63_run": "44319685006",
-    "v63_status": "success",
-    "v63_implementation_sha": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
-    "v63_checks": "npm ci; npm audit; 2 frontend unit tests; TypeScript/build; Chromium; 8 mocked Playwright tests; locked .NET restore; Release build; 26/26 domain checks; disposable PostgreSQL 18.7; 10/10 persistence/RLS checks; 49/49 Identity checks; API HTTP authentication/session security; 1 real full-stack browser E2E"
+    "v63_implementation_run": "44319685006",
+    "v63_implementation_status": "success",
+    "v63_documentation_run": "44320319677",
+    "v63_documentation_status": "success",
+    "v64_initial_run": "44321104904",
+    "v64_initial_status": "failure_before_job_steps_no_logs",
+    "v64_regex_fix_run": "44321314420",
+    "v64_regex_fix_status": "failure_before_job_steps_no_logs",
+    "v64_regex_fix_retry_attempt": 2,
+    "v64_retry_status": "failure_before_job_steps_no_logs",
+    "v64_status": "in_progress_not_approved",
+    "v64_diagnostic": "GitHub Actions job returned steps=null and no job logs; job-log endpoint returned 404. No test/compiler diagnostic available."
   },
-  "v62_browser_suite": {
-    "framework": "@playwright/test",
-    "version": "1.65.1",
-    "test_file": "web/atendee-portal/tests/e2e/portal.spec.mjs",
-    "test_count": 8,
-    "api_mode": "deterministic mocked responses; UI/browser interaction only",
-    "backend_authorization_source": "API HTTP, Identity/TOTP and PostgreSQL/RLS integration checks"
+  "v63_fullstack_baseline": {
+    "implementation_commit": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
+    "workflow_run": "44319685006",
+    "workflow_status": "success",
+    "mocked_browser_tests": 8,
+    "real_fullstack_browser_tests": 1,
+    "database": "disposable PostgreSQL 18.7",
+    "roles": ["Owner", "Manager", "Professional", "Receptionist"]
   },
-  "v63_fullstack_browser_suite": {
-    "runner": "tests/Atendee.Api.HttpChecks/BrowserE2eRunner.cs",
+  "v64_work_in_progress": {
+    "commits": [
+      "b27b4030bb8f8a44a6184d1fc8acaac3f8b6c8f9",
+      "aa38361ed16017a9642145400a94d9b3a4088286"
+    ],
     "test_file": "web/atendee-portal/tests/e2e/fullstack.spec.mjs",
-    "test_count": 1,
-    "api_mode": "real ASP.NET Core API via temporary HTTPS Kestrel",
-    "database": "disposable PostgreSQL 18.7 provisioned by CI",
-    "roles": ["Owner", "Manager", "Professional", "Receptionist"],
-    "key_security_assertions": [
-      "secure HttpOnly SameSite=Strict __Host- application cookie",
-      "antiforgery header on browser mutations",
-      "Manager MFA enrollment before privileged session",
-      "Receptionist direct eligible-members request returns 403",
-      "Professional reads own assigned services"
-    ]
+    "assertions": [
+      "anonymous request token is rejected after Owner authentication",
+      "authenticated request token is rejected after logout"
+    ],
+    "expected_result": "HTTP 400 antiforgery_validation_failed",
+    "approval": "pending_full_ci"
   },
-  "next_step": "V64 explicit two-tenant negative full-stack browser cases and authenticated antiforgery/session-transition regression tests",
+  "next_step": "Restore diagnosable CI execution and validate V64 stale-token browser assertions; then implement two-tenant negative browser cases",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
