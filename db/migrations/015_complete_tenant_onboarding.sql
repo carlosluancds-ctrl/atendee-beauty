@@ -60,8 +60,7 @@ END;
 $function$;
 
 REVOKE ALL ON FUNCTION atendee.complete_tenant_onboarding(UUID, UUID) FROM PUBLIC;
-GRANT USAGE ON SCHEMA atendee TO atendee_app_login;
-GRANT EXECUTE ON FUNCTION atendee.complete_tenant_onboarding(UUID, UUID) TO atendee_app_login;
+GRANT EXECUTE ON FUNCTION atendee.complete_tenant_onboarding(UUID, UUID) TO atendee_runtime;
 
 RESET ROLE;
 COMMIT;

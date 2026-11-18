@@ -35,20 +35,41 @@ public static class TenantOnboardingEndpoints
 
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(context.RequestAborted);
-            await using var command = new NpgsqlCommand(
+            await using var transaction = await connection.BeginTransactionAsync(context.RequestAborted);
+
+            // atendee_app_login has no direct table or schema privileges. Enter the
+            // restricted tenant runtime role only for this transaction.
+            await using (var roleCommand = new NpgsqlCommand(
+                "SET LOCAL ROLE atendee_runtime", connection, transaction))
+            {
+                await roleCommand.ExecuteNonQueryAsync(context.RequestAborted);
+            }
+
+            Guid tenantId;
+            int newStatusValue;
+            await using (var command = new NpgsqlCommand(
                 "SELECT tenant_id, status FROM atendee.complete_tenant_onboarding(@tenant_id, @actor_id)",
-                connection);
-            command.Parameters.AddWithValue("tenant_id", current.RequireTenantId().Value);
-            command.Parameters.AddWithValue("actor_id", actorId);
+                connection,
+                transaction))
+            {
+                command.Parameters.AddWithValue("tenant_id", current.RequireTenantId().Value);
+                command.Parameters.AddWithValue("actor_id", actorId);
 
-            await using var reader = await command.ExecuteReaderAsync(context.RequestAborted);
-            if (!await reader.ReadAsync(context.RequestAborted))
-                return Results.Forbid();
+                await using var reader = await command.ExecuteReaderAsync(context.RequestAborted);
+                if (!await reader.ReadAsync(context.RequestAborted))
+                {
+                    await transaction.RollbackAsync(context.RequestAborted);
+                    return Results.Forbid();
+                }
 
-            var tenantId = reader.GetGuid(0);
-            var newStatusValue = reader.GetInt32(1);
+                tenantId = reader.GetGuid(0);
+                newStatusValue = reader.GetInt32(1);
+            }
+
             if (!Enum.IsDefined(typeof(TenantStatus), newStatusValue))
                 throw new InvalidOperationException("Tenant onboarding returned an unsupported lifecycle status.");
+
+            await transaction.CommitAsync(context.RequestAborted);
 
             var newStatus = (TenantStatus)newStatusValue;
             return Results.Ok(new TenantOnboardingCompletionResponse(
