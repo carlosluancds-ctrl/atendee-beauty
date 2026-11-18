@@ -80,6 +80,8 @@ internal static class BrowserE2eRunner
                 WorkingDirectory = portalDirectory,
                 UseShellExecute = false
             };
+            startInfo.ArgumentList.Add("run");
+            startInfo.ArgumentList.Add("test:e2e:fullstack");
             foreach (var name in startInfo.Environment.Keys
                 .Where(name => name.StartsWith("ATENDEE_TEST_", StringComparison.Ordinal) ||
                                name.StartsWith("ConnectionStrings__", StringComparison.Ordinal) ||
