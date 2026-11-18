@@ -199,7 +199,9 @@ jobs:
       - name: Run Identity, TOTP and tenant-context integration checks
         run: dotnet run --project tests/Atendee.Identity.Checks/Atendee.Identity.Checks.csproj --no-build --configuration Release
 
-      - name: Run API HTTP authentication and session-security checks
+      - name: Run API HTTP authentication, session-security and full-stack browser checks
+        env:
+          ATENDEE_RUN_BROWSER_E2E: "true"
         run: dotnet run --project tests/Atendee.Api.HttpChecks/Atendee.Api.HttpChecks.csproj --no-build --configuration Release
 
       - name: Clear disposable database credentials from the job environment

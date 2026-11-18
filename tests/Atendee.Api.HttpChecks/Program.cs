@@ -1368,6 +1368,16 @@ try
     liveClient.Dispose();
 
     Console.WriteLine("RESULT: HTTP authentication, antiforgery, cookies, session revocation, logout, MFA, audit, role-matrix and tenant-status checks passed.");
+
+    if (string.Equals(Environment.GetEnvironmentVariable("ATENDEE_RUN_BROWSER_E2E"), "true", StringComparison.Ordinal))
+    {
+        await BrowserE2eRunner.RunAsync(
+            identityConnectionString,
+            tenantConnectionString,
+            migratorConnectionString,
+            apiContentRoot,
+            Path.Combine(repositoryRoot, "web", "atendee-portal"));
+    }
 }
 finally
 {
