@@ -1,15 +1,29 @@
 {
-  "backup_version": "v46-frontend-activation-ci-verified",
+  "backup_version": "v47-login-mfa-onboarding-frontend",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V46_2026-11-18.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V47_2026-11-18.md",
   "latest_repository_commit": "bd16f1d409c3a3571d7d6d5eab8ab39a328474ab",
+  "pending_repository_commit": "V47 login/MFA frontend increment prepared from bd16f1d409c3a3571d7d6d5eab8ab39a328474ab; push verification pending",
   "latest_ci": {
-    "run_id": "44282286929",
-    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44282286929",
+    "run_id": "44282678565",
+    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44282678565",
     "status": "success",
-    "tested_commit": "bd16f1d409c3a3571d7d6d5eab8ab39a328474ab"
+    "tested_commit": "d96a50e676a34bfd9b595bc6ef1128b6826e8edd"
+  },
+  "pending_ci": {
+    "workflow": "PostgreSQL 18 persistence integration plus frontend Node checks",
+    "status": "pending V47 push and workflow execution",
+    "must_verify": [
+      "npm ci",
+      "npm audit --audit-level=moderate",
+      "frontend Node tests",
+      "frontend TypeScript and esbuild production build",
+      "PostgreSQL 18.7 role bootstrap and migration 011",
+      "Identity/TOTP/activation integration checks",
+      "API HTTP authentication, antiforgery and session-security checks"
+    ]
   },
   "owner_decisions": {
     "first_owner_provisioning": "approved offline operator command; implemented in V41 and unchanged",
@@ -48,12 +62,16 @@
     "Identity and HTTP integration tests for activation, rotation, replay and no-session behavior",
     "Operational identity provisioning runbook",
     "React/TypeScript activation page with URL-fragment token handling and antiforgery POST",
+    "React login page handling authenticated/mfa_required/mfa_setup_required states",
+    "TOTP and recovery-code challenge UI",
+    "MFA setup, verification, cancellation and one-time recovery-code UI",
     "Static esbuild frontend, Node built-in tests and local same-origin development proxy",
     "IIS static hosting web.config with security headers and SPA fallback",
     "CI frontend npm ci/audit/test/build steps"
   ],
   "not_production_ready": [
-    "Frontend login and MFA enrollment pages pending",
+    "V47 login/MFA frontend CI result pending verification",
+    "Salon dashboard, booking and business workflow UI pending",
     "IIS URL Rewrite/ARR same-origin /api reverse proxy and TLS hosting not configured",
     "SES sender domain/address, DKIM, SPF/DMARC, production access and IAM credentials not configured",
     "Migration 011 and provisioner login must be applied/provisioned in target environment",

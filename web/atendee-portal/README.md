@@ -1,6 +1,6 @@
-# Atendee Portal — activation frontend
+# Atendee Portal — login, MFA and activation frontend
 
-React + TypeScript single-page frontend for the operator-issued account activation flow.
+React 19 + TypeScript single-page frontend for the operational identity onboarding flow.
 
 ## Local development
 
@@ -14,23 +14,32 @@ Requires Node.js 22 or later.
    npm run dev
    ```
 
-   Change the proxy target to the actual local API origin. The built-in development server proxies `/api/*` on the same origin so the antiforgery cookie and request header work without CORS.
+   Change the proxy target to the actual local API origin. The built-in development server proxies `/api/*` on the same origin so antiforgery cookies, the MFA setup cookie and authentication cookies work without CORS.
 
-3. Open `http://127.0.0.1:4173`.
+3. Open `http://127.0.0.1:4173/login`.
 
 The development proxy accepts the API's local development TLS certificate. It is not used in production.
 
 ## Production hosting
 
-Serve the `dist/` directory as static content. Configure IIS URL Rewrite/ARR (or an equivalent reverse proxy) so `/api/*` is forwarded to the ASP.NET API on the same HTTPS origin. Keep the activation page and API same-origin; do not enable permissive CORS. The server must preserve the antiforgery `Set-Cookie` response and forward the `X-CSRF-TOKEN` request header.
+Serve the `dist/` directory as static content. Configure IIS URL Rewrite/ARR (or an equivalent reverse proxy) so `/api/*` is forwarded to the ASP.NET API on the same HTTPS origin. Keep the frontend and API same-origin; do not enable permissive CORS. The server must preserve Set-Cookie response headers and forward the X-CSRF-TOKEN request header.
 
-## Activation security behavior
+The SPA provides:
+- `/activate#token=...` — one-time account activation.
+- `/login` — email/password login.
+- MFA challenge for accounts with MFA already enabled.
+- MFA enrollment for provisioned identities without MFA.
+- One-time recovery-code display after successful MFA enrollment.
 
-- Reads the one-time token from the URL fragment and removes the fragment from the visible URL/history before rendering.
-- Requests `GET /api/v1/auth/antiforgery` to obtain the request token and antiforgery cookie.
-- Posts `{ token, password }` to `POST /api/v1/auth/activate` with `X-CSRF-TOKEN`, same-origin credentials, and no-store fetches.
-- Does not store the activation token, password, or antiforgery token in localStorage/sessionStorage.
-- Does not issue or assume a signed-in session after activation; the user must sign in separately and complete MFA enrollment.
+## Security behavior
+
+- Activation token is read from the URL fragment and removed from visible URL/history before rendering.
+- Login, MFA challenge, enrollment and activation use the antiforgery endpoint and X-CSRF-TOKEN header for unsafe requests.
+- All API calls use same-origin credentials and no-store fetches.
+- No session, activation token, password, MFA secret or antiforgery token is persisted in localStorage/sessionStorage.
+- MFA recovery codes are shown once and are held only in component memory until the user confirms they have saved them.
+- A pending first Owner completes MFA without receiving an application session; the existing offline V41 command is still required to create the salon membership.
+- No permissive CORS, third-party scripts, external fonts or third-party QR service.
 
 ## Commands
 
