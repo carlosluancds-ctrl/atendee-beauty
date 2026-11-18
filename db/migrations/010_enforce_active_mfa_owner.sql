@@ -133,6 +133,7 @@ $function$;
 REVOKE ALL ON FUNCTION identity.lock_tenant_owner_invariant() FROM PUBLIC;
 REVOKE ALL ON FUNCTION identity.assert_tenant_has_active_mfa_owner() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION identity.lock_tenant_owner_invariant() TO atendee_owner;
+GRANT EXECUTE ON FUNCTION identity.assert_tenant_has_active_mfa_owner() TO atendee_owner;
 
 RESET ROLE;
 SET LOCAL ROLE atendee_owner;
