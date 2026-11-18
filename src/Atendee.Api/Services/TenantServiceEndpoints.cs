@@ -44,13 +44,25 @@ public static class TenantServiceEndpoints
             UpsertSalonServiceRequest request,
             HttpContext context,
             TrustedRequestContext current,
+            ILogger<TenantServiceEndpoints> logger,
             ITenantTransactionRunner transactionRunner,
             ITenantServiceStore store) =>
         {
             if (!CanManage(current))
                 return Results.Forbid();
             if (!request.IsComplete())
+            {
+                logger.LogWarning(
+                    "Service request rejected as incomplete. NamePresent={NamePresent}, DurationPresent={DurationPresent}, PricePresent={PricePresent}, CurrencyPresent={CurrencyPresent}, BufferBeforePresent={BufferBeforePresent}, BufferAfterPresent={BufferAfterPresent}, IsActivePresent={IsActivePresent}",
+                    !string.IsNullOrWhiteSpace(request.Name),
+                    request.DurationMinutes.HasValue,
+                    request.PriceMinorUnits.HasValue,
+                    !string.IsNullOrWhiteSpace(request.Currency),
+                    request.BufferBeforeMinutes.HasValue,
+                    request.BufferAfterMinutes.HasValue,
+                    request.IsActive.HasValue);
                 return Results.BadRequest(new { error = "service_validation_failed" });
+            }
 
             try
             {
@@ -63,8 +75,11 @@ public static class TenantServiceEndpoints
                     context.RequestAborted);
                 return Results.Created($"/api/v1/services/{service.Id}", service);
             }
-            catch (ArgumentException)
+            catch (ArgumentException exception)
             {
+                logger.LogWarning(
+                    "Service domain validation rejected request. Parameter={ParameterName}",
+                    exception.ParamName);
                 return Results.BadRequest(new { error = "service_validation_failed" });
             }
         });
