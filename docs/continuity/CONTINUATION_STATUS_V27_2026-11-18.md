@@ -15,6 +15,9 @@
 - Eventos atualmente permitidos:
   - operational_account.sessions_revoked
   - operational_account.disabled
+  - operational_mfa.enrolled
+  - operational_mfa.totp_challenge_succeeded
+  - operational_mfa.recovery_code_redeemed
 - Cada evento armazena somente:
   - ID do evento;
   - tipo allowlisted;

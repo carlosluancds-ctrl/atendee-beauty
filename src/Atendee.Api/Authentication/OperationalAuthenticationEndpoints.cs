@@ -182,7 +182,9 @@ public static class OperationalAuthenticationEndpoints
         HttpContext httpContext,
         SignInManager<OperationalIdentityUser> signInManager,
         UserManager<OperationalIdentityUser> userManager,
-        ITenantMembershipResolver membershipResolver)
+        ITenantMembershipResolver membershipResolver,
+        AtendeeIdentityDbContext identityDb,
+        ISecurityAuditWriter auditWriter)
     {
         httpContext.Response.Headers.CacheControl = "no-store";
 
@@ -206,20 +208,46 @@ public static class OperationalAuthenticationEndpoints
         }
 
         var code = request.Code.Trim();
-        var valid = request.UseRecoveryCode
-            ? (await userManager.RedeemTwoFactorRecoveryCodeAsync(user, code)).Succeeded
-            : await userManager.VerifyTwoFactorTokenAsync(
+        if (request.UseRecoveryCode)
+        {
+            // Recovery-code redemption and its audit event are one atomic
+            // identity-database transaction.
+            await using var transaction = await identityDb.Database.BeginTransactionAsync(
+                httpContext.RequestAborted);
+            var redeemed = await userManager.RedeemTwoFactorRecoveryCodeAsync(user, code);
+            if (!redeemed.Succeeded)
+            {
+                await userManager.AccessFailedAsync(user);
+                await transaction.CommitAsync(httpContext.RequestAborted);
+                return Results.Unauthorized();
+            }
+
+            await userManager.ResetAccessFailedCountAsync(user);
+            await auditWriter.WriteAsync("operational_mfa.recovery_code_redeemed",
+                user.Id, user.Id, httpContext.RequestAborted);
+            await transaction.CommitAsync(httpContext.RequestAborted);
+        }
+        else
+        {
+            // The TOTP provider owns a separate atomic replay-guard transaction.
+            // Audit the successful factor in a new transaction after that guard commits.
+            var validTotp = await userManager.VerifyTwoFactorTokenAsync(
                 user,
                 userManager.Options.Tokens.AuthenticatorTokenProvider,
                 code);
+            if (!validTotp)
+            {
+                await userManager.AccessFailedAsync(user);
+                return Results.Unauthorized();
+            }
 
-        if (!valid)
-        {
-            await userManager.AccessFailedAsync(user);
-            return Results.Unauthorized();
+            await using var transaction = await identityDb.Database.BeginTransactionAsync(
+                httpContext.RequestAborted);
+            await userManager.ResetAccessFailedCountAsync(user);
+            await auditWriter.WriteAsync("operational_mfa.totp_challenge_succeeded",
+                user.Id, user.Id, httpContext.RequestAborted);
+            await transaction.CommitAsync(httpContext.RequestAborted);
         }
-
-        await userManager.ResetAccessFailedCountAsync(user);
 
         // Issue the full application cookie only once and include the signed
         // MFA marker. The trusted-tenant middleware requires it for Owner and
@@ -288,7 +316,9 @@ public static class OperationalAuthenticationEndpoints
         HttpContext httpContext,
         UserManager<OperationalIdentityUser> userManager,
         SignInManager<OperationalIdentityUser> signInManager,
-        ITenantMembershipResolver membershipResolver)
+        ITenantMembershipResolver membershipResolver,
+        AtendeeIdentityDbContext identityDb,
+        ISecurityAuditWriter auditWriter)
     {
         httpContext.Response.Headers.CacheControl = "no-store";
 
@@ -330,30 +360,39 @@ public static class OperationalAuthenticationEndpoints
                 return Results.BadRequest(new { error = "invalid_mfa_code" });
             }
 
+            await using var transaction = await identityDb.Database.BeginTransactionAsync(
+                httpContext.RequestAborted);
             await userManager.ResetAccessFailedCountAsync(user);
             var enabled = await userManager.SetTwoFactorEnabledAsync(user, true);
             if (!enabled.Succeeded)
                 return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
+            var recoveryCodes = await userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+            if (recoveryCodes is null || !recoveryCodes.Any())
+                return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
+            await auditWriter.WriteAsync("operational_mfa.enrolled", user.Id, user.Id,
+                httpContext.RequestAborted);
+            await transaction.CommitAsync(httpContext.RequestAborted);
+
+            await httpContext.SignOutAsync(MfaSetupScheme);
+            await signInManager.SignInWithClaimsAsync(
+                user,
+                isPersistent: false,
+                additionalClaims:
+                [
+                    new Claim("amr", "pwd"),
+                    new Claim("amr", "mfa")
+                ]);
+
+            // Recovery codes are displayed exactly once. The Identity token store
+            // encrypts their persisted value using the configured Data Protection
+            // key ring; the caller must store this response safely.
+            return Results.Ok(new MfaEnrollmentCompleteResponse(recoveryCodes.ToArray()));
         }
 
-        var recoveryCodes = await userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
-        if (recoveryCodes is null || !recoveryCodes.Any())
-            return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+        return Results.Problem(statusCode: StatusCodes.Status409Conflict);
 
-        await httpContext.SignOutAsync(MfaSetupScheme);
-        await signInManager.SignInWithClaimsAsync(
-            user,
-            isPersistent: false,
-            additionalClaims:
-            [
-                new Claim("amr", "pwd"),
-                new Claim("amr", "mfa")
-            ]);
-
-        // Recovery codes are displayed exactly once. The Identity token store
-        // encrypts their persisted value using the configured Data Protection
-        // key ring; the caller must store this response safely.
-        return Results.Ok(new MfaEnrollmentCompleteResponse(recoveryCodes.ToArray()));
     }
 
     private static async Task<IResult> LogoutAsync(

@@ -14,7 +14,13 @@ CREATE TABLE identity."SecurityAuditEvents"
     "CorrelationId" VARCHAR(64) NULL,
     CONSTRAINT "PK_SecurityAuditEvents" PRIMARY KEY ("Id"),
     CONSTRAINT "CK_SecurityAuditEvents_EventType" CHECK
-        ("EventType" IN ('operational_account.disabled', 'operational_account.sessions_revoked')),
+        ("EventType" IN (
+            'operational_account.disabled',
+            'operational_account.sessions_revoked',
+            'operational_mfa.enrolled',
+            'operational_mfa.totp_challenge_succeeded',
+            'operational_mfa.recovery_code_redeemed'
+        )),
     CONSTRAINT "CK_SecurityAuditEvents_Target" CHECK
         ("TargetIdentityUserId" <> '00000000-0000-0000-0000-000000000000'::uuid),
     CONSTRAINT "FK_SecurityAuditEvents_Actor" FOREIGN KEY ("ActorIdentityUserId")

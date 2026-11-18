@@ -8,7 +8,10 @@ public sealed class PostgresSecurityAuditWriter(AtendeeIdentityDbContext db) : I
     private static readonly HashSet<string> AllowedEventTypes = new(StringComparer.Ordinal)
     {
         "operational_account.disabled",
-        "operational_account.sessions_revoked"
+        "operational_account.sessions_revoked",
+        "operational_mfa.enrolled",
+        "operational_mfa.totp_challenge_succeeded",
+        "operational_mfa.recovery_code_redeemed"
     };
 
     public async Task WriteAsync(string eventType, Guid? actorIdentityUserId, Guid targetIdentityUserId,

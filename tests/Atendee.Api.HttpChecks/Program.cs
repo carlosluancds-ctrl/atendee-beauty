@@ -306,6 +306,9 @@ try
         .Select(value => value.GetString()!).ToArray();
     Ensure(recoveryCodes.Length == 10 && recoveryCodes.All(code => !string.IsNullOrWhiteSpace(code)),
         "MFA enrollment returns ten one-time recovery codes.");
+    var enrollmentAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
+    Ensure(enrollmentAudit.Contains("operational_mfa.enrolled"),
+        "Successful MFA enrollment is durably audited.");
 
     var ownerMe = await mfaClient.GetAsync("/api/v1/auth/me");
     Ensure(ownerMe.StatusCode == HttpStatusCode.OK,
@@ -343,6 +346,9 @@ try
         "A valid one-time recovery code completes the MFA challenge.");
     Ensure((await mfaClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
         "MFA authentication claims survive security-stamp refresh on the next request.");
+    var recoveryAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
+    Ensure(recoveryAudit.Contains("operational_mfa.recovery_code_redeemed"),
+        "Successful one-time recovery-code use is durably audited.");
 
     var replayLogout = await PostWithCsrfAsync(
         mfaClient, "/api/v1/auth/logout", mfaRequestToken!, new { });
@@ -365,6 +371,31 @@ try
         });
     Ensure(replayChallenge.StatusCode == HttpStatusCode.Unauthorized,
         "A previously redeemed recovery code cannot be reused.");
+
+    // Enrollment already consumed the current TOTP step. Wait for a new
+    // RFC 6238 step so this challenge also proves replay protection is active.
+    await Task.Delay(TimeSpan.FromSeconds(31));
+    string secondTotpCode;
+    await using (var scope = mfaFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var owner = await users.FindByIdAsync(ownerUserId.ToString());
+        Ensure(owner is not null, "Owner identity remains available for TOTP challenge verification.");
+        secondTotpCode = await users.GenerateTwoFactorTokenAsync(
+            owner!, users.Options.Tokens.AuthenticatorTokenProvider);
+    }
+
+    var totpChallenge = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/mfa/challenge", mfaRequestToken!, new
+        {
+            code = secondTotpCode,
+            useRecoveryCode = false
+        });
+    Ensure(totpChallenge.StatusCode == HttpStatusCode.OK,
+        "A fresh TOTP code completes the MFA challenge.");
+    var completeMfaAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
+    Ensure(completeMfaAudit.Contains("operational_mfa.totp_challenge_succeeded"),
+        "Successful TOTP challenge is durably audited.");
 
     using var promotionClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
