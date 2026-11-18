@@ -4,11 +4,13 @@ using System.Text.Json;
 using Atendee.Application.Abstractions;
 using Atendee.Domain.Tenants;
 using Atendee.Infrastructure.Identity;
+using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 var identityConnectionString = Required("ATENDEE_TEST_IDENTITY_CONNECTION_STRING");
@@ -116,10 +118,12 @@ try
            unknownBody == wrongPasswordBody,
         "Unknown identity and incorrect password return the same generic login response.");
 
+    var spoofedActorId = Guid.NewGuid();
     var login = await PostWithCsrfAsync(client, "/api/v1/auth/login", requestToken!, new
     {
         email,
-        password
+        password,
+        actorId = spoofedActorId
     });
     Ensure(login.StatusCode == HttpStatusCode.OK,
         "Confirmed receptionist can authenticate with valid credentials.");
@@ -141,6 +145,51 @@ try
         "Current-user endpoint returns the server-resolved tenant, not client input.");
     Ensure(meBody.GetProperty("role").GetString() == TenantRole.Receptionist.ToString(),
         "Current-user endpoint returns the persisted membership role.");
+
+    var targetEmail = "http-audit-target-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    Guid targetUserId;
+    await using (var scope = factory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var target = new OperationalIdentityUser
+        {
+            UserName = targetEmail,
+            Email = targetEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(target, password);
+        Ensure(created.Succeeded, "Synthetic audit target identity is created.");
+        targetUserId = target.Id;
+    }
+
+    await SeedAdditionalMembershipAsync(migratorConnectionString, tenantId, targetUserId, roleId: 3);
+
+    await using (var scope = factory.Services.CreateAsyncScope())
+    {
+        var resolver = scope.ServiceProvider.GetRequiredService<ITenantMembershipResolver>();
+        var membership = await resolver.ResolveAsync(userId, CancellationToken.None);
+        Ensure(membership is not null, "Trusted actor membership is resolved from the database.");
+        var trustedContext = scope.ServiceProvider.GetRequiredService<TrustedRequestContext>();
+        trustedContext.Establish(membership!);
+
+        var transactionRunner = scope.ServiceProvider.GetRequiredService<ITenantTransactionRunner>();
+        var tenantDb = scope.ServiceProvider.GetRequiredService<Atendee.Infrastructure.Persistence.TenantDbContext>();
+        await transactionRunner.ExecuteAsync(async cancellationToken =>
+        {
+            var affected = await tenantDb.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE atendee.tenant_users SET role = {(short)TenantRole.Professional} WHERE tenant_id = {tenantId} AND identity_user_id = {targetUserId}",
+                cancellationToken);
+            Ensure(affected == 1, "Trusted tenant transaction changes exactly one target membership.");
+        });
+    }
+
+    var membershipRoleAudit = await ReadMembershipRoleChangeAuditAsync(migratorConnectionString, targetUserId);
+    Ensure(membershipRoleAudit.Length == 1 &&
+           membershipRoleAudit[0].EventType == "tenant_membership.role_changed" &&
+           membershipRoleAudit[0].ActorId == userId &&
+           membershipRoleAudit[0].TargetId == targetUserId &&
+           membershipRoleAudit[0].ActorId != spoofedActorId,
+        "Database trigger records the server-resolved actor, ignores client-supplied actorId, and writes exactly one membership event.");
 
     await using (var scope = factory.Services.CreateAsyncScope())
     {
@@ -909,6 +958,32 @@ static async Task SeedMembershipAsync(
     await transaction.CommitAsync();
 }
 
+static async Task SeedAdditionalMembershipAsync(
+    string connectionString,
+    Guid tenantId,
+    Guid userId,
+    int roleId)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using var membership = new NpgsqlCommand(
+        """
+        INSERT INTO atendee.tenant_users
+            (tenant_id,identity_user_id,display_name,role,is_active,created_at_utc)
+        VALUES(@tenant,@user,'HTTP Synthetic Audit Target',@role,true,now())
+        """, connection, transaction);
+    membership.Parameters.AddWithValue("tenant", tenantId);
+    membership.Parameters.AddWithValue("user", userId);
+    membership.Parameters.AddWithValue("role", roleId);
+    await membership.ExecuteNonQueryAsync();
+
+    await transaction.CommitAsync();
+}
+
 static async Task UpdateMembershipAsync(
     string connectionString,
     Guid userId,
@@ -936,6 +1011,33 @@ static async Task UpdateMembershipAsync(
     }
 
     await transaction.CommitAsync();
+}
+
+static async Task<(string EventType, Guid? ActorId, Guid TargetId)[]> ReadMembershipRoleChangeAuditAsync(
+    string connectionString,
+    Guid targetUserId)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using var command = new NpgsqlCommand(
+        @"SELECT ""EventType"", ""ActorIdentityUserId"", ""TargetIdentityUserId""
+          FROM identity.""SecurityAuditEvents""
+          WHERE ""TargetIdentityUserId"" = @target AND ""EventType"" = 'tenant_membership.role_changed'
+          ORDER BY ""OccurredAtUtc"", ""Id""", connection, transaction);
+    command.Parameters.AddWithValue("target", targetUserId);
+    var values = new List<(string EventType, Guid? ActorId, Guid TargetId)>();
+    await using (var reader = await command.ExecuteReaderAsync())
+    {
+        while (await reader.ReadAsync())
+            values.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetGuid(1), reader.GetGuid(2)));
+    }
+
+    await transaction.CommitAsync();
+    return values.ToArray();
 }
 
 static async Task<string[]> ReadSecurityAuditTypesAsync(string connectionString, Guid targetUserId)

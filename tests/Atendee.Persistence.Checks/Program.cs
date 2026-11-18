@@ -33,6 +33,7 @@ var checks = 0;
 var services = new ServiceCollection();
 services.AddScoped<TestTenantAccessor>();
 services.AddScoped<ICurrentTenantContext, TestCurrentTenantContext>();
+services.AddScoped<ICurrentActorContext, TestCurrentActorContext>();
 services.AddAtendeePersistence(connectionString);
 await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
 
@@ -43,6 +44,15 @@ await using (var scopeA = provider.CreateAsyncScope())
     var runner = scopeA.ServiceProvider.GetRequiredService<ITenantTransactionRunner>();
     var store = scopeA.ServiceProvider.GetRequiredService<ITenantNoteStore>();
     var db = scopeA.ServiceProvider.GetRequiredService<TenantDbContext>();
+
+    _ = await db.Database.SqlQueryRaw<string>(
+        "SELECT set_config('app.actor_id', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', false) AS \"Value\"")
+        .SingleAsync();
+    var trustedActorSetting = await runner.ExecuteAsync(ct =>
+        db.Database.SqlQueryRaw<string>("SELECT current_setting('app.actor_id', true) AS \"Value\"")
+            .SingleAsync(ct));
+    Check(trustedActorSetting == "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "transaction runner clears a stale session actor and applies only the server-side actor context");
 
     await runner.ExecuteAsync(ct => store.AddAsync(noteA, "synthetic note from A", ct));
     var visible = await runner.ExecuteAsync(ct => store.GetByIdAsync(noteA, ct));
@@ -137,4 +147,10 @@ internal sealed class TestTenantAccessor
 internal sealed class TestCurrentTenantContext(TestTenantAccessor accessor) : ICurrentTenantContext
 {
     public TenantId RequireTenantId() => accessor.TenantId;
+}
+
+internal sealed class TestCurrentActorContext : ICurrentActorContext
+{
+    public Guid? ActorId => Guid.Parse("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+    public bool IsPlatformAdministrator => false;
 }
