@@ -1,41 +1,31 @@
 # Atendee Beauty — V62 Browser E2E Plan (2026-11-18)
 
-## Current state
-V61 is approved. This document records the inspected implementation constraints and the V62 test design; it does not claim browser tests have been implemented or run.
+> **Status: implemented and approved.** The final outcome and CI evidence are recorded in `docs/continuity/CONTINUATION_STATUS_V62_2026-11-18.md`. This file is retained as the original architecture/design note.
 
-## Inspected portal architecture
+## Architecture findings
 - React 19 + TypeScript, bundled with esbuild.
-- Routes are selected in `web/atendee-portal/src/App.tsx`: `/activate`, `/team`, `/my-services`, `/services`, and the login fallback.
-- `web/atendee-portal/scripts/dev-server.mjs` serves the built portal on loopback and proxies `/api/*` to `ATENDEE_API_PROXY_TARGET`.
-- The portal obtains an antiforgery request token from `GET /api/v1/auth/antiforgery` and sends it in `X-CSRF-TOKEN` for unsafe API calls.
-- The API requires HTTPS redirection and uses Secure, HttpOnly, SameSite=Strict `__Host-` cookies for authentication and antiforgery.
-- Current portal scripts are `dev`, `build`, and `test`. Current tests use Node's built-in test runner and test activation helper functions only.
-- The portal package has React, React DOM, TypeScript, esbuild and React type packages. No browser automation framework is declared.
-- CI is `.github/workflows/postgres18-persistence.yml`. It uses `npm ci`, runs `npm audit`, frontend tests/build, then provisions a disposable PostgreSQL 18.7 database and runs persistence, Identity/TOTP and API HTTP checks.
+- Routes in `web/atendee-portal/src/App.tsx`: `/activate`, `/team`, `/my-services`, `/services`, and login fallback.
+- `web/atendee-portal/scripts/dev-server.mjs` serves the built portal and proxies `/api/*` to `ATENDEE_API_PROXY_TARGET`.
+- Unsafe portal API calls obtain an antiforgery token from `GET /api/v1/auth/antiforgery` and send `X-CSRF-TOKEN`.
+- Existing CI provisions disposable PostgreSQL 18.7 and runs RLS, Identity/TOTP and API HTTP integration checks.
+- The existing API HTTP executable seeds synthetic identities inside `WebApplicationFactory`, but does not expose a persistent API process or browser-ready credentials.
 
-## Proposed V62 coverage
-1. Browser smoke tests for login, MFA challenge, first-time MFA enrollment/recovery acknowledgement, and logout.
-2. Role-specific navigation and rendered states for Owner, Manager, Receptionist and Professional.
-3. Team/professional browser flows: eligible-member discovery and profile creation for Owner/Manager; assigned-services view for Professional.
-4. Negative UI/API cases for Receptionist access and cross-tenant data visibility.
-5. Antiforgery behavior and cookie/session handling through the actual same-origin portal proxy.
+## V62 implementation decision
+V62 deliberately delivered frontend/browser E2E tests with deterministic mocked API responses first. This exercises the actual React UI and browser interactions without pretending that mocks prove backend authorization. The authoritative backend tests remain the existing real API HTTP, Identity/TOTP and PostgreSQL/RLS suites.
 
-## Test architecture decision
-- Keep the existing API HTTP and RLS integration checks authoritative for backend authorization and tenant isolation.
-- Use isolated, synthetic test data only. No production identities, secrets, SES, billing or deployed services.
-- Browser tests must not use production URLs. Prefer the existing CI PostgreSQL fixture and a local API + portal process, or explicitly document any API mocking boundary if the browser suite is frontend-only.
-- Do not present mocked API browser tests as proof of backend authorization. Keep the distinction explicit.
-- Add the browser framework only with a reproducible dependency lockfile. Do not hand-edit or guess npm integrity hashes. Preserve `npm ci` and `npm audit`.
-- CI must install a pinned browser/runtime version and execute the browser suite deterministically. Preserve the existing PostgreSQL/RLS/Identity checks.
+The 8 browser cases cover login/MFA challenge, first-time MFA enrollment and recovery acknowledgement, Owner/Manager professional profile creation and service assignment, Receptionist read-only team/catalogue views, Professional assigned services, and Owner service editing.
 
-## Blockers / decisions before implementation
-- The current CI API HTTP check is a standalone executable that creates synthetic identities and exercises the API through `WebApplicationFactory`; it does not expose a persistent API process or seed browser-ready login credentials.
-- A browser suite that exercises real authentication therefore needs a deliberate test-host/seed handoff, or a dedicated test harness that starts the API and seeds isolated identities while the browser test runs.
-- Decide whether V62 first delivers frontend-only browser smoke tests with explicitly mocked API responses, or a full-stack browser harness using the disposable PostgreSQL fixture. Full-stack coverage is preferred for real MFA/session and tenant-boundary claims.
-- Generate and verify dependency lock changes with npm itself in a controlled checkout; never fabricate lock metadata.
+Playwright is pinned at `1.65.1` with an npm-generated lockfile. CI installs Chromium and runs the browser suite. The initial Playwright 1.56.1 attempt failed on Ubuntu 26.04 because that version did not support the runner image; upgrading to 1.65.1 resolved it.
 
-## Repository safeguards
+## Next decision: V63 full-stack browser harness
+- Reuse the disposable PostgreSQL provisioning already used in CI.
+- Inspect and reuse the API HTTP test fixture, `WebApplicationFactory`, Identity/TOTP helpers and provisioning pathways.
+- Create a controlled test-host/seed handoff that runs the real ASP.NET API and portal while the browser executes.
+- Use only isolated synthetic users, memberships, tenants and secrets.
+- Do not create production backdoors, weaken MFA, bypass antiforgery, relax RLS or treat mocked browser tests as authorization proof.
+
+## Safeguards
 - Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
-- Working branch: `security/csrf-webhook-antiforgery-v23`; keep `main` untouched.
+- Branch: `security/csrf-webhook-antiforgery-v23`; keep `main` untouched.
 - Preserve V41 first-Owner provisioning, tenant isolation, RLS, transaction runner and backend-first authorization.
 - No deploy, SES setup, billing/trial activation or production data changes without explicit authorization.
