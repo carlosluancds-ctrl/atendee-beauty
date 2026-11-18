@@ -1,29 +1,15 @@
 {
-  "backup_version": "v45-react-activation-frontend",
+  "backup_version": "v46-frontend-activation-ci-verified",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V45_2026-11-18.md",
-  "latest_repository_commit": "b66e1e7ae3fc794891177dbeb89bfd7f3c2d7ef0",
-  "pending_repository_commit": "V45 frontend activation increment prepared from b66e1e7ae3fc794891177dbeb89bfd7f3c2d7ef0; push verification pending",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V46_2026-11-18.md",
+  "latest_repository_commit": "bd16f1d409c3a3571d7d6d5eab8ab39a328474ab",
   "latest_ci": {
-    "run_id": "44279908188",
-    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44279908188",
+    "run_id": "44282286929",
+    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44282286929",
     "status": "success",
-    "tested_commit": "b66e1e7ae3fc794891177dbeb89bfd7f3c2d7ef0"
-  },
-  "pending_ci": {
-    "workflow": "PostgreSQL 18 persistence integration plus frontend Node checks",
-    "status": "pending V45 push and workflow execution",
-    "must_verify": [
-      "npm ci",
-      "npm audit --audit-level=moderate",
-      "frontend Node tests",
-      "frontend TypeScript and esbuild production build",
-      "PostgreSQL 18.7 role bootstrap and migration 011",
-      "Identity activation and concurrent replay integration checks",
-      "API HTTP activation, antiforgery and no-session checks"
-    ]
+    "tested_commit": "bd16f1d409c3a3571d7d6d5eab8ab39a328474ab"
   },
   "owner_decisions": {
     "first_owner_provisioning": "approved offline operator command; implemented in V41 and unchanged",
@@ -63,11 +49,11 @@
     "Operational identity provisioning runbook",
     "React/TypeScript activation page with URL-fragment token handling and antiforgery POST",
     "Static esbuild frontend, Node built-in tests and local same-origin development proxy",
-    "IIS static hosting web.config with security headers and SPA fallback"
+    "IIS static hosting web.config with security headers and SPA fallback",
+    "CI frontend npm ci/audit/test/build steps"
   ],
   "not_production_ready": [
-    "V45 frontend-inclusive CI result pending verification",
-    "Frontend login and MFA setup pages pending",
+    "Frontend login and MFA enrollment pages pending",
     "IIS URL Rewrite/ARR same-origin /api reverse proxy and TLS hosting not configured",
     "SES sender domain/address, DKIM, SPF/DMARC, production access and IAM credentials not configured",
     "Migration 011 and provisioner login must be applied/provisioned in target environment",
