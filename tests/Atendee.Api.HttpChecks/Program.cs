@@ -631,7 +631,7 @@ try
     Ensure((await promotionClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
         "A blocked Owner promotion leaves the existing receptionist session unchanged.");
 
-    await using (var scope = roleMatrixFactory!.Services.CreateAsyncScope())
+    await using (var scope = mfaFactory!.Services.CreateAsyncScope())
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
         var receptionist = await users.FindByIdAsync(promotionUserId.ToString());
@@ -712,7 +712,7 @@ try
     const string managerPassword = "Atendee-Manager-Role-2026!";
     var managerTenantId = Guid.NewGuid();
     Guid managerUserId;
-    await using (var scope = roleMatrixFactory!.Services.CreateAsyncScope())
+    await using (var scope = mfaFactory!.Services.CreateAsyncScope())
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
         var manager = new OperationalIdentityUser
@@ -766,7 +766,7 @@ try
     const string professionalPassword = "Atendee-Professional-Role-2026!";
     var professionalTenantId = Guid.NewGuid();
     Guid professionalUserId;
-    await using (var scope = roleMatrixFactory!.Services.CreateAsyncScope())
+    await using (var scope = mfaFactory!.Services.CreateAsyncScope())
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
         var professional = new OperationalIdentityUser
