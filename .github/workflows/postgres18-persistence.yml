@@ -44,6 +44,14 @@ jobs:
         working-directory: web/atendee-portal
         run: npm run build
 
+      - name: Install Chromium for portal browser tests
+        working-directory: web/atendee-portal
+        run: npx playwright install --with-deps chromium
+
+      - name: Run portal browser E2E checks
+        working-directory: web/atendee-portal
+        run: npm run test:e2e
+
       - name: Restore locked dependencies
         run: dotnet restore Atendee.sln --locked-mode
 
