@@ -1,5 +1,7 @@
 # Atendee Beauty
 
+> **PARA CONTINUAR O PROJETO (qualquer IA ou conta):** o trabalho ativo está na branch `security/csrf-webhook-antiforgery-v23`; a `main` não contém o trabalho recente e não deve ser alterada. Faça checkout dessa branch e leia `CLAUDE.md` e `docs/continuity/CONTINUE_HERE.md`. O bloco "Estado em 17/11/2026" abaixo é histórico e está defasado.
+
 **Repositório privado do produto Atendee Beauty.** Este repositório reúne as decisões de produto, arquitetura, segurança, documentação de continuidade e o Starter Kit técnico atual.
 
 > **Estado em 17/11/2026:** Starter Kit v7 + identidade operacional/MFA/contexto confiável de tenant validados em GitHub Actions no PostgreSQL 18.7 na branch `wip/operational-identity-v1` (run 44179994461): restore bloqueado, build Release, 15/15 checks de domínio, 9/9 de persistência/RLS/pool e 23/23 de identidade passaram. O trabalho ainda não foi incorporado à `main`; a aplicação não está pronta para produção.

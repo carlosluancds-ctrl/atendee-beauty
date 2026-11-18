@@ -28,3 +28,9 @@ Verify git status/HEAD/CI -> inspect code -> small change + negative tests -> gi
 
 ## Guardrails (absolute)
 No main changes, no deploy, no public signup, no admin disable/revoke endpoints yet, never trust client-sent tenant/role/actor, never log secrets/PII, do not call the audit ledger immutable against DB owner/superuser, CI green != production ready. Do not change the approved status matrix or decide the open items without explicit owner confirmation.
+
+## How to resume in a new account (V36)
+- The repo is PRIVATE and its default branch `main` does NOT contain this work. The new account needs GitHub access to the private repo and must use the branch `security/csrf-webhook-antiforgery-v23` (link: https://github.com/carlosluancds-ctrl/atendee-beauty/tree/security/csrf-webhook-antiforgery-v23).
+- Suggested message to the new Claude: "Continue esse projeto. Repositório: https://github.com/carlosluancds-ctrl/atendee-beauty, branch security/csrf-webhook-antiforgery-v23. Leia CLAUDE.md e docs/continuity/CONTINUE_HERE.md."
+- Entry points added on the branch: root `CLAUDE.md` (resume protocol and guardrails) and a banner at the top of `README.md`. The original long handoff file (ATENDEE_BEAUTY_CONTINUITY_HANDOFF_CLAUDE.md) is NOT stored in the repo; its essentials are in CLAUDE.md, this file, the V23-V36 status files and docs/continuity/BACKUP_HANDOFF_2026-11-17.md. Attach the original if you have it.
+- Running git/gh commands needs a connected device (Desktop Commander) or another authorized way to run them; without it, read-only analysis and design are still possible.
