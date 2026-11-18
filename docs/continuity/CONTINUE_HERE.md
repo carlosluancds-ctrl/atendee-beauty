@@ -5,9 +5,8 @@
 ## Repository
 - https://github.com/carlosluancds-ctrl/atendee-beauty
 - Active branch: security/csrf-webhook-antiforgery-v23; never modify main.
-- Last implementation commit with full CI verified: bd16f1d409c3a3571d7d6d5eab8ab39a328474ab.
-- V45 CI run 44282286929 passed; V46 continuity CI run 44282678565 passed.
-- V47 login/MFA frontend increment is prepared in the temporary remote snapshot; commit and CI pending.
+- Latest implementation commit with full CI verified: acddf2f545e861d459724284e1906158385caeed.
+- Latest full CI: run 44283430559 passed for that exact SHA.
 
 ## Completed
 - V41: offline first-Owner salon provisioning command. Requires existing identity with confirmed email, MFA enabled, no active lockout and no salon membership; atomically creates PendingVerification salon + active Owner membership. No HTTP endpoint.
@@ -15,9 +14,9 @@
 - V43: selected Amazon SES API v2 as the default transactional email provider and documented activation design.
 - V44: backend activation path implemented: dedicated provisioner role, migration 011, offline create/reissue CLI, SES v2 email sender, activation API, audit events, integration tests and runbook. V41 remains unchanged.
 - V44 Identity test provider registration fix is in b66e1e7ae3fc794891177dbeb89bfd7f3c2d7ef0; CI run 44279908188 passed.
-- V45: React/TypeScript activation page in web/atendee-portal. CI run 44282286929 passed for bd16f1d409c3a3571d7d6d5eab8ab39a328474ab.
-- V46: continuity checkpoint; run 44282678565 passed for d96a50e676a34bfd9b595bc6ef1128b6826e8edd.
-- V47: login, TOTP/recovery challenge, MFA setup, one-time recovery-code display and pending Owner state implemented locally; commit/CI pending.
+- V45: React/TypeScript activation page. CI run 44282286929 passed for bd16f1d409c3a3571d7d6d5eab8ab39a328474ab.
+- V46: continuity checkpoint; CI run 44282678565 passed for d96a50e676a34bfd9b595bc6ef1128b6826e8edd.
+- V47: login, TOTP/recovery challenge, MFA setup and one-time recovery-code experience. Full CI run 44283430559 passed for acddf2f545e861d459724284e1906158385caeed.
 
 ## V44 backend details
 - No public self-registration, public tenant creation, public account creation route, or public first-Owner endpoint.
@@ -42,19 +41,17 @@
 - Local development: set ATENDEE_API_PROXY_TARGET to local API origin, then npm run dev.
 
 ## Validation observed
-- V45 exact SHA bd16f1d409c3a3571d7d6d5eab8ab39a328474ab: full GitHub Actions run 44282286929 passed, including frontend audit/tests/build and backend PostgreSQL 18.7 integration.
-- V46 exact SHA d96a50e676a34bfd9b595bc6ef1128b6826e8edd: full GitHub Actions run 44282678565 passed.
-- V47 local npm ci passed, npm test 2/2, npm run build passed, npm audit 0 vulnerabilities.
-- V47 static smoke: /login, /activate and /assets/app.js returned 200; CSP header present; compiled bundle includes login, MFA challenge and activation views.
-- Local API proxy not tested against a running ASP.NET API.
-- V47 commit and CI pending; do not claim CI pass until observed.
+- V47 exact SHA acddf2f545e861d459724284e1906158385caeed: full GitHub Actions run 44283430559 passed.
+- Frontend npm ci, audit, Node tests and strict TypeScript/esbuild build passed.
+- Backend locked restore, Release build, domain, PostgreSQL 18.7 persistence/RLS, Identity/TOTP/activation and API HTTP/antiforgery/session checks passed.
+- Local frontend tests 2/2; npm audit 0 vulnerabilities; static smoke /login, /activate and /assets/app.js all HTTP 200 with CSP.
+- Browser-level end-to-end review and local API proxy integration have not been performed.
 
 ## Immediate next steps
-1. Push V47 source and continuity files to this branch; verify exact SHA and all files.
-2. Verify frontend npm ci/audit/test/build and full PostgreSQL 18.7 backend workflow on exact V47 SHA. Fix any failures.
-3. Perform a browser-level review of activation, login, TOTP challenge, recovery-code challenge and pre-membership MFA enrollment. Avoid real email or production data.
-4. Continue dashboard only after authentication/onboarding and backend contracts are verified.
-5. Configure SES sender identity/DNS, production access, IAM and temporary credentials only when external AWS/domain access is available and authorized. Never deploy without explicit release gates.
+1. Perform a browser-level review of activation, login, TOTP challenge, recovery-code challenge and pre-membership MFA enrollment. Verify same-origin cookies, CSRF behavior, and no application cookie for pending Owner.
+2. If issues are found, fix and add tests, then rerun npm ci/audit/test/build and full PostgreSQL 18.7 CI.
+3. Document IIS URL Rewrite/ARR and TLS hosting prerequisites without assuming server access or API hostnames.
+4. Configure SES sender identity/DNS, production access, IAM and temporary credentials only when external AWS/domain access is available and authorized. Never send real email or deploy without release gates.
 
 ## External setup still pending
 - SES sender domain/address verification, Easy DKIM, SPF/DMARC, SES production access and IAM credentials.
