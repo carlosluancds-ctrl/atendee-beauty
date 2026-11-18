@@ -607,7 +607,7 @@ try
     var pendingTenantProfileBody = await pendingTenantProfile.Content.ReadFromJsonAsync<JsonElement>();
     Ensure(pendingTenantProfile.StatusCode == HttpStatusCode.OK &&
            pendingTenantProfileBody.GetProperty("status").GetString() == TenantStatus.PendingVerification.ToString() &&
-           pendingTenantProfileBody.GetProperty("currentMemberRole").GetString() == TenantRole.Owner.ToString(),
+           pendingTenantProfileBody.GetProperty("membership").GetProperty("role").GetString() == TenantRole.Owner.ToString(),
         "The authenticated Owner can read the current salon profile resolved from server-side membership.");
 
     var completedOnboarding = await PostWithCsrfAsync(

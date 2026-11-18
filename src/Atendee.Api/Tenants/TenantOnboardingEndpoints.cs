@@ -12,21 +12,6 @@ public static class TenantOnboardingEndpoints
     {
         var group = endpoints.MapGroup("/api/v1/tenant").RequireAuthorization();
 
-        group.MapGet("", (TrustedRequestContext current) =>
-        {
-            if (current.ActorId is null || current.TenantStatus is null || current.Role is null ||
-                !TenantAccessPolicy.IsAllowed(current.TenantStatus.Value, current.Role.Value, TenantCapability.Login))
-                return Results.Forbid();
-
-            return Results.Ok(new TenantProfileResponse(
-                current.TenantName!,
-                current.TenantSlug!,
-                current.TenantTimeZoneId!,
-                current.TenantStatus.Value.ToString(),
-                current.DisplayName!,
-                current.Role.Value.ToString()));
-        });
-
         group.MapPost("/onboarding/complete", async (
             HttpContext context,
             TrustedRequestContext current,
@@ -75,14 +60,6 @@ public static class TenantOnboardingEndpoints
         return endpoints;
     }
 }
-
-public sealed record TenantProfileResponse(
-    string Name,
-    string Slug,
-    string TimeZoneId,
-    string Status,
-    string CurrentMemberDisplayName,
-    string CurrentMemberRole);
 
 public sealed record TenantOnboardingCompletionResponse(
     Guid TenantId,

@@ -1,18 +1,20 @@
 {
-  "backup_version": "v52-migration-order-and-ci-application",
+  "backup_version": "v53-remove-duplicate-tenant-profile-route",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V52_2026-11-18.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V53_2026-11-18.md",
   "latest_repository_commit": "PENDING_COMMIT",
   "latest_ci": {
-    "status": "pending",
-    "last_failed_run": "44293354129",
-    "last_failed_sha": "759e9fa88eff6cb147f736a0695a658eebd03998",
-    "failure": "stale test symbol professionalProfileId; fixed in V51"
+    "v51_run": "44293640840",
+    "v51_status": "failure",
+    "v51_reason": "duplicate GET /api/v1/tenant route",
+    "v52_run": "44293858634",
+    "v52_status": "in_progress_at_checkpoint",
+    "v53_status": "pending"
   },
   "latest_implementation": {
-    "tenant_profile_endpoint": "GET /api/v1/tenant",
+    "tenant_profile_endpoint": "GET /api/v1/tenant (existing endpoint, unchanged)",
     "complete_onboarding_endpoint": "POST /api/v1/tenant/onboarding/complete",
     "database_migration": "db/migrations/015_complete_tenant_onboarding.sql",
     "workflow_applies_migration": true,
