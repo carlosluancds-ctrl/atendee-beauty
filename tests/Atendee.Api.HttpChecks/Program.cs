@@ -593,9 +593,11 @@ static async Task<string[]> ReadSecurityAuditTypesAsync(string connectionString,
         @"SELECT ""EventType"" FROM identity.""SecurityAuditEvents"" WHERE ""TargetIdentityUserId"" = @target ORDER BY ""OccurredAtUtc"", ""Id"" ", connection, transaction);
     command.Parameters.AddWithValue("target", targetUserId);
     var values = new List<string>();
-    await using var reader = await command.ExecuteReaderAsync();
-    while (await reader.ReadAsync())
-        values.Add(reader.GetString(0));
+    await using (var reader = await command.ExecuteReaderAsync())
+    {
+        while (await reader.ReadAsync())
+            values.Add(reader.GetString(0));
+    }
 
     await transaction.CommitAsync();
     return values.ToArray();
