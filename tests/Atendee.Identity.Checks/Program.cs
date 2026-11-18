@@ -117,31 +117,6 @@ try
     await SeedMembershipAsync(migratorConnectionString, tenantId, userId);
     await SeedSecondTenantAsync(migratorConnectionString, secondTenantId);
 
-    Check(await TryDisableMfaAsync(identityConnectionString, userId),
-        "Database rejects disabling MFA on the salon's last active Owner");
-    Check(await TryChangeMembershipAsync(migratorConnectionString, tenantId, userId, "role", 4),
-        "Database rejects demoting the salon's last active Owner");
-    Check(await TryChangeMembershipAsync(migratorConnectionString, tenantId, userId, "is_active", 0),
-        "Database rejects deactivating the salon's last active Owner");
-    Check(await TryDeleteMembershipAsync(migratorConnectionString, tenantId, userId),
-        "Database rejects removing the salon's last active Owner");
-    Check(await TryCreateTenantWithoutOwnerAsync(migratorConnectionString, Guid.NewGuid()),
-        "Database rejects committing a salon without an active MFA-enabled Owner");
-
-    var backupOwnerId = await SeedAdditionalOwnerAsync(migratorConnectionString, tenantId);
-    Check(!await TryChangeMembershipAsync(migratorConnectionString, tenantId, userId, "role", 4),
-        "Database permits Owner demotion when another active MFA-enabled Owner remains");
-    Check(!await TryDisableMfaAsync(identityConnectionString, userId),
-        "Database permits MFA disablement on a demoted non-Owner");
-
-    var concurrentOwnerId = await SeedAdditionalOwnerAsync(migratorConnectionString, tenantId);
-    var concurrentChanges = await Task.WhenAll(
-        TryChangeMembershipAsync(migratorConnectionString, tenantId, backupOwnerId, "role", 4),
-        TryChangeMembershipAsync(migratorConnectionString, tenantId, concurrentOwnerId, "is_active", 0));
-    Check(concurrentChanges.Count(blocked => blocked) == 1 &&
-          await ReadActiveMfaOwnerCountAsync(migratorConnectionString, tenantId) == 1,
-        "Concurrent Owner demotion and deactivation serialize so exactly one active MFA-enabled Owner remains");
-
     await using (var scope = provider.CreateAsyncScope())
     {
         var resolver = scope.ServiceProvider.GetRequiredService<ITenantMembershipResolver>();
@@ -183,6 +158,32 @@ try
 
     var duplicateBlocked = await TryInsertSecondMembershipAsync(migratorConnectionString, secondTenantId, userId);
     Check(duplicateBlocked, "Database prevents one operational identity from joining a second salon");
+
+    Check(await TryDisableMfaAsync(identityConnectionString, userId),
+        "Database rejects disabling MFA on the salon's last active Owner");
+    Check(await TryChangeMembershipAsync(migratorConnectionString, tenantId, userId, "role", 4),
+        "Database rejects demoting the salon's last active Owner");
+    Check(await TryChangeMembershipAsync(migratorConnectionString, tenantId, userId, "is_active", 0),
+        "Database rejects deactivating the salon's last active Owner");
+    Check(await TryDeleteMembershipAsync(migratorConnectionString, tenantId, userId),
+        "Database rejects removing the salon's last active Owner");
+    Check(await TryCreateTenantWithoutOwnerAsync(migratorConnectionString, Guid.NewGuid()),
+        "Database rejects committing a salon without an active MFA-enabled Owner");
+
+    var backupOwnerId = await SeedAdditionalOwnerAsync(migratorConnectionString, tenantId);
+    Check(!await TryChangeMembershipAsync(migratorConnectionString, tenantId, userId, "role", 4),
+        "Database permits Owner demotion when another active MFA-enabled Owner remains");
+    Check(!await TryDisableMfaAsync(identityConnectionString, userId),
+        "Database permits MFA disablement on a demoted non-Owner");
+
+    var concurrentOwnerId = await SeedAdditionalOwnerAsync(migratorConnectionString, tenantId);
+    var concurrentChanges = await Task.WhenAll(
+        TryChangeMembershipAsync(migratorConnectionString, tenantId, backupOwnerId, "role", 4),
+        TryChangeMembershipAsync(migratorConnectionString, tenantId, concurrentOwnerId, "is_active", 0));
+    Check(concurrentChanges.Count(blocked => blocked) == 1 &&
+          await ReadActiveMfaOwnerCountAsync(migratorConnectionString, tenantId) == 1,
+        "Concurrent Owner demotion and deactivation serialize so exactly one active MFA-enabled Owner remains");
+
     Console.WriteLine($"RESULT: {checks}/{checks} Identity checks passed.");
 }
 finally
