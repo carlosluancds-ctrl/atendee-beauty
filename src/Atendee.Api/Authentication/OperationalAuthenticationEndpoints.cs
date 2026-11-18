@@ -132,7 +132,8 @@ public static class OperationalAuthenticationEndpoints
 
         if (membership is null ||
             !membership.IsActive ||
-            membership.TenantStatus is TenantStatus.Closing or TenantStatus.Closed)
+            !TenantAccessPolicy.IsAllowed(
+                membership.TenantStatus, membership.Role, TenantCapability.Login))
         {
             await auditWriter.WriteAsync("operational_auth.login_failed",
                 null, user.Id, httpContext.RequestAborted);
@@ -235,7 +236,8 @@ public static class OperationalAuthenticationEndpoints
 
         if (membership is null ||
             !membership.IsActive ||
-            membership.TenantStatus is TenantStatus.Closing or TenantStatus.Closed)
+            !TenantAccessPolicy.IsAllowed(
+                membership.TenantStatus, membership.Role, TenantCapability.Login))
         {
             await signInManager.SignOutAsync();
             return Results.Unauthorized();
@@ -319,7 +321,9 @@ public static class OperationalAuthenticationEndpoints
 
         if (membership is null ||
             !membership.IsActive ||
-            membership.Role is not (TenantRole.Owner or TenantRole.Manager))
+            membership.Role is not (TenantRole.Owner or TenantRole.Manager) ||
+            !TenantAccessPolicy.IsAllowed(
+                membership.TenantStatus, membership.Role, TenantCapability.Login))
         {
             await httpContext.SignOutAsync(MfaSetupScheme);
             return Results.Forbid();
@@ -373,7 +377,9 @@ public static class OperationalAuthenticationEndpoints
 
         if (membership is null ||
             !membership.IsActive ||
-            membership.Role is not (TenantRole.Owner or TenantRole.Manager))
+            membership.Role is not (TenantRole.Owner or TenantRole.Manager) ||
+            !TenantAccessPolicy.IsAllowed(
+                membership.TenantStatus, membership.Role, TenantCapability.Login))
         {
             await httpContext.SignOutAsync(MfaSetupScheme);
             return Results.Forbid();

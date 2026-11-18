@@ -44,7 +44,12 @@ public sealed class TenantContextMiddleware(RequestDelegate next)
             return;
         }
 
-        if (membership.TenantStatus == Atendee.Domain.Tenants.TenantStatus.Closed)
+        // Tenant lifecycle policy is evaluated on every request, so a status or
+        // role change takes effect on the member's next request.
+        if (!Atendee.Domain.Tenants.TenantAccessPolicy.IsAllowed(
+                membership.TenantStatus,
+                membership.Role,
+                Atendee.Domain.Tenants.TenantCapability.Login))
         {
             await RejectAsync(context, StatusCodes.Status403Forbidden);
             return;

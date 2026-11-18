@@ -18,7 +18,23 @@ var checks = new (string Name, Action Run)[]
     ("user display name is trimmed", () => Assert(TenantUser.Create(TenantId.New(), "  Ana  ", TenantRole.Professional, nowUtc).DisplayName == "Ana")),
     ("user is linked to the requested tenant", () => { var id = TenantId.New(); Assert(TenantUser.Create(id, "Ana", TenantRole.Professional, nowUtc).TenantId == id); }),
     ("new user is active", () => Assert(TenantUser.Create(TenantId.New(), "Ana", TenantRole.Professional, nowUtc).IsActive)),
-    ("deactivation changes active state", () => { var user = TenantUser.Create(TenantId.New(), "Ana", TenantRole.Professional, nowUtc); user.Deactivate(); Assert(!user.IsActive); })
+    ("deactivation changes active state", () => { var user = TenantUser.Create(TenantId.New(), "Ana", TenantRole.Professional, nowUtc); user.Deactivate(); Assert(!user.IsActive); }),
+    ("status policy matches the approved matrix for every status, role and capability", PolicyMatchesApprovedMatrix),
+    ("status policy denies undefined status, undefined role and malformed capabilities", PolicyDeniesUndefinedInputs),
+    ("closed tenant grants no capability to any role", () =>
+    {
+        foreach (var role in Enum.GetValues<TenantRole>())
+            Assert(TenantAccessPolicy.CapabilitiesFor(TenantStatus.Closed, role) == TenantCapability.None);
+    }),
+    ("every granted capability set includes login", () =>
+    {
+        foreach (var status in Enum.GetValues<TenantStatus>())
+        foreach (var role in Enum.GetValues<TenantRole>())
+        {
+            var granted = TenantAccessPolicy.CapabilitiesFor(status, role);
+            Assert(granted == TenantCapability.None || granted.HasFlag(TenantCapability.Login));
+        }
+    })
 };
 
 var failed = new List<string>();
@@ -43,6 +59,68 @@ if (failed.Count > 0)
 static void Assert(bool condition)
 {
     if (!condition) throw new InvalidOperationException("Assertion failed.");
+}
+
+// Independent restatement of the approved matrix (docs/product/POLITICA_ACESSO_STATUS_TENANT_V1.md).
+// Column order of the Y/- string: CompleteOnboarding, ReadData, WriteData, Automation,
+// ManageTeamAndSettings, Billing, ExportData. Login is implied for the listed roles.
+static void PolicyMatchesApprovedMatrix()
+{
+    var allRoles = new[] { TenantRole.Owner, TenantRole.Manager, TenantRole.Receptionist, TenantRole.Professional };
+    var everyone = allRoles;
+    var ownerOnly = new[] { TenantRole.Owner };
+    var ownerAndManager = new[] { TenantRole.Owner, TenantRole.Manager };
+    var capabilityOrder = new[]
+    {
+        TenantCapability.CompleteOnboarding,
+        TenantCapability.ReadData,
+        TenantCapability.WriteData,
+        TenantCapability.Automation,
+        TenantCapability.ManageTeamAndSettings,
+        TenantCapability.Billing,
+        TenantCapability.ExportData
+    };
+
+    var approved = new (TenantStatus Status, TenantRole[] LoginRoles, string Allowed)[]
+    {
+        (TenantStatus.PendingVerification, ownerOnly,       "Y------"),
+        (TenantStatus.SetupRequired,       ownerAndManager, "YYY-YY-"),
+        (TenantStatus.Trial,               everyone,        "-YYYYYY"),
+        (TenantStatus.Active,              everyone,        "-YYYYYY"),
+        (TenantStatus.PastDue,             everyone,        "-YYYYYY"),
+        (TenantStatus.Suspended,           everyone,        "-Y---YY"),
+        (TenantStatus.Closing,             ownerOnly,       "-Y---YY"),
+        (TenantStatus.Closed,              Array.Empty<TenantRole>(), "-------")
+    };
+
+    Assert(approved.Length == Enum.GetValues<TenantStatus>().Length);
+    Assert(approved.Select(row => row.Status).Distinct().Count() == approved.Length);
+
+    foreach (var row in approved)
+    foreach (var role in allRoles)
+    {
+        var canLogin = row.LoginRoles.Contains(role);
+        Assert(TenantAccessPolicy.IsAllowed(row.Status, role, TenantCapability.Login) == canLogin);
+
+        for (var index = 0; index < capabilityOrder.Length; index++)
+        {
+            var expected = canLogin && row.Allowed[index] == 'Y';
+            Assert(TenantAccessPolicy.IsAllowed(row.Status, role, capabilityOrder[index]) == expected);
+        }
+    }
+}
+
+static void PolicyDeniesUndefinedInputs()
+{
+    Assert(!TenantAccessPolicy.IsAllowed((TenantStatus)99, TenantRole.Owner, TenantCapability.Login));
+    Assert(!TenantAccessPolicy.IsAllowed(TenantStatus.Active, (TenantRole)99, TenantCapability.Login));
+    Assert(!TenantAccessPolicy.IsAllowed(TenantStatus.Active, TenantRole.Owner, TenantCapability.None));
+    Assert(!TenantAccessPolicy.IsAllowed(TenantStatus.Active, TenantRole.Owner,
+        TenantCapability.Login | TenantCapability.ReadData));
+    Assert(!TenantAccessPolicy.IsAllowed(TenantStatus.Active, TenantRole.Owner, (TenantCapability)(1 << 20)));
+    Assert(!TenantAccessPolicy.IsAllowed(TenantStatus.Active, TenantRole.Owner, (TenantCapability)(-1)));
+    Assert(TenantAccessPolicy.CapabilitiesFor((TenantStatus)99, TenantRole.Owner) == TenantCapability.None);
+    Assert(TenantAccessPolicy.CapabilitiesFor(TenantStatus.Active, (TenantRole)0) == TenantCapability.None);
 }
 
 static void Throws<TException>(Action action) where TException : Exception

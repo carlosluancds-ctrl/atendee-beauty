@@ -22,6 +22,8 @@ WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? mfaFactory = null;
 string? mfaKeyRing = null;
 WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? roleMatrixFactory = null;
 string? roleMatrixKeyRing = null;
+WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? statusFactory = null;
+string? statusKeyRing = null;
 
 // Minimal hosting reads its default configuration while Program.cs executes;
 // provide connection strings as process environment variables before the
@@ -656,15 +658,127 @@ try
            professionalMeBody.GetProperty("role").GetString() == TenantRole.Professional.ToString(),
         "Professional session resolves its current role from server-side membership.");
 
-    Console.WriteLine("RESULT: HTTP authentication, antiforgery, cookies, session revocation, logout, MFA, audit and role-matrix checks passed.");
+    // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
+    // logins their own per-IP login budget (4 of 5 permits are used here).
+    statusKeyRing = Path.Combine(Path.GetTempPath(), "atendee-status-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(statusKeyRing);
+    statusFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    {
+        web.UseContentRoot(apiContentRoot);
+        web.UseEnvironment("Development");
+        web.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Identity"] = identityConnectionString,
+                ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                ["DataProtection:KeyRingPath"] = statusKeyRing
+            });
+        });
+    });
+
+    const string statusPassword = "Atendee-Status-Policy-2026!";
+
+    async Task<(Guid TenantId, Guid UserId, string Email)> SeedStatusReceptionistAsync(int statusId)
+    {
+        var memberEmail = "http-status-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+        var memberTenantId = Guid.NewGuid();
+        Guid memberUserId;
+        await using (var scope = statusFactory!.Services.CreateAsyncScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+            var member = new OperationalIdentityUser
+            {
+                UserName = memberEmail,
+                Email = memberEmail,
+                EmailConfirmed = true
+            };
+            var created = await users.CreateAsync(member, statusPassword);
+            Ensure(created.Succeeded, "Synthetic status-policy identity is created.");
+            memberUserId = member.Id;
+        }
+
+        await SeedMembershipAsync(migratorConnectionString, memberTenantId, memberUserId,
+            roleId: 3, statusId: statusId);
+        return (memberTenantId, memberUserId, memberEmail);
+    }
+
+    async Task<(HttpClient Client, HttpResponseMessage Login)> LoginStatusMemberAsync(string memberEmail)
+    {
+        var memberClient = statusFactory!.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            HandleCookies = true,
+            AllowAutoRedirect = false
+        });
+        var memberAntiforgery = await memberClient.GetAsync("/api/v1/auth/antiforgery");
+        var memberToken = (await memberAntiforgery.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("requestToken").GetString();
+        var memberLogin = await PostWithCsrfAsync(memberClient, "/api/v1/auth/login", memberToken!, new
+        {
+            email = memberEmail,
+            password = statusPassword
+        });
+        return (memberClient, memberLogin);
+    }
+
+    // Suspended (5): read-only members may sign in; a later move to Closed (7) ends the session.
+    var suspendedMember = await SeedStatusReceptionistAsync(statusId: 5);
+    var (suspendedClient, suspendedLogin) = await LoginStatusMemberAsync(suspendedMember.Email);
+    Ensure(suspendedLogin.StatusCode == HttpStatusCode.OK,
+        "A receptionist of a Suspended tenant can still sign in (read-only, pay and export policy).");
+    var suspendedMe = await suspendedClient.GetAsync("/api/v1/auth/me");
+    var suspendedMeBody = await suspendedMe.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(suspendedMe.StatusCode == HttpStatusCode.OK &&
+           suspendedMeBody.GetProperty("tenantStatus").GetString() == TenantStatus.Suspended.ToString(),
+        "The server-resolved tenant status is reported for a Suspended tenant.");
+    await UpdateTenantStatusAsync(migratorConnectionString, suspendedMember.TenantId, statusId: 7);
+    Ensure((await suspendedClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Forbidden,
+        "Closing a tenant (status Closed) ends an already-issued session on its next request.");
+    suspendedClient.Dispose();
+
+    // Closing (6): non-owner members are denied at login and the denial is audited as a login failure.
+    var closingMember = await SeedStatusReceptionistAsync(statusId: 6);
+    var (closingClient, closingLogin) = await LoginStatusMemberAsync(closingMember.Email);
+    var closingAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, closingMember.UserId);
+    Ensure(closingLogin.StatusCode == HttpStatusCode.Unauthorized &&
+           closingAudit.Count(type => type == "operational_auth.login_failed") == 1 &&
+           !closingAudit.Contains("operational_auth.login_succeeded"),
+        "A non-owner member of a Closing tenant cannot sign in and the denial is audited.");
+    Ensure((await closingClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
+        "A denied Closing-tenant login leaves no usable session.");
+    closingClient.Dispose();
+
+    // SetupRequired (1): only Owner and Manager configure the salon; a receptionist is denied.
+    var setupMember = await SeedStatusReceptionistAsync(statusId: 1);
+    var (setupClient, setupLogin) = await LoginStatusMemberAsync(setupMember.Email);
+    Ensure(setupLogin.StatusCode == HttpStatusCode.Unauthorized,
+        "A receptionist cannot sign in while the tenant is SetupRequired.");
+    setupClient.Dispose();
+
+    // Active (3) to Closing (6) mid-session: a non-owner loses access on the next request.
+    var liveMember = await SeedStatusReceptionistAsync(statusId: 3);
+    var (liveClient, liveLogin) = await LoginStatusMemberAsync(liveMember.Email);
+    Ensure(liveLogin.StatusCode == HttpStatusCode.OK &&
+           (await liveClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
+        "A receptionist of an Active tenant has a working session before the status change.");
+    await UpdateTenantStatusAsync(migratorConnectionString, liveMember.TenantId, statusId: 6);
+    Ensure((await liveClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Forbidden,
+        "Moving a tenant to Closing revokes a non-owner member's live session on the next request.");
+    liveClient.Dispose();
+
+    Console.WriteLine("RESULT: HTTP authentication, antiforgery, cookies, session revocation, logout, MFA, audit, role-matrix and tenant-status checks passed.");
 }
 finally
 {
     factory.Dispose();
     mfaFactory?.Dispose();
     roleMatrixFactory?.Dispose();
+    statusFactory?.Dispose();
     try
     {
+        if (statusKeyRing is not null && Directory.Exists(statusKeyRing))
+            Directory.Delete(statusKeyRing, recursive: true);
         if (mfaKeyRing is not null && Directory.Exists(mfaKeyRing))
             Directory.Delete(mfaKeyRing, recursive: true);
         if (roleMatrixKeyRing is not null && Directory.Exists(roleMatrixKeyRing))
@@ -728,7 +842,28 @@ static async Task<HttpResponseMessage> PostWithCsrfAsync(
     return await client.SendAsync(request);
 }
 
-static async Task SeedMembershipAsync(string connectionString, Guid tenantId, Guid userId, int roleId = 3)
+static async Task UpdateTenantStatusAsync(string connectionString, Guid tenantId, int statusId)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using (var update = new NpgsqlCommand(
+        "UPDATE atendee.tenants SET status = @status WHERE id = @id", connection, transaction))
+    {
+        update.Parameters.AddWithValue("status", (short)statusId);
+        update.Parameters.AddWithValue("id", tenantId);
+        var affected = await update.ExecuteNonQueryAsync();
+        Ensure(affected == 1, "Synthetic tenant status update affects exactly one row.");
+    }
+
+    await transaction.CommitAsync();
+}
+
+static async Task SeedMembershipAsync(
+    string connectionString, Guid tenantId, Guid userId, int roleId = 3, int statusId = 3)
 {
     await using var connection = new NpgsqlConnection(connectionString);
     await connection.OpenAsync();
@@ -739,10 +874,11 @@ static async Task SeedMembershipAsync(string connectionString, Guid tenantId, Gu
     await using (var tenant = new NpgsqlCommand(
         """
         INSERT INTO atendee.tenants(id,name,slug,time_zone_id,status,created_at_utc)
-        VALUES(@id,'HTTP Synthetic Salon','http-' || @id::text,'America/Sao_Paulo',3,now())
+        VALUES(@id,'HTTP Synthetic Salon','http-' || @id::text,'America/Sao_Paulo',@status,now())
         """, connection, transaction))
     {
         tenant.Parameters.AddWithValue("id", tenantId);
+        tenant.Parameters.AddWithValue("status", (short)statusId);
         await tenant.ExecuteNonQueryAsync();
     }
 
