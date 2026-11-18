@@ -1,17 +1,25 @@
 {
-  "backup_version": "v54-runtime-role-transaction-boundary",
+  "backup_version": "v55-fix-https-test-client",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V54_2026-11-18.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V55_2026-11-18.md",
   "latest_repository_commit": "PENDING_COMMIT",
-  "latest_ci": {"status":"pending"},
+  "latest_ci": {
+    "v53_run": "44294027003",
+    "v53_status": "failure",
+    "v53_onboarding_checks": "passed",
+    "v53_failure": "later professional HTTP test client used HTTP with Secure antiforgery cookie; fixed in V55",
+    "v54_run": "44294201306",
+    "v54_status": "pending_at_checkpoint",
+    "v55_status": "pending"
+  },
   "latest_implementation": {
     "tenant_profile_endpoint": "GET /api/v1/tenant (existing)",
     "complete_onboarding_endpoint": "POST /api/v1/tenant/onboarding/complete",
     "database_migration": "db/migrations/015_complete_tenant_onboarding.sql",
     "workflow_applies_migration": true,
-    "database_role": "atendee_app_login enters atendee_runtime with SET LOCAL ROLE inside explicit transaction; only runtime may execute the function",
+    "database_role": "explicit transaction + SET LOCAL ROLE atendee_runtime",
     "transition": "PendingVerification -> SetupRequired; active Owner, confirmed email and MFA, idempotent",
     "audit": "Existing PostgreSQL tenant status trigger"
   }

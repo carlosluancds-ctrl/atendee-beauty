@@ -719,6 +719,7 @@ try
 
     using var assignedAssignedProfessionalClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
+        BaseAddress = new Uri("https://localhost"),
         AllowAutoRedirect = false,
         HandleCookies = true
     });
