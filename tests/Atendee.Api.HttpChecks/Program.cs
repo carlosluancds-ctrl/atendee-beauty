@@ -733,6 +733,11 @@ try
            suspendedMeBody.GetProperty("tenantStatus").GetString() == TenantStatus.Suspended.ToString(),
         "The server-resolved tenant status is reported for a Suspended tenant.");
     await UpdateTenantStatusAsync(migratorConnectionString, suspendedMember.TenantId, statusId: 7);
+    var suspendedTenantAudit = await ReadTenantStatusAuditAsync(migratorConnectionString, suspendedMember.TenantId);
+    Ensure(suspendedTenantAudit.Length == 1 &&
+           suspendedTenantAudit[0].From == 5 && suspendedTenantAudit[0].To == 7 &&
+           !suspendedTenantAudit[0].HasActor && !suspendedTenantAudit[0].HasIdentityTarget,
+        "A tenant status change is audited by the database trigger exactly once, with from/to status and no actor or identity target.");
     Ensure((await suspendedClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Forbidden,
         "Closing a tenant (status Closed) ends an already-issued session on its next request.");
     suspendedClient.Dispose();
@@ -763,6 +768,12 @@ try
            (await liveClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
         "A receptionist of an Active tenant has a working session before the status change.");
     await UpdateTenantStatusAsync(migratorConnectionString, liveMember.TenantId, statusId: 6);
+    var liveTenantAudit = await ReadTenantStatusAuditAsync(migratorConnectionString, liveMember.TenantId);
+    Ensure(liveTenantAudit.Length == 1 && liveTenantAudit[0].From == 3 && liveTenantAudit[0].To == 6,
+        "Moving a tenant from Active to Closing is audited with the exact from/to status.");
+    await UpdateTenantStatusAsync(migratorConnectionString, liveMember.TenantId, statusId: 6);
+    Ensure((await ReadTenantStatusAuditAsync(migratorConnectionString, liveMember.TenantId)).Length == 1,
+        "A tenant update that leaves the status unchanged is not audited.");
     Ensure((await liveClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Forbidden,
         "Moving a tenant to Closing revokes a non-owner member's live session on the next request.");
     liveClient.Dispose();
@@ -949,6 +960,29 @@ static async Task<string[]> ReadSecurityAuditTypesAsync(string connectionString,
     return values.ToArray();
 }
 
+static async Task<(short From, short To, bool HasActor, bool HasIdentityTarget)[]> ReadTenantStatusAuditAsync(
+    string connectionString,
+    Guid tenantId)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using var command = new NpgsqlCommand(
+        @"SELECT ""FromTenantStatus"", ""ToTenantStatus"", ""ActorIdentityUserId"" IS NOT NULL, ""TargetIdentityUserId"" IS NOT NULL FROM identity.""SecurityAuditEvents"" WHERE ""TargetTenantId"" = @tenant AND ""EventType"" = 'tenant_status.changed' ORDER BY ""OccurredAtUtc"", ""Id"" ", connection, transaction);
+    command.Parameters.AddWithValue("tenant", tenantId);
+    var values = new List<(short From, short To, bool HasActor, bool HasIdentityTarget)>();
+    await using (var reader = await command.ExecuteReaderAsync())
+    {
+        while (await reader.ReadAsync())
+            values.Add((reader.GetInt16(0), reader.GetInt16(1), reader.GetBoolean(2), reader.GetBoolean(3)));
+    }
+
+    await transaction.CommitAsync();
+    return values.ToArray();
+}
 static async Task<int> CountAuditEventsWithActorAsync(
     string connectionString,
     Guid targetUserId,
