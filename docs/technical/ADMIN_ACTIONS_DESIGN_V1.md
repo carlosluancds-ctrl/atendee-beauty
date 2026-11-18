@@ -52,7 +52,7 @@ Platform Admin must not be representable as a tenant membership role. Proposal: 
 | A9 | Cross-tenant audit review | Platform Admin | justification code, scoped to one tenant at a time | yes | `platform_admin.audit_viewed` |
 | A10 | Break-glass data access | Platform Admin | section 6 | yes | `platform_admin.break_glass_*` |
 
-Tenant status transition graph (**DECISION**; proposal, consistent with the provisional access policy):
+Tenant status transition graph (**DECISION**; proposal, consistent with the approved V1 access policy):
 `PendingVerification -> SetupRequired -> Trial/Active`; `Trial/Active <-> PastDue`; `PastDue -> Active | Suspended`; `Suspended -> Active | Closing`; `Closing -> Closed | Suspended`; `Closed` is terminal for self-service. Any transition outside the graph is rejected by a database constraint/trigger, not only by application code. Who may perform each edge, the PastDue grace duration and post-Closed retention remain open.
 
 ## 5. Audit requirements
@@ -101,7 +101,7 @@ Allowed role; each denied role; each denied tenant status (per `TenantAccessPoli
 
 ## 10. Decisions needed from the product owner
 
-1. Confirm or change the provisional tenant-status access policy.
+1. ~~Confirm or change the tenant-status access policy.~~ RESOLVED 2026-11-18: the owner explicitly approved the V1 status x role x capability matrix as written (see `docs/product/POLITICA_ACESSO_STATUS_TENANT_V1.md`). PastDue grace, post-Closed retention and who changes a status remain open (items 4 and 5).
 2. Platform Admin model: separate realm and WebAuthn requirement; who the first administrators are.
 3. Step-up freshness window and which actions require four-eyes.
 4. Tenant status transition graph, who performs each edge, PastDue grace period.

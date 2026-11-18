@@ -4,6 +4,8 @@
 **Data:** 2026-11-18
 **Natureza da decisão:** o proprietário do produto delegou explicitamente esta decisão ("Decida tudo da forma mais profissional"). Este documento registra a decisão tomada sob essa delegação. Ela é **reversível**: mudar uma linha da tabela e do teste exaustivo basta. Nenhum deploy, nenhum signup público e nenhum dado real dependem dela.
 
+**APROVAÇÃO EXPLÍCITA DO PROPRIETÁRIO:** em 2026-11-18 (~02:02 UTC) o proprietário do produto aprovou a matriz decidida abaixo, por mensagem direta no chat ("Eu aprovo aquela tabela lá"), em resposta à pergunta específica sobre a tabela. A matriz deixa de ser provisória. A aprovação cobre SOMENTE a matriz status x papel x capacidade; os itens da seção "Fora do escopo desta decisão" continuam pendentes. Mudanças futuras na tabela exigem nova decisão explícita do proprietário.
+
 **Implementação:** `src/Atendee.Domain/Tenants/TenantAccessPolicy.cs` (fonte única da verdade) e `TenantCapability.cs`.
 **Teste:** `tests/Atendee.Domain.Checks` (matriz exaustiva status × papel × capacidade, escrita de forma independente) e `tests/Atendee.Api.HttpChecks` (sessões reais).
 
