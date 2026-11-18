@@ -170,10 +170,14 @@ try
     }
 
     var auditTypes = await ReadSecurityAuditTypesAsync(migratorConnectionString, userId);
-    Ensure(auditTypes.Length == 2 &&
-           auditTypes.Contains("operational_account.sessions_revoked") &&
-           auditTypes.Contains("operational_account.disabled"),
-        "Session revocation and account disablement are durably recorded.");
+    Ensure(auditTypes.Length == 5 &&
+           auditTypes.Count(type => type == "operational_auth.login_failed") == 1 &&
+           auditTypes.Count(type => type == "operational_auth.login_succeeded") == 2 &&
+           auditTypes.Count(type => type == "operational_account.sessions_revoked") == 1 &&
+           auditTypes.Count(type => type == "operational_account.disabled") == 1,
+        "Login failure/success, session revocation and account disablement are durably recorded exactly once each.");
+    Ensure(!auditTypes.Contains("operational_mfa.challenge_failed"),
+        "Password-only accounts do not produce MFA challenge audit events.");
 
     var auditMutationDenied = false;
     try
@@ -206,6 +210,9 @@ try
     });
     Ensure(disabledLogin.StatusCode == HttpStatusCode.Unauthorized,
         "Disabled operational identity cannot establish a new session.");
+    var auditTypesAfterLockedOutAttempt = await ReadSecurityAuditTypesAsync(migratorConnectionString, userId);
+    Ensure(auditTypesAfterLockedOutAttempt.Length == auditTypes.Length,
+        "Login attempts against an already locked-out account do not grow the audit ledger.");
 
     // Run privileged-account MFA checks in a fresh host so the independent
     // per-IP login limiter starts with an isolated budget.
@@ -373,6 +380,9 @@ try
         });
     Ensure(replayChallenge.StatusCode == HttpStatusCode.Unauthorized,
         "A previously redeemed recovery code cannot be reused.");
+    var failedChallengeAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
+    Ensure(failedChallengeAudit.Count(type => type == "operational_mfa.challenge_failed") == 1,
+        "A failed MFA challenge is durably audited exactly once.");
 
     // Enrollment already consumed the current TOTP step. Wait for a new
     // RFC 6238 step so this challenge also proves replay protection is active.

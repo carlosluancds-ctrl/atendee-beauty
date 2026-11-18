@@ -77,7 +77,8 @@ public static class OperationalAuthenticationEndpoints
         UserManager<OperationalIdentityUser> userManager,
         IPasswordHasher<OperationalIdentityUser> passwordHasher,
         SignInManager<OperationalIdentityUser> signInManager,
-        ITenantMembershipResolver membershipResolver)
+        ITenantMembershipResolver membershipResolver,
+        ISecurityAuditWriter auditWriter)
     {
         if (string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password) ||
@@ -102,13 +103,28 @@ public static class OperationalAuthenticationEndpoints
         // Verify the password and account confirmation before querying tenant
         // membership. A known login with an incorrect password does not reveal
         // whether the identity has a salon membership.
+        // Failed attempts against an account that is already locked out are not
+        // audited individually: the lockout itself is the recorded event and this
+        // bounds audit-table growth from credential-stuffing floods. Attempts
+        // against unknown emails have no trusted target identity and are not
+        // audited (the email must never be persisted).
+        var alreadyLockedOut = await userManager.IsLockedOutAsync(user);
+
         var passwordCheck = await signInManager.CheckPasswordSignInAsync(
             user,
             request.Password,
             lockoutOnFailure: true);
 
         if (!passwordCheck.Succeeded)
+        {
+            if (!alreadyLockedOut)
+            {
+                await auditWriter.WriteAsync("operational_auth.login_failed",
+                    null, user.Id, httpContext.RequestAborted);
+            }
+
             return GenericLoginFailure();
+        }
 
         var membership = await membershipResolver.ResolveAsync(
             user.Id,
@@ -118,6 +134,8 @@ public static class OperationalAuthenticationEndpoints
             !membership.IsActive ||
             membership.TenantStatus is TenantStatus.Closing or TenantStatus.Closed)
         {
+            await auditWriter.WriteAsync("operational_auth.login_failed",
+                null, user.Id, httpContext.RequestAborted);
             return GenericLoginFailure();
         }
 
@@ -167,6 +185,10 @@ public static class OperationalAuthenticationEndpoints
         }
         else
         {
+            // Audit first: if the mandatory audit write fails, no session cookie
+            // is issued and the request fails instead of succeeding silently.
+            await auditWriter.WriteAsync("operational_auth.login_succeeded",
+                user.Id, user.Id, httpContext.RequestAborted);
             await signInManager.SignInWithClaimsAsync(
                 user,
                 isPersistent: false,
@@ -218,6 +240,8 @@ public static class OperationalAuthenticationEndpoints
             if (!redeemed.Succeeded)
             {
                 await userManager.AccessFailedAsync(user);
+                await auditWriter.WriteAsync("operational_mfa.challenge_failed",
+                    null, user.Id, httpContext.RequestAborted);
                 await transaction.CommitAsync(httpContext.RequestAborted);
                 return Results.Unauthorized();
             }
@@ -238,6 +262,8 @@ public static class OperationalAuthenticationEndpoints
             if (!validTotp)
             {
                 await userManager.AccessFailedAsync(user);
+                await auditWriter.WriteAsync("operational_mfa.challenge_failed",
+                    null, user.Id, httpContext.RequestAborted);
                 return Results.Unauthorized();
             }
 
