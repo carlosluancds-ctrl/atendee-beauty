@@ -170,7 +170,8 @@ try
     }
 
     var auditTypes = await ReadSecurityAuditTypesAsync(migratorConnectionString, userId);
-    Ensure(auditTypes.Length == 5 &&
+    Ensure(auditTypes.Length == 6 &&
+           auditTypes.Count(type => type == "tenant_membership.created") == 1 &&
            auditTypes.Count(type => type == "operational_auth.login_failed") == 1 &&
            auditTypes.Count(type => type == "operational_auth.login_succeeded") == 2 &&
            auditTypes.Count(type => type == "operational_account.sessions_revoked") == 1 &&
@@ -410,6 +411,10 @@ try
         "Successful TOTP challenge is durably audited.");
 
     await UpdateMembershipAsync(migratorConnectionString, ownerUserId, roleId: 3, isActive: true);
+    var roleChangeAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
+    Ensure(roleChangeAudit.Count(type => type == "tenant_membership.role_changed") == 1 &&
+           !roleChangeAudit.Contains("tenant_membership.deactivated"),
+        "A membership role change is audited by the database trigger exactly once, without a spurious activation event.");
     var demotedOwnerMe = await mfaClient.GetAsync("/api/v1/auth/me");
     var demotedOwnerBody = await demotedOwnerMe.Content.ReadFromJsonAsync<JsonElement>();
     Ensure(demotedOwnerMe.StatusCode == HttpStatusCode.OK &&
@@ -496,6 +501,10 @@ try
         "Receptionist establishes a session before membership deactivation.");
 
     await UpdateMembershipAsync(migratorConnectionString, deactivationUserId, roleId: 3, isActive: false);
+    var deactivationAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, deactivationUserId);
+    Ensure(deactivationAudit.Count(type => type == "tenant_membership.deactivated") == 1 &&
+           !deactivationAudit.Contains("tenant_membership.activated"),
+        "A membership deactivation is audited by the database trigger exactly once.");
     Ensure((await deactivationClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "Deactivating membership invalidates the existing tenant session on its next request.");
 
