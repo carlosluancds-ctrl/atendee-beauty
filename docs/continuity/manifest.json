@@ -1,21 +1,22 @@
 {
-  "backup_version": "v51-fix-stale-http-test-symbol",
+  "backup_version": "v52-migration-order-and-ci-application",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V51_2026-11-18.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V52_2026-11-18.md",
   "latest_repository_commit": "PENDING_COMMIT",
   "latest_ci": {
-    "run_id": "44293354129",
-    "status": "failure",
-    "tested_commit": "759e9fa88eff6cb147f736a0695a658eebd03998",
-    "reason": "pre-existing stale variable reference in HTTP integration test; fixed in V51"
+    "status": "pending",
+    "last_failed_run": "44293354129",
+    "last_failed_sha": "759e9fa88eff6cb147f736a0695a658eebd03998",
+    "failure": "stale test symbol professionalProfileId; fixed in V51"
   },
   "latest_implementation": {
     "tenant_profile_endpoint": "GET /api/v1/tenant",
     "complete_onboarding_endpoint": "POST /api/v1/tenant/onboarding/complete",
-    "database_migration": "db/migrations/012_complete_tenant_onboarding.sql",
-    "transition": "PendingVerification -> SetupRequired; active Owner only, confirmed email and MFA, idempotent",
+    "database_migration": "db/migrations/015_complete_tenant_onboarding.sql",
+    "workflow_applies_migration": true,
+    "transition": "PendingVerification -> SetupRequired; active Owner, confirmed email and MFA, idempotent",
     "audit": "Existing PostgreSQL tenant status trigger"
   }
 }
