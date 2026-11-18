@@ -5,7 +5,7 @@
 ## Where things are
 - Repo (private): https://github.com/carlosluancds-ctrl/atendee-beauty
 - Work branch: security/csrf-webhook-antiforgery-v23 (base wip/operational-identity-v1). Never touch main.
-- Latest verified repository HEAD before V38: `4d33437356b7bdc681a262eb9036e8de22c27c9a` (V37 documentation commit; CI run 44224034308 completed successfully for this exact SHA). V37 implementation commit: `7d681d5da2b8bf58bff8c4b1bd651983639b08ab` (CI run 44223700861). Always re-check `git log`, remote branch SHA and the latest CI instead of trusting this file. See the newest `CONTINUATION_STATUS_V*.md` first.
+- Latest V40 code commit: fe01831eb23cab5552c630372e4ac7bc6742f34f (CI run 44231852468 passed for this exact SHA). Always re-check git log, remote branch SHA and the latest CI instead of trusting this file. Read CONTINUATION_STATUS_V40_2026-11-18.md first.
 - Previous remote workspace: Windows machine runnervm9zap3, clone at C:\Users\RDP\Documents\Atendee_Beauty_Git_wip_operational_identity_v1 (access via Desktop Commander connector + gh CLI; never ask for or print tokens). Desktop Commander processes return after ~3 s; poll with read_process_output. In PowerShell avoid complex gh --jq quoting; use `gh run list` / `gh run view --log | Select-String`. Use absolute paths in .NET file APIs. PowerShell 5 reads BOM-less scripts as ANSI: add a UTF-8 BOM to scripts containing accents.
 
 ## Last completed steps
@@ -18,12 +18,13 @@
 
 ## Decisions status
 - APPROVED by owner: tenant-status access matrix (docs/product/POLITICA_ACESSO_STATUS_TENANT_V1.md). Only the owner can change it.
+- APPROVED by owner on 2026-11-18: every salon must retain at least one active Owner with MFA; no active Owner may lack MFA, including during onboarding. The first Owner completes MFA before membership is created. Implemented in V40 / migration 010.
 - STILL OPEN (ask the owner, do not decide): PastDue grace period and PastDue -> Suspended process; post-Closed retention/export/deletion; who/how changes a tenant status; Platform Admin model, step-up window, four-eyes, status transition graph, audit retention, break-glass rules (ADMIN_ACTIONS_DESIGN_V1.md section 10, items 2-6).
 
 ## Next step
-1. Extend identity-target audit events with a trusted `TargetTenantId`, resolved from persisted membership within the transaction, and test target consistency and grants.
+1. V40 completed the approved active-Owner/MFA database invariant and pre-membership MFA enrollment path.
 2. Do not expose a tenant-visible audit read view or export endpoint until the owner decides audit visibility, retention and post-Closed handling.
-3. Ask the owner for the remaining decisions in `ADMIN_ACTIONS_DESIGN_V1.md` before any status-change flow or Platform Admin work.
+3. Do not add public signup, tenant provisioning, status-change flows, or Platform Admin functionality without the corresponding explicit owner decisions.
 
 ## Routine for every step
 Verify git status/HEAD/CI -> inspect code -> small change + negative tests -> git diff --check + Release build -> commit/push on the work branch -> watch CI for the exact SHA (confirm new assertions in the log) -> update CONTINUATION_STATUS_V<n> and this file -> clean working tree -> summarize.
@@ -43,8 +44,13 @@ Every completed development or documentation step MUST create a new versioned st
 `docs/continuity/CONTINUATION_STATUS_VNN_YYYY-MM-DD.md`.
 Never overwrite prior status files or reuse a version number. Record scope, changed files, migrations, decisions/approvals, exact tests and results, build/CI links and tested SHA, branch/HEAD/worktree/push state, risks, open decisions, and the next safe step. Update this index to point to the newest status while preserving the historical files. Never claim a test, build, push, or CI success without verifying it. A step is not complete until its status file exists and its path is confirmed. If the status artifact cannot be created or updated, explicitly leave documentation pending. At the end, give the owner the exact filename and a usable reference/link. On a new session, read this index and the newest status file before editing code, then repeat this rule for the next step.
 
-Latest verified completed step: V39 commit `53859f4c071f8ac1cee4b13a61c8df8159a137a1`, CI run `44226217587` successful for the exact SHA. The newest status artifact is `docs/continuity/CONTINUATION_STATUS_V39_2026-11-18.md`.
+Latest verified completed code step: V40 commit fe01831eb23cab5552c630372e4ac7bc6742f34f, CI run 44231852468 successful for the exact SHA. Newest status artifact: docs/continuity/CONTINUATION_STATUS_V40_2026-11-18.md.
 
 - V39 (CI green): migration 009 derives `TargetTenantId` for new identity-target audit events from persisted membership; CI run 44226217587 passed for exact commit `53859f4c071f8ac1cee4b13a61c8df8159a137a1`. See `CONTINUATION_STATUS_V39_2026-11-18.md`. Do not proceed to audit read/export until owner decisions on visibility, retention, and post-Closed behavior are explicit.
 
-
+## V40 (2026-11-18) - active Owner/MFA invariant
+- Owner explicitly approved that every salon must retain at least one active Owner with MFA and that no active Owner may lack MFA, including during onboarding.
+- Migration 010 enforces the invariant at PostgreSQL level, using tenant-scoped transaction advisory locks and deferred constraint triggers for tenant creation, membership changes, and MFA changes.
+- A provisioned identity can enroll MFA before its first salon membership; enrollment does not issue an application session. No signup or provisioning endpoint was added.
+- CI run 44231852468 passed for exact code SHA fe01831eb23cab5552c6303724eac7bc6742f34f: domain 19/19, persistence 10/10, Identity 31/31, and API HTTP authentication/session checks.
+- See docs/continuity/CONTINUATION_STATUS_V40_2026-11-18.md.
