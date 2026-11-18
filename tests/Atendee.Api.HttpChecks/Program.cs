@@ -20,6 +20,8 @@ var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
 var apiContentRoot = Path.Combine(repositoryRoot, "src", "Atendee.Api");
 WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? mfaFactory = null;
 string? mfaKeyRing = null;
+WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? roleMatrixFactory = null;
+string? roleMatrixKeyRing = null;
 
 // Minimal hosting reads its default configuration while Program.cs executes;
 // provide connection strings as process environment variables before the
@@ -397,6 +399,13 @@ try
     Ensure(completeMfaAudit.Contains("operational_mfa.totp_challenge_succeeded"),
         "Successful TOTP challenge is durably audited.");
 
+    await UpdateMembershipAsync(migratorConnectionString, ownerUserId, roleId: 3, isActive: true);
+    var demotedOwnerMe = await mfaClient.GetAsync("/api/v1/auth/me");
+    var demotedOwnerBody = await demotedOwnerMe.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(demotedOwnerMe.StatusCode == HttpStatusCode.OK &&
+           demotedOwnerBody.GetProperty("role").GetString() == TenantRole.Receptionist.ToString(),
+        "A live Owner-to-Receptionist role change is reflected on the next request.");
+
     using var promotionClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
@@ -480,16 +489,120 @@ try
     Ensure((await deactivationClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "Deactivating membership invalidates the existing tenant session on its next request.");
 
-    Console.WriteLine("RESULT: HTTP authentication, antiforgery, cookies, session revocation, logout, MFA and live membership checks passed.");
+    // A fresh host isolates the role-matrix clients from the per-IP login budget
+    // consumed by the preceding account/MFA scenarios.
+    roleMatrixKeyRing = Path.Combine(Path.GetTempPath(), "atendee-role-matrix-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(roleMatrixKeyRing);
+    roleMatrixFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    {
+        web.UseContentRoot(apiContentRoot);
+        web.UseEnvironment("Development");
+        web.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Identity"] = identityConnectionString,
+                ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                ["DataProtection:KeyRingPath"] = roleMatrixKeyRing
+            });
+        });
+    });
+
+    var managerEmail = "http-role-manager-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string managerPassword = "Atendee-Manager-Role-2026!";
+    var managerTenantId = Guid.NewGuid();
+    Guid managerUserId;
+    await using (var scope = roleMatrixFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var manager = new OperationalIdentityUser
+        {
+            UserName = managerEmail,
+            Email = managerEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(manager, managerPassword);
+        Ensure(created.Succeeded, "Synthetic manager identity is created.");
+        managerUserId = manager.Id;
+    }
+    await SeedMembershipAsync(migratorConnectionString, managerTenantId, managerUserId, roleId: 2);
+
+    using var managerClient = roleMatrixFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    var managerAntiforgery = await managerClient.GetAsync("/api/v1/auth/antiforgery");
+    var managerToken = (await managerAntiforgery.Content.ReadFromJsonAsync<JsonElement>())!
+        .GetProperty("requestToken").GetString();
+    var managerLogin = await PostWithCsrfAsync(managerClient, "/api/v1/auth/login", managerToken!, new
+    {
+        email = managerEmail,
+        password = managerPassword
+    });
+    var managerLoginBody = await managerLogin.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(managerLogin.StatusCode == HttpStatusCode.Accepted &&
+           managerLoginBody.GetProperty("state").GetString() == "mfa_setup_required",
+        "Manager without MFA receives only the restricted MFA-setup session.");
+    Ensure((await managerClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
+        "Manager cannot use the application API before completing MFA.");
+
+    var professionalEmail = "http-role-professional-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string professionalPassword = "Atendee-Professional-Role-2026!";
+    var professionalTenantId = Guid.NewGuid();
+    Guid professionalUserId;
+    await using (var scope = roleMatrixFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var professional = new OperationalIdentityUser
+        {
+            UserName = professionalEmail,
+            Email = professionalEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(professional, professionalPassword);
+        Ensure(created.Succeeded, "Synthetic professional identity is created.");
+        professionalUserId = professional.Id;
+    }
+    await SeedMembershipAsync(migratorConnectionString, professionalTenantId, professionalUserId, roleId: 4);
+
+    using var professionalClient = roleMatrixFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    var professionalAntiforgery = await professionalClient.GetAsync("/api/v1/auth/antiforgery");
+    var professionalToken = (await professionalAntiforgery.Content.ReadFromJsonAsync<JsonElement>())!
+        .GetProperty("requestToken").GetString();
+    var professionalLogin = await PostWithCsrfAsync(
+        professionalClient, "/api/v1/auth/login", professionalToken!, new
+        {
+            email = professionalEmail,
+            password = professionalPassword
+        });
+    Ensure(professionalLogin.StatusCode == HttpStatusCode.OK,
+        "Professional can authenticate without the privileged-role MFA setup gate.");
+    var professionalMe = await professionalClient.GetAsync("/api/v1/auth/me");
+    var professionalMeBody = await professionalMe.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(professionalMe.StatusCode == HttpStatusCode.OK &&
+           professionalMeBody.GetProperty("role").GetString() == TenantRole.Professional.ToString(),
+        "Professional session resolves its current role from server-side membership.");
+
+    Console.WriteLine("RESULT: HTTP authentication, antiforgery, cookies, session revocation, logout, MFA, audit and role-matrix checks passed.");
 }
 finally
 {
     factory.Dispose();
     mfaFactory?.Dispose();
+    roleMatrixFactory?.Dispose();
     try
     {
         if (mfaKeyRing is not null && Directory.Exists(mfaKeyRing))
             Directory.Delete(mfaKeyRing, recursive: true);
+        if (roleMatrixKeyRing is not null && Directory.Exists(roleMatrixKeyRing))
+            Directory.Delete(roleMatrixKeyRing, recursive: true);
         if (Directory.Exists(keyRing))
             Directory.Delete(keyRing, recursive: true);
     }
