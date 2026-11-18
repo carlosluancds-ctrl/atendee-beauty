@@ -1,70 +1,56 @@
 # CONTINUE HERE — Atendee Beauty (auto-backup updated each step)
 
-**Primary resume context:** read CLAUDE.md, this file, and the highest-numbered docs/continuity/CONTINUATION_STATUS_V*.md before changing code.
+**Before changing code:** read CLAUDE.md, this file, and the highest-numbered docs/continuity/CONTINUATION_STATUS_V*.md.
 
 ## Repository
 - https://github.com/carlosluancds-ctrl/atendee-beauty
-- Active branch: security/csrf-webhook-antiforgery-v23; never modify main.
-- Latest implementation commit with full CI verified: acddf2f545e861d459724284e1906158385caeed.
-- Latest full CI checkpoint: run 44283829889 passed for commit 4a4e6bfc439674ec53561f72340cd447cd1068e8.
+- Active branch: security/csrf-webhook-antiforgery-v23. Never modify main.
+- Latest implementation SHA: 10ccc184fcd094a9ae6aa33ca90161cc90a2fcfd.
+- Full CI run 44285681344 passed for that exact SHA.
+- Latest continuity checkpoint is V51; the commit for it is recorded in manifest.json.
 
-## Completed
-- V41: offline first-Owner salon provisioning command. Requires existing identity with confirmed email, MFA enabled, no active lockout and no salon membership; atomically creates PendingVerification salon + active Owner membership. No HTTP endpoint.
-- V42: approved separate protected operator command to create the initial operational identity and initiate activation.
-- V43: selected Amazon SES API v2 as the default transactional email provider and documented activation design.
-- V44: backend activation path implemented: dedicated provisioner role, migration 011, offline create/reissue CLI, SES v2 email sender, activation API, audit events, integration tests and runbook. V41 remains unchanged.
-- V44 Identity test provider registration fix is in b66e1e7ae3fc794891177dbeb89bfd7f3c2d7ef0; CI run 44279908188 passed.
-- V45: React/TypeScript activation page. CI run 44282286929 passed for bd16f1d409c3a3571d7d6d5eab8ab39a328474ab.
-- V46: continuity checkpoint; CI run 44282678565 passed for d96a50e676a34bfd9b595bc6ef1128b6826e8edd.
-- V47: login, TOTP/recovery challenge, MFA setup and one-time recovery-code experience. CI run 44283430559 passed for acddf2f545e861d459724284e1906158385caeed.
-- V48: full CI rerun passed for continuity commit 4a4e6bfc439674ec53561f72340cd447cd1068e8 (run 44283829889).
-- V49: browser-level review passed for activation, pending-owner MFA setup, TOTP challenge and recovery-code challenge using Microsoft Edge + a temporary local mock API. No production API or credentials used.
+## Completed milestones
+- V41 offline first-Owner salon provisioning command; remains the only first-Owner membership creation path.
+- V42/V44 separate offline operational identity create/reissue, SES v2 mailer, activation API, restricted provisioner DB login and migration 011.
+- V43 documented SES v2 architecture.
+- V45 activation page.
+- V47 login, TOTP/recovery challenge, MFA setup and one-time recovery-code experience.
+- V49 browser review using Edge + local mock API passed activation, pending-owner MFA setup, TOTP and recovery-code flows. This is not real API browser E2E.
+- V50 authenticated read-only GET /api/v1/tenant; migration 012 extends the SECURITY DEFINER membership projection with salon name, slug and timezone. The auth DB role retains no direct SELECT on tenants or tenant_users.
+- V50 exact implementation SHA 10ccc184fcd094a9ae6aa33ca90161cc90a2fcfd passed full CI run 44285681344.
 
-## V44 backend details
-- No public self-registration, public tenant creation, public account creation route, or public first-Owner endpoint.
-- Offline command tools/Atendee.OperationalIdentityProvisioning supports create and reissue.
-- Pending ASP.NET Identity user has no password, EmailConfirmed=false, TwoFactorEnabled=false, and no salon membership.
-- 256-bit random activation token, 30-minute expiry, single-use; only SHA-256 hash stored. Re-issue rotates the prior token.
-- API: POST /api/v1/auth/activate. Antiforgery required; IP rate-limited; generic invalid/expired/replayed response; password creation, email confirmation, token consumption and audit are atomic. No session issued.
-- SES v2 uses AWS SDK for .NET v4 AWSSDK.SimpleEmailV2 4.1.0.2 and AWS credential provider chain. No permanent credentials in source.
-- Database login atendee_identity_provisioner is NOINHERIT/NOSUPERUSER/NOBYPASSRLS and can SET only to atendee_identity_owner.
-- Existing V41 first-Owner command remains the sole way to create the first salon and Owner membership, after email confirmation and MFA.
+## Architecture invariants
+- No public self-registration, public tenant creation or public first-Owner endpoint.
+- Pending identity activation is single-use, 256-bit random token, 30-minute expiry, SHA-256 hash only; activation confirms email and sets password atomically, without issuing a session.
+- Pending first Owner must sign in and enroll MFA before V41 offline provisioning creates salon and Owner membership.
+- Tenant ID, role and status come only from the server-resolved membership.
+- App/auth logins do not directly read tenant tables; use narrow SECURITY DEFINER projections/functions.
+- Owner/Manager require TOTP/recovery MFA and signed amr=mfa marker on each authenticated request.
+- Unsafe HTTP requests require antiforgery; secure HttpOnly same-origin cookies; no auth/CSRF tokens in localStorage/sessionStorage.
+- V50 only reads tenant profile; no lifecycle transition endpoint.
 
-## V45/V47 frontend details
-- React 19 + TypeScript; static build uses esbuild; no Vite/Vitest dependency tree.
-- /activate reads token from URL fragment, removes fragment from visible URL/history, requests antiforgery token/cookie and posts activation.
-- /login handles POST /api/v1/auth/login states authenticated, mfa_required and mfa_setup_required.
-- MFA challenge uses POST /api/v1/auth/mfa/challenge for TOTP or recovery code.
-- MFA enrollment uses /mfa/enrollment/start, /verify and /cancel with the short-lived MFA setup cookie.
-- Recovery codes displayed once, held only in component memory, with explicit acknowledgement before leaving the screen.
-- Pending first Owner completes MFA without an application session; V41 offline command still required to create salon membership.
-- All unsafe API calls use X-CSRF-TOKEN and same-origin cookies. No localStorage/sessionStorage for auth or antiforgery material.
-- Production same-origin deployment required. IIS URL Rewrite/ARR must proxy /api/* to ASP.NET API; not configured by sample static web.config.
-- Local development: set ATENDEE_API_PROXY_TARGET to local API origin, then npm run dev.
+## Validation
+- Latest full CI: run 44285681344, success, exact SHA 10ccc184fcd094a9ae6aa33ca90161cc90a2fcfd.
+- Frontend npm ci/audit/tests/build passed.
+- .NET locked restore, Release build and domain checks passed.
+- Disposable PostgreSQL 18.7, EF Core/RLS, Identity/TOTP and HTTP authentication/session checks passed, including new migration 012 and tenant profile tests.
+- Browser E2E remains limited to local mock API; real ASP.NET API through production-style IIS proxy remains untested.
+- No production email, DNS, AWS, server changes, production data or deployment.
 
-## Validation observed
-- V47 exact SHA acddf2f545e861d459724284e1906158385caeed: full GitHub Actions run 44283430559 passed.
-- V48 exact SHA 4a4e6bfc439674ec53561f72340cd447cd1068e8: full GitHub Actions run 44283829889 passed.
-- Frontend npm ci, audit, Node tests and strict TypeScript/esbuild build passed.
-- Backend locked restore, Release build, domain, PostgreSQL 18.7 persistence/RLS, Identity/TOTP/activation and API HTTP/antiforgery/session checks passed.
-- Browser review: activation token fragment removed; no session on activation or pending-owner MFA; Secure/HttpOnly cookies propagated; TOTP and recovery challenge only create app cookie after success; 8 unsafe calls carried antiforgery.
-- Browser review used a local mock API. Real API proxy/browser E2E remains untested.
-- No real email, production data, DNS changes, server changes or deployment.
+## Current product-policy boundary
+The approved lifecycle policy leaves authority/process for tenant status changes out of scope. The product identity specification requires contact verification, terms acceptance and essential salon data before SetupRequired. Do not implement a status transition until terms content/version and the onboarding data/authority contract are approved.
 
-## Immediate next steps
-1. Inspect the approved product backlog and existing domain/API contracts to identify the next core salon workflow.
-2. Do not invent business rules or build dashboard screens without backend capability and product acceptance criteria.
-3. Present a concise implementation plan before non-trivial code changes; backend-first with tests and continuity backup after each increment.
-4. Keep production hosting, SES, DNS and deployment behind explicit external-access and release gates.
+## Next implementation direction
+Backend-first service catalogue vertical slice. First inspect MODELO_DADOS_MULTIEMPRESA_V1.txt, MATRIZ_PERMISSOES_V1.txt and backlog. Define tenant schema, RLS, validation, permissions, audit and tests before CRUD. Do not invent currency, duration defaults, tax treatment or commercial terms.
 
-## External setup still pending
-- SES sender domain/address verification, Easy DKIM, SPF/DMARC, SES production access and IAM credentials.
-- Apply migration 011 and provision restricted DB login in target environment.
-- IIS same-origin reverse proxy for /api/* and TLS/static hosting configuration.
-- Platform Admin store/MFA/break-glass; WebAuthn/passkey.
-- Non-Windows production Data Protection protector, distributed rate limiting and trusted proxy configuration.
-- Salon dashboard, bookings, customers, billing and other business UI pending.
-- No production deployment authorized or performed.
+## External production gates
+- SES sender identity/DNS/DKIM/SPF/DMARC, production access and IAM.
+- Apply migrations through 012 and provision restricted roles in target environment.
+- IIS same-origin /api reverse proxy and TLS.
+- Platform Admin identity/MFA/break-glass; WebAuthn/passkey.
+- Non-Windows Data Protection protection, distributed rate limiting, trusted proxy.
+- Salon dashboard and business workflows remain incomplete.
+- No production deployment authorized.
 
 ## Continuity rule
-After every completed increment, create a new versioned status file, update this index and manifest, commit directly to this branch, then verify exact SHA and files. Preserve prior versions. Record only tests/CI actually observed. No main changes, no deployment, no production data.
+After every completed increment, write a new versioned status file, update this index and manifest, commit directly to this branch, verify exact SHA and files, and preserve all earlier status versions. Report only observed tests/CI.
