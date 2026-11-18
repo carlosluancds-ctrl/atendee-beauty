@@ -17,10 +17,22 @@ public sealed class AtendeeIdentityDbContext(
     IDataProtectionProvider dataProtectionProvider)
     : IdentityUserContext<OperationalIdentityUser, Guid>(options)
 {
+    internal DbSet<SecurityAuditEventRow> SecurityAuditEvents => Set<SecurityAuditEventRow>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
         builder.HasDefaultSchema("identity");
+
+        var audit = builder.Entity<SecurityAuditEventRow>();
+        audit.ToTable("SecurityAuditEvents", "identity");
+        audit.HasKey(row => row.Id).HasName("PK_SecurityAuditEvents");
+        audit.Property(row => row.Id).HasColumnName("Id");
+        audit.Property(row => row.EventType).HasColumnName("EventType").HasMaxLength(80).IsRequired();
+        audit.Property(row => row.ActorIdentityUserId).HasColumnName("ActorIdentityUserId");
+        audit.Property(row => row.TargetIdentityUserId).HasColumnName("TargetIdentityUserId").IsRequired();
+        audit.Property(row => row.OccurredAtUtc).HasColumnName("OccurredAtUtc").IsRequired();
+        audit.Property(row => row.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(64);
 
         // The first release intentionally uses one globally unique email per
         // operational identity to prevent ambiguous multi-salon logins.

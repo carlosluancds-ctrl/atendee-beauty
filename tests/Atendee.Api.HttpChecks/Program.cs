@@ -167,6 +167,29 @@ try
             "Account disablement service finds the operational identity.");
     }
 
+    var auditTypes = await ReadSecurityAuditTypesAsync(migratorConnectionString, userId);
+    Ensure(auditTypes.Length == 2 &&
+           auditTypes.Contains("operational_account.sessions_revoked") &&
+           auditTypes.Contains("operational_account.disabled"),
+        "Session revocation and account disablement are durably recorded.");
+
+    var auditMutationDenied = false;
+    try
+    {
+        await using var auditConnection = new NpgsqlConnection(identityConnectionString);
+        await auditConnection.OpenAsync();
+        await using var mutation = new NpgsqlCommand(
+            @"UPDATE identity.""SecurityAuditEvents"" SET ""EventType"" = 'operational_account.disabled' WHERE ""TargetIdentityUserId"" = @target", auditConnection);
+        mutation.Parameters.AddWithValue("target", userId);
+        await mutation.ExecuteNonQueryAsync();
+    }
+    catch (PostgresException exception) when
+        (exception.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+    {
+        auditMutationDenied = true;
+    }
+    Ensure(auditMutationDenied, "The runtime identity role cannot update or rewrite audit events.");
+
     var disabledSession = await client.GetAsync("/api/v1/auth/me");
     Ensure(disabledSession.StatusCode == HttpStatusCode.Unauthorized,
         "Account disablement invalidates an already-issued cookie on the next request.");
@@ -556,4 +579,24 @@ static async Task UpdateMembershipAsync(
     }
 
     await transaction.CommitAsync();
+}
+
+static async Task<string[]> ReadSecurityAuditTypesAsync(string connectionString, Guid targetUserId)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using var command = new NpgsqlCommand(
+        @"SELECT ""EventType"" FROM identity.""SecurityAuditEvents"" WHERE ""TargetIdentityUserId"" = @target ORDER BY ""OccurredAtUtc"", ""Id"" ", connection, transaction);
+    command.Parameters.AddWithValue("target", targetUserId);
+    var values = new List<string>();
+    await using var reader = await command.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
+        values.Add(reader.GetString(0));
+
+    await transaction.CommitAsync();
+    return values.ToArray();
 }

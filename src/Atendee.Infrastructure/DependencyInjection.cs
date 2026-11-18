@@ -55,6 +55,7 @@ public static class DependencyInjection
 
         services.AddScoped<ITenantMembershipResolver, PostgresTenantMembershipResolver>();
         services.AddScoped<IOperationalAccountSecurityService, OperationalAccountSecurityService>();
+        services.AddScoped<ISecurityAuditWriter, PostgresSecurityAuditWriter>();
         services.AddScoped<TrustedRequestContext>();
         services.AddScoped<ICurrentTenantContext>(provider =>
             provider.GetRequiredService<TrustedRequestContext>());
