@@ -34,6 +34,7 @@ await using var provider = services.BuildServiceProvider(new ServiceProviderOpti
 
 var provisionerServices = new ServiceCollection();
 provisionerServices.AddLogging();
+provisionerServices.AddAuthentication().AddIdentityCookies();
 provisionerServices.AddDataProtection().SetApplicationName("AtendeeBeauty")
     .PersistKeysToFileSystem(new DirectoryInfo(keyRing));
 provisionerServices.AddAtendeeIdentity(provisionerConnectionString!);
