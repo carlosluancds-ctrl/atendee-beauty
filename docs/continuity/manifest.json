@@ -4,7 +4,7 @@
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
   "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V61_2026-11-18.md",
-  "latest_repository_commit": "PENDING_CHECKPOINT_COMMIT",
+  "latest_repository_commit": "70eaf13404d71da04c7fae8248d4ad156c2020a3",
   "latest_ci": {
     "v59_run": "44299982400",
     "v59_status": "success",
@@ -29,5 +29,6 @@
     "production_deploy_authorized": false,
     "ses_configuration_authorized": false,
     "billing_trial_activation_authorized": false
-  }
+  },
+  "latest_checkpoint_commit": "70eaf13404d71da04c7fae8248d4ad156c2020a3"
 }
