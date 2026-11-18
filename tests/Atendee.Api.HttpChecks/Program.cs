@@ -490,7 +490,7 @@ try
            ownerMfaLoginBody.GetProperty("state").GetString() == "mfa_required",
         "Owner with MFA enabled receives only a two-factor challenge session.");
     Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId))
-               .Count(type => type == "operational_auth.password_verified_mfa_pending") == 2,
+               .Count(type => type == "operational_auth.password_verified_mfa_pending") == 3,
         "Password verification that requires an MFA challenge is audited as pending.");
 
     var recoveryChallenge = await PostWithCsrfAsync(
