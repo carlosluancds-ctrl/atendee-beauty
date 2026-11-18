@@ -628,9 +628,8 @@ try
     Ensure(ownerServicesJson.GetArrayLength() == 1 &&
            ownerServicesJson[0].GetProperty("id").GetGuid() == salonServiceId,
         "Tenant service list contains the created service.");
-    var receptionistCrossTenantService = await client.GetAsync($"/api/v1/services/{salonServiceId}");
-    Ensure(receptionistCrossTenantService.StatusCode == HttpStatusCode.NotFound,
-        "A user from another salon cannot read a service by a known foreign UUID.");
+    Ensure(await ServiceIsHiddenFromTenantAsync(tenantConnectionString, tenantId, ownerTenantId, salonServiceId),
+        "PostgreSQL RLS hides a service from a different salon even when its UUID is known.");
     var updateSalonService = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/services/{salonServiceId}")
     {
         Content = JsonContent.Create(new
@@ -1413,6 +1412,37 @@ static async Task<string[]> ReadSecurityAuditTypesAsync(string connectionString,
 
     await transaction.CommitAsync();
     return values.ToArray();
+}
+
+static async Task<bool> ServiceIsHiddenFromTenantAsync(
+    string connectionString,
+    Guid foreignTenantId,
+    Guid owningTenantId,
+    Guid serviceId)
+{
+    if (foreignTenantId == owningTenantId)
+        return false;
+
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_runtime", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using (var tenant = new NpgsqlCommand(
+        "SELECT set_config('app.tenant_id', @tenant, true)", connection, transaction))
+    {
+        tenant.Parameters.AddWithValue("tenant", foreignTenantId.ToString("D"));
+        await tenant.ExecuteScalarAsync();
+    }
+
+    await using var query = new NpgsqlCommand(
+        "SELECT count(*) FROM atendee.services WHERE service_id = @service",
+        connection, transaction);
+    query.Parameters.AddWithValue("service", serviceId);
+    var visible = Convert.ToInt32(await query.ExecuteScalarAsync());
+    await transaction.CommitAsync();
+    return visible == 0;
 }
 
 static async Task<string[]> ReadServiceAuditAsync(
