@@ -9,7 +9,9 @@ Documentation-only continuity-policy synchronization. No application code, datab
 - Starting HEAD: `4d33437356b7bdc681a262eb9036e8de22c27c9a`
 - Remote branch SHA was independently confirmed with `git ls-remote` to match that HEAD.
 - Working tree was clean before this documentation change.
-- CI run [44224034308](https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44224034308) was completed successfully for the exact starting HEAD.
+- Starting-HEAD CI run [44224034308](https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44224034308) completed successfully for exact SHA `4d33437356b7bdc681a262eb9036e8de22c27c9a`.
+- V38 content commit: `405b985dcb8054d25e9c37f2ea0eb4961d6bcad6`, pushed to the work branch.
+- V38 CI run [44225192164](https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44225192164) completed `success` for the exact V38 content commit SHA. The PostgreSQL 18.7 workflow passed locked restore, Release build, domain checks, PostgreSQL startup/provisioning, EF Core/RLS checks, Identity/TOTP/tenant-context checks, and API HTTP authentication/session-security checks.
 - `main` was not changed. No deploy, public signup, or admin endpoint was created.
 
 ## Changes in V38
@@ -22,8 +24,8 @@ Documentation-only continuity-policy synchronization. No application code, datab
 
 ## Validation
 - Documentation content was checked against the current repository state.
-- This commit's CI result is pending until GitHub Actions completes; do not mark V38 CI green before checking the exact commit SHA.
-- No application build is claimed for this documentation-only change.
+- CI is green for the exact V38 content commit SHA `405b985dcb8054d25e9c37f2ea0eb4961d6bcad6` (run 44225192164). The workflow included a successful Release build and all configured PostgreSQL/identity/HTTP integration checks.
+- V38 itself changes documentation only; no application source or runtime behavior changed.
 
 ## Next technical step
 Implement trusted `TargetTenantId` association for identity-target audit events, derived from persisted membership by database-side logic in the same transaction. Add negative and positive PostgreSQL integration checks for target consistency and least-privilege grants.
@@ -41,4 +43,4 @@ Guardrails:
 - Remaining Platform Admin, step-up, four-eyes, status transition, and break-glass decisions listed in `docs/technical/ADMIN_ACTIONS_DESIGN_V1.md`.
 
 ## Completion state
-V38 is a documentation-policy step. Its completion requires committing and pushing this file and the updated index, then confirming GitHub Actions for the exact resulting SHA and a clean worktree.
+V38 content commit `405b985dcb8054d25e9c37f2ea0eb4961d6bcad6` was committed, pushed, and validated by successful CI run 44225192164 for that exact SHA. This status file and the index were then updated to record the verified result; the follow-up documentation-only commit is tracked separately by Git/CI.
