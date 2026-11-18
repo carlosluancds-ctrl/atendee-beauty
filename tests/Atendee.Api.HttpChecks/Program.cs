@@ -1141,7 +1141,6 @@ static async Task<bool> TryUpdateMembershipAsync(
     }
     catch (PostgresException ex) when (ex.SqlState == "23514")
     {
-        await transaction.RollbackAsync();
         return true;
     }
 }

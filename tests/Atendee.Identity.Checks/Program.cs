@@ -302,7 +302,6 @@ static async Task<bool> TryDisableMfaAsync(string cs, Guid userId)
     }
     catch (PostgresException ex) when (ex.SqlState == "23514")
     {
-        await transaction.RollbackAsync();
         return true;
     }
 }
@@ -332,7 +331,6 @@ static async Task<bool> TryChangeMembershipAsync(
     }
     catch (PostgresException ex) when (ex.SqlState == "23514")
     {
-        await transaction.RollbackAsync();
         return true;
     }
 }
@@ -357,7 +355,6 @@ static async Task<bool> TryDeleteMembershipAsync(string cs, Guid tenantId, Guid 
     }
     catch (PostgresException ex) when (ex.SqlState == "23514")
     {
-        await transaction.RollbackAsync();
         return true;
     }
 }
@@ -383,7 +380,6 @@ static async Task<bool> TryCreateTenantWithoutOwnerAsync(string cs, Guid tenantI
     }
     catch (PostgresException ex) when (ex.SqlState == "23514")
     {
-        await transaction.RollbackAsync();
         return true;
     }
 }
