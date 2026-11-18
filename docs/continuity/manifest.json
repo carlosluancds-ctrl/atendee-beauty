@@ -1,11 +1,18 @@
 {
-  "backup_version": "v48-login-mfa-ci-verified",
+  "backup_version": "v49-browser-onboarding-review",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V48_2026-11-18.md",
-  "latest_repository_commit": "acddf2f545e861d459724284e1906158385caeed",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V49_2026-11-18.md",
+  "latest_repository_commit": "4a4e6bfc439674ec53561f72340cd447cd1068e8",
   "latest_ci": {
+    "run_id": "44283829889",
+    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44283829889",
+    "status": "success",
+    "tested_commit": "4a4e6bfc439674ec53561f72340cd447cd1068e8"
+  },
+  "latest_implementation_commit": "acddf2f545e861d459724284e1906158385caeed",
+  "latest_implementation_ci": {
     "run_id": "44283430559",
     "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44283430559",
     "status": "success",
@@ -53,11 +60,12 @@
     "MFA setup, verification, cancellation and one-time recovery-code UI",
     "Static esbuild frontend, Node built-in tests and local same-origin development proxy",
     "IIS static hosting web.config with security headers and SPA fallback",
-    "CI frontend npm ci/audit/test/build steps"
+    "CI frontend npm ci/audit/test/build steps",
+    "Browser-level mock-API E2E review of activation, MFA setup, TOTP and recovery-code paths"
   ],
   "not_production_ready": [
-    "Browser-level end-to-end review of login/MFA/activation pending",
-    "Salon dashboard, booking, customer management and billing UI pending",
+    "Real ASP.NET API browser/proxy E2E not performed",
+    "Salon dashboard, bookings, customers, billing and other business UI pending",
     "IIS URL Rewrite/ARR same-origin /api reverse proxy and TLS hosting not configured",
     "SES sender domain/address, DKIM, SPF/DMARC, production access and IAM credentials not configured",
     "Migration 011 and provisioner login must be applied/provisioned in target environment",

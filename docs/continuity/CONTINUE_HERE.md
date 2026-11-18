@@ -6,7 +6,7 @@
 - https://github.com/carlosluancds-ctrl/atendee-beauty
 - Active branch: security/csrf-webhook-antiforgery-v23; never modify main.
 - Latest implementation commit with full CI verified: acddf2f545e861d459724284e1906158385caeed.
-- Latest full CI: run 44283430559 passed for that exact SHA.
+- Latest full CI checkpoint: run 44283829889 passed for commit 4a4e6bfc439674ec53561f72340cd447cd1068e8.
 
 ## Completed
 - V41: offline first-Owner salon provisioning command. Requires existing identity with confirmed email, MFA enabled, no active lockout and no salon membership; atomically creates PendingVerification salon + active Owner membership. No HTTP endpoint.
@@ -16,7 +16,9 @@
 - V44 Identity test provider registration fix is in b66e1e7ae3fc794891177dbeb89bfd7f3c2d7ef0; CI run 44279908188 passed.
 - V45: React/TypeScript activation page. CI run 44282286929 passed for bd16f1d409c3a3571d7d6d5eab8ab39a328474ab.
 - V46: continuity checkpoint; CI run 44282678565 passed for d96a50e676a34bfd9b595bc6ef1128b6826e8edd.
-- V47: login, TOTP/recovery challenge, MFA setup and one-time recovery-code experience. Full CI run 44283430559 passed for acddf2f545e861d459724284e1906158385caeed.
+- V47: login, TOTP/recovery challenge, MFA setup and one-time recovery-code experience. CI run 44283430559 passed for acddf2f545e861d459724284e1906158385caeed.
+- V48: full CI rerun passed for continuity commit 4a4e6bfc439674ec53561f72340cd447cd1068e8 (run 44283829889).
+- V49: browser-level review passed for activation, pending-owner MFA setup, TOTP challenge and recovery-code challenge using Microsoft Edge + a temporary local mock API. No production API or credentials used.
 
 ## V44 backend details
 - No public self-registration, public tenant creation, public account creation route, or public first-Owner endpoint.
@@ -42,16 +44,18 @@
 
 ## Validation observed
 - V47 exact SHA acddf2f545e861d459724284e1906158385caeed: full GitHub Actions run 44283430559 passed.
+- V48 exact SHA 4a4e6bfc439674ec53561f72340cd447cd1068e8: full GitHub Actions run 44283829889 passed.
 - Frontend npm ci, audit, Node tests and strict TypeScript/esbuild build passed.
 - Backend locked restore, Release build, domain, PostgreSQL 18.7 persistence/RLS, Identity/TOTP/activation and API HTTP/antiforgery/session checks passed.
-- Local frontend tests 2/2; npm audit 0 vulnerabilities; static smoke /login, /activate and /assets/app.js all HTTP 200 with CSP.
-- Browser-level end-to-end review and local API proxy integration have not been performed.
+- Browser review: activation token fragment removed; no session on activation or pending-owner MFA; Secure/HttpOnly cookies propagated; TOTP and recovery challenge only create app cookie after success; 8 unsafe calls carried antiforgery.
+- Browser review used a local mock API. Real API proxy/browser E2E remains untested.
+- No real email, production data, DNS changes, server changes or deployment.
 
 ## Immediate next steps
-1. Perform a browser-level review of activation, login, TOTP challenge, recovery-code challenge and pre-membership MFA enrollment. Verify same-origin cookies, CSRF behavior, and no application cookie for pending Owner.
-2. If issues are found, fix and add tests, then rerun npm ci/audit/test/build and full PostgreSQL 18.7 CI.
-3. Document IIS URL Rewrite/ARR and TLS hosting prerequisites without assuming server access or API hostnames.
-4. Configure SES sender identity/DNS, production access, IAM and temporary credentials only when external AWS/domain access is available and authorized. Never send real email or deploy without release gates.
+1. Inspect the approved product backlog and existing domain/API contracts to identify the next core salon workflow.
+2. Do not invent business rules or build dashboard screens without backend capability and product acceptance criteria.
+3. Present a concise implementation plan before non-trivial code changes; backend-first with tests and continuity backup after each increment.
+4. Keep production hosting, SES, DNS and deployment behind explicit external-access and release gates.
 
 ## External setup still pending
 - SES sender domain/address verification, Easy DKIM, SPF/DMARC, SES production access and IAM credentials.
@@ -59,6 +63,7 @@
 - IIS same-origin reverse proxy for /api/* and TLS/static hosting configuration.
 - Platform Admin store/MFA/break-glass; WebAuthn/passkey.
 - Non-Windows production Data Protection protector, distributed rate limiting and trusted proxy configuration.
+- Salon dashboard, bookings, customers, billing and other business UI pending.
 - No production deployment authorized or performed.
 
 ## Continuity rule
