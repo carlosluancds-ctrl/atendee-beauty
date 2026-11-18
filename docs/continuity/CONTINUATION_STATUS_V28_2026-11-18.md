@@ -1,4 +1,4 @@
-﻿# Atendee Beauty - Continuity Status V28 (2026-11-18)
+# Atendee Beauty - Continuity Status V28 (2026-11-18)
 
 ## Repository
 - Branch: security/csrf-webhook-antiforgery-v23
@@ -43,7 +43,7 @@ No administrative audit query/export endpoint exists. Account disable/revoke met
 - Release build passes with zero warnings and zero errors.
 - Domain checks: 15/15.
 - The audit-ledger/MFA increment passed PostgreSQL 18.7 CI run 44210254600 on commit b028d154d87519fd1c48b7f66a81623451325f37.
-- The expanded four-role matrix in this V28 increment requires its own CI confirmation after push.
+- The expanded four-role matrix passed PostgreSQL 18.7 CI run 44210726600 (SUCCESS) on commit 7230b69f52925a6dfa274711a1ff7df7bdbb4bb7.
 
 ## Remaining work
 - Audit login success/failure, failed MFA, membership changes, and administrative actions.
