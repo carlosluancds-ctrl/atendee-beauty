@@ -290,7 +290,7 @@ export default function ProfessionalPage() {
                   {ownServices.map(service => (
                     <li key={service.id}>
                       <span><strong>{service.name}</strong><small>{service.durationMinutes} min · {service.isActive ? "Ativo" : "Inativo"}</small></span>
-                      <span>{(service.priceMinorUnits / 100).toLocaleString("pt-BR", { style: "currency", currency: service.currency })}</span>
+                      <span>{service.priceMinorUnits.toLocaleString("pt-BR")} <small>{service.currency} · unidade menor</small></span>
                     </li>
                   ))}
                 </ul>
