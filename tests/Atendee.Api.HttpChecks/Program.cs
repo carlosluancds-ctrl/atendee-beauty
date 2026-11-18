@@ -630,95 +630,95 @@ try
         "Tenant service list contains the created service.");
     Ensure(await ServiceIsHiddenFromTenantAsync(tenantConnectionString, tenantId, ownerTenantId, salonServiceId),
         "PostgreSQL RLS hides a service from a different salon even when its UUID is known.");
-    var professionalEmail = "http-professional-" + Guid.NewGuid().ToString("N") + "@example.invalid";
-    const string professionalPassword = "Atendee-Professional-HTTP-2026!";
-    var professionalUserId = Guid.NewGuid();
+    var assignedAssignedProfessionalEmail = "http-professional-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string assignedAssignedProfessionalPassword = "Atendee-Professional-HTTP-2026!";
+    var assignedAssignedProfessionalUserId = Guid.NewGuid();
     await using (var scope = mfaFactory.Services.CreateAsyncScope())
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
         var professionalUser = new OperationalIdentityUser
         {
-            Id = professionalUserId,
-            UserName = professionalEmail,
-            Email = professionalEmail,
+            Id = assignedAssignedProfessionalUserId,
+            UserName = assignedAssignedProfessionalEmail,
+            Email = assignedAssignedProfessionalEmail,
             EmailConfirmed = true,
             TwoFactorEnabled = false
         };
-        var created = await users.CreateAsync(professionalUser, professionalPassword);
+        var created = await users.CreateAsync(professionalUser, assignedAssignedProfessionalPassword);
         Ensure(created.Succeeded, "Synthetic professional identity is created for service-assignment tests.");
     }
-    await SeedAdditionalMembershipAsync(migratorConnectionString, ownerTenantId, professionalUserId, roleId: 4);
+    await SeedAdditionalMembershipAsync(migratorConnectionString, ownerTenantId, assignedAssignedProfessionalUserId, roleId: 4);
 
-    var invalidProfessional = await PostWithCsrfAsync(mfaClient, "/api/v1/professionals", mfaRequestToken!, new
+    var assignedInvalidProfessional = await PostWithCsrfAsync(mfaClient, "/api/v1/professionals", mfaRequestToken!, new
     {
         identityUserId = ownerUserId
     });
-    Ensure(invalidProfessional.StatusCode == HttpStatusCode.BadRequest,
+    Ensure(assignedInvalidProfessional.StatusCode == HttpStatusCode.BadRequest,
         "Owner cannot create a professional profile for an identity with the wrong tenant role.");
 
-    var createProfessional = await PostWithCsrfAsync(mfaClient, "/api/v1/professionals", mfaRequestToken!, new
+    var assignedCreateProfessional = await PostWithCsrfAsync(mfaClient, "/api/v1/professionals", mfaRequestToken!, new
     {
-        identityUserId = professionalUserId
+        identityUserId = assignedAssignedProfessionalUserId
     });
-    Ensure(createProfessional.StatusCode == HttpStatusCode.Created,
+    Ensure(assignedCreateProfessional.StatusCode == HttpStatusCode.Created,
         "Owner can create a professional profile only for an active Professional membership.");
-    var professionalProfile = await createProfessional.Content.ReadFromJsonAsync<JsonElement>();
-    var professionalProfileId = professionalProfile.GetProperty("id").GetGuid();
-    Ensure(professionalProfile.GetProperty("identityUserId").GetGuid() == professionalUserId &&
-           !string.IsNullOrWhiteSpace(professionalProfile.GetProperty("displayName").GetString()),
+    var assignedAssignedProfessionalProfile = await assignedCreateProfessional.Content.ReadFromJsonAsync<JsonElement>();
+    var assignedAssignedProfessionalProfileId = assignedAssignedProfessionalProfile.GetProperty("id").GetGuid();
+    Ensure(assignedAssignedProfessionalProfile.GetProperty("identityUserId").GetGuid() == assignedAssignedProfessionalUserId &&
+           !string.IsNullOrWhiteSpace(assignedAssignedProfessionalProfile.GetProperty("displayName").GetString()),
         "Professional profile binds the operational identity and uses the trusted membership display name.");
 
-    var invalidAssignment = await PutWithCsrfAsync(
-        mfaClient, $"/api/v1/professionals/{professionalProfileId}/services",
+    var assignedInvalidAssignment = await PutWithCsrfAsync(
+        mfaClient, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/services",
         mfaRequestToken!, new { serviceIds = new[] { Guid.NewGuid() } });
-    Ensure(invalidAssignment.StatusCode == HttpStatusCode.BadRequest,
+    Ensure(assignedInvalidAssignment.StatusCode == HttpStatusCode.BadRequest,
         "Owner cannot assign a service that does not belong to the current salon.");
 
-    var assignProfessionalService = await PutWithCsrfAsync(
-        mfaClient, $"/api/v1/professionals/{professionalProfileId}/services",
+    var assignedAssignProfessionalService = await PutWithCsrfAsync(
+        mfaClient, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/services",
         mfaRequestToken!, new { serviceIds = new[] { salonServiceId } });
-    Ensure(assignProfessionalService.StatusCode == HttpStatusCode.OK,
+    Ensure(assignedAssignProfessionalService.StatusCode == HttpStatusCode.OK,
         "Owner can assign an active service from the same salon to a professional.");
-    var assignedProfessional = await assignProfessionalService.Content.ReadFromJsonAsync<JsonElement>();
-    Ensure(assignedProfessional.GetProperty("serviceIds").GetArrayLength() == 1 &&
-           assignedProfessional.GetProperty("serviceIds")[0].GetGuid() == salonServiceId,
+    var assignedAssignedProfessional = await assignedAssignProfessionalService.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(assignedAssignedProfessional.GetProperty("serviceIds").GetArrayLength() == 1 &&
+           assignedAssignedProfessional.GetProperty("serviceIds")[0].GetGuid() == salonServiceId,
         "Professional profile returns only its explicitly assigned service IDs.");
 
-    var professionalList = await mfaClient.GetAsync("/api/v1/professionals");
-    Ensure(professionalList.StatusCode == HttpStatusCode.OK,
+    var assignedAssignedProfessionalList = await mfaClient.GetAsync("/api/v1/professionals");
+    Ensure(assignedAssignedProfessionalList.StatusCode == HttpStatusCode.OK,
         "Owner can list professional profiles in the current salon.");
-    var professionalListBody = await professionalList.Content.ReadFromJsonAsync<JsonElement>();
-    Ensure(professionalListBody.GetArrayLength() == 1 &&
-           professionalListBody[0].GetProperty("id").GetGuid() == professionalProfileId,
+    var assignedAssignedProfessionalListBody = await assignedAssignedProfessionalList.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(assignedAssignedProfessionalListBody.GetArrayLength() == 1 &&
+           assignedAssignedProfessionalListBody[0].GetProperty("id").GetGuid() == assignedAssignedProfessionalProfileId,
         "Professional list contains the current salon's profile.");
 
-    using var professionalClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
+    using var assignedAssignedProfessionalClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         AllowAutoRedirect = false,
         HandleCookies = true
     });
-    var professionalCsrf = await professionalClient.GetAsync("/api/v1/auth/antiforgery");
-    var professionalCsrfBody = await professionalCsrf.Content.ReadFromJsonAsync<JsonElement>();
-    var professionalRequestToken = professionalCsrfBody.GetProperty("requestToken").GetString();
-    Ensure(professionalCsrf.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(professionalRequestToken),
+    var assignedAssignedProfessionalCsrf = await assignedAssignedProfessionalClient.GetAsync("/api/v1/auth/antiforgery");
+    var assignedAssignedProfessionalCsrfBody = await assignedAssignedProfessionalCsrf.Content.ReadFromJsonAsync<JsonElement>();
+    var assignedAssignedProfessionalRequestToken = assignedAssignedProfessionalCsrfBody.GetProperty("requestToken").GetString();
+    Ensure(assignedAssignedProfessionalCsrf.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(assignedAssignedProfessionalRequestToken),
         "Professional client obtains an antiforgery token.");
-    var professionalLogin = await PostWithCsrfAsync(professionalClient, "/api/v1/auth/login", professionalRequestToken!, new
+    var assignedAssignedProfessionalLogin = await PostWithCsrfAsync(assignedAssignedProfessionalClient, "/api/v1/auth/login", assignedAssignedProfessionalRequestToken!, new
     {
-        email = professionalEmail,
-        password = professionalPassword
+        email = assignedAssignedProfessionalEmail,
+        password = assignedAssignedProfessionalPassword
     });
-    Ensure(professionalLogin.StatusCode == HttpStatusCode.OK,
+    Ensure(assignedAssignedProfessionalLogin.StatusCode == HttpStatusCode.OK,
         "Professional identity can sign in with its own operational membership.");
-    var ownProfessionalProfile = await professionalClient.GetAsync("/api/v1/professionals/me");
-    Ensure(ownProfessionalProfile.StatusCode == HttpStatusCode.OK,
+    var assignedOwnProfessionalProfile = await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals/me");
+    Ensure(assignedOwnProfessionalProfile.StatusCode == HttpStatusCode.OK,
         "Professional can read only its own profile through the /me route.");
-    var ownProfessionalBody = await ownProfessionalProfile.Content.ReadFromJsonAsync<JsonElement>();
-    Ensure(ownProfessionalBody.GetProperty("id").GetGuid() == professionalProfileId &&
-           ownProfessionalBody.GetProperty("serviceIds").GetArrayLength() == 1 &&
-           ownProfessionalBody.GetProperty("serviceIds")[0].GetGuid() == salonServiceId,
+    var assignedOwnProfessionalBody = await assignedOwnProfessionalProfile.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(assignedOwnProfessionalBody.GetProperty("id").GetGuid() == assignedAssignedProfessionalProfileId &&
+           assignedOwnProfessionalBody.GetProperty("serviceIds").GetArrayLength() == 1 &&
+           assignedOwnProfessionalBody.GetProperty("serviceIds")[0].GetGuid() == salonServiceId,
         "Professional self-profile exposes only its own assigned services.");
-    Ensure((await professionalClient.GetAsync("/api/v1/professionals")).StatusCode == HttpStatusCode.Forbidden &&
-           (await professionalClient.GetAsync("/api/v1/services")).StatusCode == HttpStatusCode.Forbidden,
+    Ensure((await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals")).StatusCode == HttpStatusCode.Forbidden &&
+           (await assignedAssignedProfessionalClient.GetAsync("/api/v1/services")).StatusCode == HttpStatusCode.Forbidden,
         "Professional cannot list other profiles or access the unscoped service catalogue.");
 
     var professionalAudit = await ReadProfessionalAuditAsync(
