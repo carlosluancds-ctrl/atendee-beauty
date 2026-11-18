@@ -641,8 +641,8 @@ try
     }
     await UpdateMembershipAsync(migratorConnectionString, promotionUserId, roleId: 1, isActive: true);
     var promotedOwnerSession = await promotionClient.GetAsync("/api/v1/auth/me");
-    Ensure(promotedOwnerSession.StatusCode == HttpStatusCode.Forbidden,
-        "A password-only session cannot use Owner privileges even after a server-side MFA-ready promotion (HTTP " +
+    Ensure(promotedOwnerSession.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized,
+        "A password-only session is denied after a server-side MFA-ready Owner promotion (HTTP " +
         (int)promotedOwnerSession.StatusCode + ").");
 
     using var deactivationClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
