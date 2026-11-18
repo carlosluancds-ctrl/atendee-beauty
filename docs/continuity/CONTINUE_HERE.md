@@ -1,39 +1,40 @@
 # CONTINUE HERE — Atendee Beauty (auto-backup updated each step)
 
-**Primary resume context:** this file plus the highest-numbered `docs/continuity/CONTINUATION_STATUS_V*.md`. Read `CLAUDE.md`, this file, and the newest status file before any code change.
+**Primary resume context:** read `CLAUDE.md`, this file, and the highest-numbered `docs/continuity/CONTINUATION_STATUS_V*.md` before changing code.
 
-## Repository and branch
-- Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
-- Active work branch: `security/csrf-webhook-antiforgery-v23`. Never modify `main`.
-- At V42 documentation checkpoint, the remote code baseline was `5e37dbbcc23ddd40a7cf478b2b2947ad74bfcba5`; V42 adds a documentation-only commit on this branch.
-- Latest code CI before V42: run 44235109072 passed for code SHA `5e37dbbcc23ddd40a7cf478b2b2947ad74bfcba5`: https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44235109072
-- Re-check remote branch SHA, latest CI and local worktree before every implementation increment. The local Windows clone was not accessible during V42.
+## Repository
+- https://github.com/carlosluancds-ctrl/atendee-beauty
+- Active branch: `security/csrf-webhook-antiforgery-v23`; never modify `main`.
+- V42 commit: `84faf49e76ed695b7c4ebaa99c555271bc226ef3`.
+- V42 PostgreSQL 18.7 CI: run 44273325577 passed for exact V42 SHA: https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44273325577.
+- V43 adds only architecture/continuity documentation. Verify the remote HEAD before starting.
 
-## Completed work
-- V41: offline first-Owner salon provisioning command. It requires an existing confirmed-email identity with MFA enabled, no active lockout and no existing salon membership; creates PendingVerification salon + active Owner membership atomically. No HTTP route. See `CONTINUATION_STATUS_V41_2026-11-18.md` and `docs/operations/FIRST_OWNER_PROVISIONING.md`.
-- V42: owner approved a separate protected operator command to create the initial operational identity and initiate activation. Decision only; no code, email provider, endpoint, or deployment added. See `CONTINUATION_STATUS_V42_2026-11-18.md`.
+## Completed
+- V41: offline first-Owner salon provisioning command. Requires an existing identity with confirmed email, MFA enabled, no active lockout and no salon membership; atomically creates PendingVerification salon + active Owner membership. No HTTP endpoint.
+- V42: owner approved a separate protected operator command to create the initial operational identity and initiate activation.
+- V43: selected Amazon SES API v2 as the default transactional email provider and documented the complete activation design. No code or AWS resource changed yet.
+- Detailed design: `docs/technical/OPERATIONAL_IDENTITY_ACTIVATION_DESIGN_V1.md`.
 
-## Decisions and boundaries
-- Approved: first operational identity creation via a separate protected operator command that starts activation.
-- Not approved: public self-registration, public salon provisioning, or account-creation endpoint.
-- V41's salon provisioning command remains separate and must not create identities/passwords.
-- The new identity must confirm email, set its password, and complete pre-membership MFA before V41 can attach the Owner membership.
-- Outbound email provider remains unselected. Do not implement real email delivery or configure provider credentials until the owner chooses one.
-- Use ASP.NET Core Identity; never implement password hashing directly.
-- Never place passwords, activation tokens, email-confirmation tokens, TOTP secrets or recovery codes in CLI arguments, logs, console output, CI logs or audit events.
-- Any application-managed activation token must be high entropy, single use, expiring, bound to the intended identity/email, and stored only as a cryptographic hash.
-- Preserve all other V41 security/product guardrails and unresolved product decisions.
+## Approved boundaries and design
+- No public self-registration, no public tenant creation, no public account-creation endpoint.
+- Separate offline identity-provisioning command; separate from V41.
+- Pending ASP.NET Identity account has no password and EmailConfirmed=false.
+- 256-bit random activation token, single-use, 30-minute expiry; persist only SHA-256 hash. Never expose token in CLI, logs, telemetry, exceptions or audit events.
+- Activation POST accepts only operator-issued token + new password; atomic token consumption, Identity password creation and email confirmation. No application session is issued.
+- Then user signs in and completes existing pre-membership MFA; only then V41 creates the first Owner membership.
+- SES v2 through AWS SDK .NET v4 (`AWSSDK.SimpleEmailV2`); credential provider chain; IAM least privilege; no long-lived credentials in repo.
+- Dedicated DB login `atendee_identity_provisioner` with SET only to `atendee_identity_owner`.
+- SES live delivery needs verified sender domain, DKIM/SPF/DMARC DNS, production access and temporary AWS credentials. No live email or deployment without explicit external authorization.
+- Do not add a fake sender that claims success.
 
-## Next step
-Ask the owner which transactional email provider to use for activation delivery. Once selected, inspect official integration and secret-management requirements, then present the specific implementation plan before changing code.
+## Next backend increments
+1. Recheck branch HEAD and CI; get a usable clean local clone/build environment before editing code.
+2. Implement dedicated provisioning DB role + activation token migration and PostgreSQL integration checks.
+3. Implement offline identity provisioning/re-issue command using ASP.NET Identity.
+4. Implement SES v2 sender with fake-client tests and locked package restore.
+5. Implement activation API with atomic token/password/email confirmation and abuse controls.
+6. Run full PostgreSQL 18.7 CI, review logs, update operational docs.
+7. Only after backend gates pass, begin frontend activation UI.
 
-## Mandatory continuity artifact rule
-At the end of every completed code or documentation step:
-1. Create a new `docs/continuity/CONTINUATION_STATUS_VNN_YYYY-MM-DD.md` using the next unused version number; never overwrite old status files.
-2. Update this index and `docs/continuity/manifest.json`.
-3. Commit/push directly to this work branch and verify the commit and file paths.
-4. Record exact tests/build/CI and SHA only when actually observed. For docs-only changes, explicitly state that code tests/build were not run.
-5. Preserve all previous status files and never change `main`.
-
-## Absolute guardrails
-No main changes, no deployment, no public signup, no client-trusted tenant/role/actor, no secrets in logs, no unapproved Platform Admin or tenant-status mutation features. CI green is not production approval.
+## Continuity rule
+After every completed increment, create a new versioned status file, update this index and manifest, commit directly to this branch, then verify exact SHA and files. Preserve all prior versions. Record only tests/CI actually observed. No main changes, no deployment, no production data.
