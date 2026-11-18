@@ -142,6 +142,12 @@ public static class OperationalAuthenticationEndpoints
         var privilegedRole = membership.Role is TenantRole.Owner or TenantRole.Manager;
         if (privilegedRole && !user.TwoFactorEnabled)
         {
+            // The password was verified but no application session exists yet.
+            // The actor is intentionally null: authentication is not complete.
+            // Audit first so a failed mandatory write issues no setup cookie.
+            await auditWriter.WriteAsync("operational_auth.password_verified_mfa_pending",
+                null, user.Id, httpContext.RequestAborted);
+
             var claims = new[]
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
@@ -178,7 +184,13 @@ public static class OperationalAuthenticationEndpoints
             httpContext.Response.Headers.CacheControl = "no-store";
 
             if (signIn.RequiresTwoFactor)
+            {
+                // Password verified, challenge still pending: null actor, no
+                // application cookie. A failed mandatory audit write fails the request.
+                await auditWriter.WriteAsync("operational_auth.password_verified_mfa_pending",
+                    null, user.Id, httpContext.RequestAborted);
                 return Results.Accepted(value: new LoginStateResponse("mfa_required"));
+            }
 
             if (!signIn.Succeeded)
                 return GenericLoginFailure();
@@ -376,7 +388,19 @@ public static class OperationalAuthenticationEndpoints
 
             if (!valid)
             {
-                await userManager.AccessFailedAsync(user);
+                // The failed-attempt counter and its audit event commit together.
+                // Volume is bounded: the auth-mfa rate limiter applies, and once
+                // lockout is reached GetSetupUserAsync rejects further attempts
+                // before any event is written. The submitted code is never stored.
+                await using (var failureTransaction = await identityDb.Database.BeginTransactionAsync(
+                    httpContext.RequestAborted))
+                {
+                    await userManager.AccessFailedAsync(user);
+                    await auditWriter.WriteAsync("operational_mfa.enrollment_failed",
+                        null, user.Id, httpContext.RequestAborted);
+                    await failureTransaction.CommitAsync(httpContext.RequestAborted);
+                }
+
                 if (await userManager.IsLockedOutAsync(user))
                 {
                     await httpContext.SignOutAsync(MfaSetupScheme);

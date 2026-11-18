@@ -277,6 +277,11 @@ try
     Ensure(ownerLogin.StatusCode == HttpStatusCode.Accepted &&
            ownerLoginBody.GetProperty("state").GetString() == "mfa_setup_required",
         "Owner without MFA receives only a short-lived MFA-setup session.");
+    var pendingSetupAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
+    Ensure(pendingSetupAudit.Count(type => type == "operational_auth.password_verified_mfa_pending") == 1 &&
+           !pendingSetupAudit.Contains("operational_auth.login_succeeded") &&
+           !pendingSetupAudit.Contains("operational_auth.login_failed"),
+        "Password verification that still requires MFA setup is audited as pending, not as a successful login.");
 
     var enrollmentStart = await PostWithCsrfAsync(
         mfaClient, "/api/v1/auth/mfa/enrollment/start", mfaRequestToken!, new { });
@@ -297,6 +302,31 @@ try
         enrollmentCode = await users.GenerateTwoFactorTokenAsync(
             owner!, users.Options.Tokens.AuthenticatorTokenProvider);
     }
+
+    var auditBeforeInvalidEnrollment = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
+    var blankEnrollment = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/mfa/enrollment/verify", mfaRequestToken!, new { code = " " });
+    Ensure(blankEnrollment.StatusCode == HttpStatusCode.BadRequest &&
+           (await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId)).Length ==
+               auditBeforeInvalidEnrollment.Length,
+        "Malformed enrollment input is rejected without growing the audit ledger.");
+
+    var wrongEnrollmentCode = enrollmentCode == "000000" ? "000001" : "000000";
+    var invalidEnrollment = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/mfa/enrollment/verify", mfaRequestToken!, new
+        {
+            code = wrongEnrollmentCode
+        });
+    Ensure(invalidEnrollment.StatusCode == HttpStatusCode.BadRequest,
+        "An invalid authenticator code is rejected during MFA enrollment.");
+    var enrollmentFailureAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
+    Ensure(enrollmentFailureAudit.Count(type => type == "operational_mfa.enrollment_failed") == 1 &&
+           !enrollmentFailureAudit.Contains("operational_mfa.enrolled") &&
+           !enrollmentFailureAudit.Contains("operational_mfa.challenge_failed"),
+        "A failed MFA enrollment attempt is durably audited exactly once and does not enable MFA.");
+    Ensure(await CountAuditEventsWithActorAsync(migratorConnectionString, ownerUserId,
+               "operational_mfa.enrollment_failed", "operational_auth.password_verified_mfa_pending") == 0,
+        "Pending-MFA and enrollment-failure events carry no actor: the identity is not yet authenticated.");
 
     var enrollmentVerify = await PostWithCsrfAsync(
         mfaClient, "/api/v1/auth/mfa/enrollment/verify", mfaRequestToken!, new
@@ -343,6 +373,9 @@ try
     Ensure(ownerMfaLogin.StatusCode == HttpStatusCode.Accepted &&
            ownerMfaLoginBody.GetProperty("state").GetString() == "mfa_required",
         "Owner with MFA enabled receives only a two-factor challenge session.");
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId))
+               .Count(type => type == "operational_auth.password_verified_mfa_pending") == 2,
+        "Password verification that requires an MFA challenge is audited as pending.");
 
     var recoveryChallenge = await PostWithCsrfAsync(
         mfaClient, "/api/v1/auth/mfa/challenge", mfaRequestToken!, new
@@ -555,6 +588,17 @@ try
     var managerAntiforgery = await managerClient.GetAsync("/api/v1/auth/antiforgery");
     var managerToken = (await managerAntiforgery.Content.ReadFromJsonAsync<JsonElement>())!
         .GetProperty("requestToken").GetString();
+    var managerWrongPassword = await PostWithCsrfAsync(managerClient, "/api/v1/auth/login", managerToken!, new
+    {
+        email = managerEmail,
+        password = "Incorrect-Manager-Password-2026!"
+    });
+    var managerFailureAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, managerUserId);
+    Ensure(managerWrongPassword.StatusCode == HttpStatusCode.Unauthorized &&
+           managerFailureAudit.Count(type => type == "operational_auth.login_failed") == 1 &&
+           !managerFailureAudit.Contains("operational_auth.password_verified_mfa_pending"),
+        "An incorrect password never produces a pending-MFA event; it is audited as a login failure.");
+
     var managerLogin = await PostWithCsrfAsync(managerClient, "/api/v1/auth/login", managerToken!, new
     {
         email = managerEmail,
@@ -564,6 +608,9 @@ try
     Ensure(managerLogin.StatusCode == HttpStatusCode.Accepted &&
            managerLoginBody.GetProperty("state").GetString() == "mfa_setup_required",
         "Manager without MFA receives only the restricted MFA-setup session.");
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, managerUserId))
+               .Count(type => type == "operational_auth.password_verified_mfa_pending") == 1,
+        "Manager password verification that requires MFA setup is audited as pending exactly once.");
     Ensure((await managerClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "Manager cannot use the application API before completing MFA.");
 
@@ -764,4 +811,24 @@ static async Task<string[]> ReadSecurityAuditTypesAsync(string connectionString,
 
     await transaction.CommitAsync();
     return values.ToArray();
+}
+
+static async Task<int> CountAuditEventsWithActorAsync(
+    string connectionString,
+    Guid targetUserId,
+    params string[] eventTypes)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using var command = new NpgsqlCommand(
+        @"SELECT count(*) FROM identity.""SecurityAuditEvents"" WHERE ""TargetIdentityUserId"" = @target AND ""EventType"" = ANY(@types) AND ""ActorIdentityUserId"" IS NOT NULL", connection, transaction);
+    command.Parameters.AddWithValue("target", targetUserId);
+    command.Parameters.AddWithValue("types", eventTypes);
+    var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+    await transaction.CommitAsync();
+    return count;
 }

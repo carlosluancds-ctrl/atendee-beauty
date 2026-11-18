@@ -13,8 +13,10 @@ public sealed class PostgresSecurityAuditWriter(AtendeeIdentityDbContext db) : I
         "operational_mfa.totp_challenge_succeeded",
         "operational_mfa.recovery_code_redeemed",
         "operational_mfa.challenge_failed",
+        "operational_mfa.enrollment_failed",
         "operational_auth.login_succeeded",
-        "operational_auth.login_failed"
+        "operational_auth.login_failed",
+        "operational_auth.password_verified_mfa_pending"
     };
 
     public async Task WriteAsync(string eventType, Guid? actorIdentityUserId, Guid targetIdentityUserId,
