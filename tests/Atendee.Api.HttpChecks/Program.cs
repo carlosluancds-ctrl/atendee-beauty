@@ -343,7 +343,90 @@ try
     Ensure(replayChallenge.StatusCode == HttpStatusCode.Unauthorized,
         "A previously redeemed recovery code cannot be reused.");
 
-    Console.WriteLine("RESULT: HTTP authentication, antiforgery, cookies, session revocation, logout and MFA checks passed.");
+    using var promotionClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    var promotionEmail = "http-promotion-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string promotionPassword = "Atendee-Promotion-HTTP-2026!";
+    var promotionTenantId = Guid.NewGuid();
+    Guid promotionUserId;
+    await using (var scope = mfaFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var receptionist = new OperationalIdentityUser
+        {
+            UserName = promotionEmail,
+            Email = promotionEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(receptionist, promotionPassword);
+        Ensure(created.Succeeded, "Synthetic receptionist for role-change checks is created.");
+        promotionUserId = receptionist.Id;
+    }
+    await SeedMembershipAsync(migratorConnectionString, promotionTenantId, promotionUserId);
+
+    var promotionAntiforgery = await promotionClient.GetAsync("/api/v1/auth/antiforgery");
+    var promotionToken = (await promotionAntiforgery.Content.ReadFromJsonAsync<JsonElement>())
+        .GetProperty("requestToken").GetString();
+    var promotionLogin = await PostWithCsrfAsync(promotionClient, "/api/v1/auth/login", promotionToken!, new
+    {
+        email = promotionEmail,
+        password = promotionPassword
+    });
+    Ensure(promotionLogin.StatusCode == HttpStatusCode.OK &&
+           (await promotionClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
+        "Receptionist establishes a session before a server-side role change.");
+
+    await UpdateMembershipAsync(migratorConnectionString, promotionUserId, roleId: 1, isActive: true);
+    Ensure((await promotionClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Forbidden,
+        "Promoting a password-only session to Owner does not grant privileged access.");
+
+    using var deactivationClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    var deactivationEmail = "http-deactivation-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string deactivationPassword = "Atendee-Deactivation-HTTP-2026!";
+    var deactivationTenantId = Guid.NewGuid();
+    Guid deactivationUserId;
+    await using (var scope = mfaFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var receptionist = new OperationalIdentityUser
+        {
+            UserName = deactivationEmail,
+            Email = deactivationEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(receptionist, deactivationPassword);
+        Ensure(created.Succeeded, "Synthetic receptionist for membership-deactivation checks is created.");
+        deactivationUserId = receptionist.Id;
+    }
+    await SeedMembershipAsync(migratorConnectionString, deactivationTenantId, deactivationUserId);
+
+    var deactivationAntiforgery = await deactivationClient.GetAsync("/api/v1/auth/antiforgery");
+    var deactivationToken = (await deactivationAntiforgery.Content.ReadFromJsonAsync<JsonElement>())
+        .GetProperty("requestToken").GetString();
+    var deactivationLogin = await PostWithCsrfAsync(
+        deactivationClient, "/api/v1/auth/login", deactivationToken!, new
+        {
+            email = deactivationEmail,
+            password = deactivationPassword
+        });
+    Ensure(deactivationLogin.StatusCode == HttpStatusCode.OK &&
+           (await deactivationClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
+        "Receptionist establishes a session before membership deactivation.");
+
+    await UpdateMembershipAsync(migratorConnectionString, deactivationUserId, roleId: 3, isActive: false);
+    Ensure((await deactivationClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
+        "Deactivating membership invalidates the existing tenant session on its next request.");
+
+    Console.WriteLine("RESULT: HTTP authentication, antiforgery, cookies, session revocation, logout, MFA and live membership checks passed.");
 }
 finally
 {
@@ -441,6 +524,35 @@ static async Task SeedMembershipAsync(string connectionString, Guid tenantId, Gu
         membership.Parameters.AddWithValue("user", userId);
         membership.Parameters.AddWithValue("role", roleId);
         await membership.ExecuteNonQueryAsync();
+    }
+
+    await transaction.CommitAsync();
+}
+
+static async Task UpdateMembershipAsync(
+    string connectionString,
+    Guid userId,
+    int roleId,
+    bool isActive)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    await using (var update = new NpgsqlCommand(
+        """
+        UPDATE atendee.tenant_users
+        SET role = @role, is_active = @active
+        WHERE identity_user_id = @user
+        """, connection, transaction))
+    {
+        update.Parameters.AddWithValue("role", roleId);
+        update.Parameters.AddWithValue("active", isActive);
+        update.Parameters.AddWithValue("user", userId);
+        var affected = await update.ExecuteNonQueryAsync();
+        Ensure(affected == 1, "Synthetic membership update affects exactly one row.");
     }
 
     await transaction.CommitAsync();
