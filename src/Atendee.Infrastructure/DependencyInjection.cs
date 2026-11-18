@@ -54,6 +54,7 @@ public static class DependencyInjection
         .AddEntityFrameworkStores<AtendeeIdentityDbContext>();
 
         services.AddScoped<ITenantMembershipResolver, PostgresTenantMembershipResolver>();
+        services.AddScoped<IOperationalAccountSecurityService, OperationalAccountSecurityService>();
         services.AddScoped<TrustedRequestContext>();
         services.AddScoped<ICurrentTenantContext>(provider =>
             provider.GetRequiredService<TrustedRequestContext>());

@@ -170,6 +170,14 @@ if (identityEnabled)
         };
     });
 
+    // Revalidate the Identity security stamp on every authenticated request.
+    // Account disablement and session revocation therefore take effect on the
+    // next request instead of waiting for the default 30-minute interval.
+    builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+    {
+        options.ValidationInterval = TimeSpan.Zero;
+    });
+
     builder.Services.AddAuthorization(options =>
     {
         options.AddPolicy(

@@ -296,7 +296,7 @@ public static class OperationalAuthenticationEndpoints
             return Results.BadRequest(new { error = "invalid_mfa_code" });
 
         var user = await GetSetupUserAsync(httpContext, userManager);
-        if (user is null)
+        if (user is null || user.TwoFactorEnabled)
             return Results.Unauthorized();
 
         var membership = await membershipResolver.ResolveAsync(
@@ -319,8 +319,18 @@ public static class OperationalAuthenticationEndpoints
                 request.Code.Trim());
 
             if (!valid)
-                return Results.BadRequest(new { error = "invalid_mfa_code" });
+            {
+                await userManager.AccessFailedAsync(user);
+                if (await userManager.IsLockedOutAsync(user))
+                {
+                    await httpContext.SignOutAsync(MfaSetupScheme);
+                    return Results.Unauthorized();
+                }
 
+                return Results.BadRequest(new { error = "invalid_mfa_code" });
+            }
+
+            await userManager.ResetAccessFailedCountAsync(user);
             var enabled = await userManager.SetTwoFactorEnabledAsync(user, true);
             if (!enabled.Succeeded)
                 return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
@@ -369,7 +379,11 @@ public static class OperationalAuthenticationEndpoints
         if (!Guid.TryParse(value, out var userId) || userId == Guid.Empty)
             return null;
 
-        return await userManager.FindByIdAsync(userId.ToString());
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is null || await userManager.IsLockedOutAsync(user))
+            return null;
+
+        return user;
     }
 
     private static IResult GenericLoginFailure()
