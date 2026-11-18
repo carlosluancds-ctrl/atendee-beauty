@@ -43,7 +43,7 @@ async function loginWithPassword(page, email, password, expectedPath = "/service
 
 async function logout(page) {
   await page.getByRole("button", { name: "Sair" }).click();
-  await expect(page).toHaveURL(/\\/login$/);
+  await expect(page).toHaveURL(/\/login$/);
 }
 
 async function getAntiforgeryToken(page) {
