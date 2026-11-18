@@ -37,7 +37,9 @@ Trusted tenant association for identity-target audit events. No audit read view,
 - `git diff --check`: passed.
 - `dotnet build Atendee.sln --no-restore --configuration Release -v:q`: succeeded, 0 warnings and 0 errors.
 - `Atendee.Domain.Checks`: 19/19 passed.
-- PostgreSQL 18 integration checks require the CI disposable database and will be recorded after the exact V39 commit is pushed and CI completes.
+- CI run [44226217587](https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44226217587) completed `success` for the exact V39 commit SHA `53859f4c071f8ac1cee4b13a61c8df8159a137a1` on PostgreSQL 18.7.
+- CI passed locked restore, Release build, domain checks, database provisioning, EF Core/RLS, Identity/TOTP/tenant-context, and API HTTP authentication/session checks.
+- The CI log explicitly confirms all new assertions: trusted target tenant on membership audit; forged `TargetTenantId` overwritten; auth-login denied direct membership SELECT and resolver EXECUTE; all identity-target events for a member have the exact tenant; and no-membership identity retains NULL.
 
 ## Product/security boundaries
 - Do not expose tenant-visible audit read views or query/export endpoints until the owner decides audit visibility, retention, and post-Closed handling.
@@ -47,7 +49,7 @@ Trusted tenant association for identity-target audit events. No audit read view,
 - No changes to `main`, no deploy, no public signup, no admin endpoints.
 
 ## Next step
-After V39 CI succeeds, ask the owner to resolve the remaining product decisions before any audit read/export work. In particular: tenant-visible audit scope, retention and post-Closed behavior. Review the proposed last-Owner database invariant with the owner before treating it as an approved business rule.
+Before any audit read/export work, ask the owner to resolve tenant-visible audit scope, retention and post-Closed behavior. Review the proposed last-Owner database invariant with the owner before treating it as an approved business rule.
 
 ## Completion state
-V39 code and this status file must be committed and pushed on the work branch. The step remains pending until GitHub Actions completes successfully for the exact commit SHA and the worktree/remote branch are verified clean and synchronized.
+V39 commit `53859f4c071f8ac1cee4b13a61c8df8159a137a1` was pushed to the work branch and passed CI run 44226217587 for that exact SHA. Local worktree and remote branch were verified clean and synchronized at the same SHA. The CI evidence is recorded in this status-file follow-up documentation commit.

@@ -43,6 +43,8 @@ Every completed development or documentation step MUST create a new versioned st
 `docs/continuity/CONTINUATION_STATUS_VNN_YYYY-MM-DD.md`.
 Never overwrite prior status files or reuse a version number. Record scope, changed files, migrations, decisions/approvals, exact tests and results, build/CI links and tested SHA, branch/HEAD/worktree/push state, risks, open decisions, and the next safe step. Update this index to point to the newest status while preserving the historical files. Never claim a test, build, push, or CI success without verifying it. A step is not complete until its status file exists and its path is confirmed. If the status artifact cannot be created or updated, explicitly leave documentation pending. At the end, give the owner the exact filename and a usable reference/link. On a new session, read this index and the newest status file before editing code, then repeat this rule for the next step.
 
-Latest verified completed step: V38 content commit `405b985dcb8054d25e9c37f2ea0eb4961d6bcad6`, CI run `44225192164` successful for the exact SHA. The newest status artifact is `docs/continuity/CONTINUATION_STATUS_V38_2026-11-18.md`.
+Latest verified completed step: V39 commit `53859f4c071f8ac1cee4b13a61c8df8159a137a1`, CI run `44226217587` successful for the exact SHA. The newest status artifact is `docs/continuity/CONTINUATION_STATUS_V39_2026-11-18.md`.
 
-- V39 (TargetTenantId on new identity-target audit events): implementation in progress; see `CONTINUATION_STATUS_V39_2026-11-18.md`. Do not proceed to audit read/export until owner decisions on visibility, retention, and post-Closed behavior are explicit.
+- V39 (CI green): migration 009 derives `TargetTenantId` for new identity-target audit events from persisted membership; CI run 44226217587 passed for exact commit `53859f4c071f8ac1cee4b13a61c8df8159a137a1`. See `CONTINUATION_STATUS_V39_2026-11-18.md`. Do not proceed to audit read/export until owner decisions on visibility, retention, and post-Closed behavior are explicit.
+
+
