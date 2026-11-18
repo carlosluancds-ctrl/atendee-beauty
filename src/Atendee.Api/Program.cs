@@ -283,8 +283,17 @@ if (identityEnabled)
             {
                 await antiforgery.ValidateRequestAsync(context);
             }
-            catch (AntiforgeryValidationException)
+            catch (AntiforgeryValidationException exception)
             {
+                var logger = context.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Atendee.Api.Antiforgery");
+                logger.LogWarning(
+                    "Antiforgery validation rejected {Method} {Path}. RequestTokenPresent={RequestTokenPresent}, CookieTokenPresent={CookieTokenPresent}, Reason={Reason}",
+                    context.Request.Method,
+                    context.Request.Path.Value,
+                    context.Request.Headers.ContainsKey("X-CSRF-TOKEN"),
+                    context.Request.Cookies.ContainsKey("__Host-Atendee.AntiForgery"),
+                    exception.Message);
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;
                 await context.Response.WriteAsJsonAsync(new { error = "antiforgery_validation_failed" });
                 return;
