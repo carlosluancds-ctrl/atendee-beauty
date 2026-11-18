@@ -627,7 +627,7 @@ try
         "The onboarding transition is audited once by the PostgreSQL tenant-status trigger.");
 
     var repeatedOnboarding = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/tenant/onboarding/complete", mfaRequestToken!, new { });
+        mfaClient, "/api/v1/tenant/onboarding/complete", ownerAuthenticatedToken, new { });
     Ensure(repeatedOnboarding.StatusCode == HttpStatusCode.OK &&
            (await ReadTenantStatusAuditAsync(migratorConnectionString, ownerTenantId)).Length == 1,
         "Repeating onboarding completion is idempotent and does not create a second status audit event.");
@@ -698,7 +698,7 @@ try
     Ensure(assignedInvalidProfessional.StatusCode == HttpStatusCode.BadRequest,
         "Owner cannot create a professional profile for an identity with the wrong tenant role.");
 
-    var assignedCreateProfessional = await PostWithCsrfAsync(mfaClient, "/api/v1/professionals", mfaRequestToken!, new
+    var assignedCreateProfessional = await PostWithCsrfAsync(mfaClient, "/api/v1/professionals", ownerAuthenticatedToken, new
     {
         identityUserId = assignedAssignedProfessionalUserId
     });
@@ -799,7 +799,7 @@ try
             isActive = true
         })
     };
-    updateSalonService.Headers.Add("X-CSRF-TOKEN", mfaRequestToken!);
+    updateSalonService.Headers.Add("X-CSRF-TOKEN", ownerAuthenticatedToken);
     using var updateSalonServiceResponse = await mfaClient.SendAsync(updateSalonService);
     Ensure(updateSalonServiceResponse.StatusCode == HttpStatusCode.OK,
         "Owner can update the service's commercial and scheduling fields.");
