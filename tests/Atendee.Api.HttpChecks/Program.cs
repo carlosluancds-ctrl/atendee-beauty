@@ -263,7 +263,8 @@ try
     var receptionistServices = await client.GetAsync("/api/v1/services");
     Ensure(receptionistServices.StatusCode == HttpStatusCode.OK,
         "Receptionist can read the tenant service catalogue when tenant status allows ReadData.");
-    var receptionistCreate = await PostWithCsrfAsync(client, "/api/v1/services", requestToken!, new
+    var receptionistRequestToken = await GetAntiforgeryRequestTokenAsync(client);
+    var receptionistCreate = await PostWithCsrfAsync(client, "/api/v1/services", receptionistRequestToken, new
     {
         name = "Unauthorized service",
         durationMinutes = 30,
@@ -604,6 +605,7 @@ try
     Ensure(ownerFirstChallenge.StatusCode == HttpStatusCode.OK &&
            (await mfaClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
         "Owner receives an application session only after membership provisioning and an MFA challenge.");
+    var ownerAuthenticatedToken = await GetAntiforgeryRequestTokenAsync(mfaClient);
 
     var pendingTenantProfile = await mfaClient.GetAsync("/api/v1/tenant");
     var pendingTenantProfileBody = await pendingTenantProfile.Content.ReadFromJsonAsync<JsonElement>();
@@ -613,7 +615,7 @@ try
         "The authenticated Owner can read the current salon profile resolved from server-side membership.");
 
     var completedOnboarding = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/tenant/onboarding/complete", mfaRequestToken!, new { });
+        mfaClient, "/api/v1/tenant/onboarding/complete", ownerAuthenticatedToken, new { });
     var completedOnboardingBody = await completedOnboarding.Content.ReadFromJsonAsync<JsonElement>();
     Ensure(completedOnboarding.StatusCode == HttpStatusCode.OK &&
            completedOnboardingBody.GetProperty("status").GetString() == TenantStatus.SetupRequired.ToString() &&
@@ -635,7 +637,7 @@ try
     // after the PendingVerification -> SetupRequired behavior has been asserted.
     await UpdateTenantStatusAsync(migratorConnectionString, ownerTenantId, statusId: 3);
 
-    var createSalonService = await PostWithCsrfAsync(mfaClient, "/api/v1/services", mfaRequestToken!, new
+    var createSalonService = await PostWithCsrfAsync(mfaClient, "/api/v1/services", ownerAuthenticatedToken, new
     {
         name = "Corte de cabelo",
         durationMinutes = 45,
@@ -689,7 +691,7 @@ try
            eligibleProfessionalsBody[0].GetProperty("identityUserId").GetGuid() == assignedAssignedProfessionalUserId,
         "Eligible-professional discovery returns the active Professional membership without unrelated identities.");
 
-    var assignedInvalidProfessional = await PostWithCsrfAsync(mfaClient, "/api/v1/professionals", mfaRequestToken!, new
+    var assignedInvalidProfessional = await PostWithCsrfAsync(mfaClient, "/api/v1/professionals", ownerAuthenticatedToken, new
     {
         identityUserId = ownerUserId
     });
@@ -716,13 +718,13 @@ try
 
     var assignedInvalidAssignment = await PutWithCsrfAsync(
         mfaClient, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/services",
-        mfaRequestToken!, new { serviceIds = new[] { Guid.NewGuid() } });
+        ownerAuthenticatedToken, new { serviceIds = new[] { Guid.NewGuid() } });
     Ensure(assignedInvalidAssignment.StatusCode == HttpStatusCode.BadRequest,
         "Owner cannot assign a service that does not belong to the current salon.");
 
     var assignedAssignProfessionalService = await PutWithCsrfAsync(
         mfaClient, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/services",
-        mfaRequestToken!, new { serviceIds = new[] { salonServiceId } });
+        ownerAuthenticatedToken, new { serviceIds = new[] { salonServiceId } });
     Ensure(assignedAssignProfessionalService.StatusCode == HttpStatusCode.OK,
         "Owner can assign an active service from the same salon to a professional.");
     var assignedAssignedProfessional = await assignedAssignProfessionalService.Content.ReadFromJsonAsync<JsonElement>();
@@ -820,7 +822,7 @@ try
             isActive = false
         })
     };
-    archiveSalonService.Headers.Add("X-CSRF-TOKEN", mfaRequestToken!);
+    archiveSalonService.Headers.Add("X-CSRF-TOKEN", ownerAuthenticatedToken);
     using var archiveSalonServiceResponse = await mfaClient.SendAsync(archiveSalonService);
     Ensure(archiveSalonServiceResponse.StatusCode == HttpStatusCode.OK,
         "Owner can archive a service without hard deletion.");
@@ -834,13 +836,14 @@ try
         "Service creation, update and archive are durably audited by a database trigger.");
 
     var ownerLogout = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/auth/logout", mfaRequestToken!, new { });
+        mfaClient, "/api/v1/auth/logout", ownerAuthenticatedToken, new { });
     Ensure(ownerLogout.StatusCode == HttpStatusCode.NoContent,
         "Authenticated owner can log out.");
     Ensure((await mfaClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "Logout clears the authenticated application session.");
+    var ownerAnonymousToken = await GetAntiforgeryRequestTokenAsync(mfaClient);
 
-    var ownerMfaLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
+    var ownerMfaLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", ownerAnonymousToken, new
     {
         email = ownerEmail,
         password = ownerPassword
@@ -854,7 +857,7 @@ try
         "Password verification that requires an MFA challenge is audited as pending.");
 
     var recoveryChallenge = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/auth/mfa/challenge", mfaRequestToken!, new
+        mfaClient, "/api/v1/auth/mfa/challenge", ownerAnonymousToken, new
         {
             code = recoveryCodes[0],
             useRecoveryCode = true
@@ -869,12 +872,14 @@ try
     Ensure(recoveryAudit.Contains("operational_mfa.recovery_code_redeemed"),
         "Successful one-time recovery-code use is durably audited.");
 
+    var recoveryAuthenticatedToken = await GetAntiforgeryRequestTokenAsync(mfaClient);
     var replayLogout = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/auth/logout", mfaRequestToken!, new { });
+        mfaClient, "/api/v1/auth/logout", recoveryAuthenticatedToken, new { });
     Ensure(replayLogout.StatusCode == HttpStatusCode.NoContent,
         "Owner can terminate the recovery-code-authenticated session.");
 
-    var replayLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
+    var afterRecoveryLogoutToken = await GetAntiforgeryRequestTokenAsync(mfaClient);
+    var replayLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", afterRecoveryLogoutToken, new
     {
         email = ownerEmail,
         password = ownerPassword
@@ -883,7 +888,7 @@ try
         "Owner must complete MFA again after logout.");
 
     var replayChallenge = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/auth/mfa/challenge", mfaRequestToken!, new
+        mfaClient, "/api/v1/auth/mfa/challenge", afterRecoveryLogoutToken, new
         {
             code = recoveryCodes[0],
             useRecoveryCode = true
@@ -908,7 +913,7 @@ try
     }
 
     var totpChallenge = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/auth/mfa/challenge", mfaRequestToken!, new
+        mfaClient, "/api/v1/auth/mfa/challenge", afterRecoveryLogoutToken, new
         {
             code = secondTotpCode,
             useRecoveryCode = false
@@ -1165,6 +1170,7 @@ try
     Ensure(managerEnrollmentVerify.StatusCode == HttpStatusCode.OK &&
            (await managerClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
         "Manager receives an application session only after successful MFA enrollment.");
+    var managerAuthenticatedToken = await GetAntiforgeryRequestTokenAsync(managerClient);
 
 
     var professionalEmail = "http-role-professional-" + Guid.NewGuid().ToString("N") + "@example.invalid";
@@ -1233,7 +1239,7 @@ try
            managerEligibleMembersBody[0].GetProperty("identityUserId").GetGuid() == managerProfessionalUserId,
         "Manager candidate discovery is scoped to its own salon and returns only an unprofiled Professional.");
     var managerCreateProfessional = await PostWithCsrfAsync(
-        managerClient, "/api/v1/professionals", managerToken!, new
+        managerClient, "/api/v1/professionals", managerAuthenticatedToken, new
         {
             identityUserId = managerProfessionalUserId
         });
@@ -1453,6 +1459,17 @@ static async Task<HttpResponseMessage> PutWithCsrfAsync(
     };
     request.Headers.Add("X-CSRF-TOKEN", token);
     return await client.SendAsync(request);
+}
+
+static async Task<string> GetAntiforgeryRequestTokenAsync(HttpClient client)
+{
+    using var response = await client.GetAsync("/api/v1/auth/antiforgery");
+    response.EnsureSuccessStatusCode();
+    var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+    var token = body.GetProperty("requestToken").GetString();
+    return !string.IsNullOrWhiteSpace(token)
+        ? token
+        : throw new InvalidOperationException("Antiforgery request token was not issued.");
 }
 
 static async Task<HttpResponseMessage> PostWithCsrfAsync(
