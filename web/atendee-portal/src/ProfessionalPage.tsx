@@ -267,9 +267,14 @@ export default function ProfessionalPage() {
                 ) : (
                   <div className="professional-readonly-services">
                     <strong>Serviços atribuídos</strong>
-                    <p>{profile.serviceIds.length === 0
-                      ? "Nenhum serviço atribuído."
-                      : "A lista está disponível para consulta; alterações são restritas a Owner e Manager."}</p>
+                    {profile.serviceIds.length === 0 ? <p>Nenhum serviço atribuído.</p> : (
+                      <ul className="professional-readonly-list">
+                        {profile.serviceIds.map(id => (
+                          <li key={id}>{services.find(service => service.id === id)?.name ?? "Serviço não disponível"}</li>
+                        ))}
+                      </ul>
+                    )}
+                    <p className="professional-permission-note">Alterações são restritas a Owner e Manager.</p>
                   </div>
                 )}
               </article>
