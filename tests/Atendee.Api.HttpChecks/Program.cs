@@ -645,7 +645,7 @@ try
         "A password-only session is denied after a server-side MFA-ready Owner promotion (HTTP " +
         (int)promotedOwnerSession.StatusCode + ").");
 
-    using var deactivationClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
+    using var deactivationClient = roleMatrixFactory!.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
         HandleCookies = true,
