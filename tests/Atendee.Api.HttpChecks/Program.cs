@@ -681,6 +681,14 @@ try
     }
     await SeedAdditionalMembershipAsync(migratorConnectionString, ownerTenantId, assignedAssignedProfessionalUserId, roleId: 4);
 
+    var eligibleProfessionalsBeforeCreate = await mfaClient.GetAsync("/api/v1/professionals/eligible-members");
+    Ensure(eligibleProfessionalsBeforeCreate.StatusCode == HttpStatusCode.OK,
+        "Owner can list only eligible Professional memberships in the current salon.");
+    var eligibleProfessionalsBody = await eligibleProfessionalsBeforeCreate.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(eligibleProfessionalsBody.GetArrayLength() == 1 &&
+           eligibleProfessionalsBody[0].GetProperty("identityUserId").GetGuid() == assignedAssignedProfessionalUserId,
+        "Eligible-professional discovery returns the active Professional membership without unrelated identities.");
+
     var assignedInvalidProfessional = await PostWithCsrfAsync(mfaClient, "/api/v1/professionals", mfaRequestToken!, new
     {
         identityUserId = ownerUserId
@@ -699,6 +707,12 @@ try
     Ensure(assignedAssignedProfessionalProfile.GetProperty("identityUserId").GetGuid() == assignedAssignedProfessionalUserId &&
            !string.IsNullOrWhiteSpace(assignedAssignedProfessionalProfile.GetProperty("displayName").GetString()),
         "Professional profile binds the operational identity and uses the trusted membership display name.");
+
+    var eligibleProfessionalsAfterCreate = await mfaClient.GetAsync("/api/v1/professionals/eligible-members");
+    var eligibleProfessionalsAfterCreateBody = await eligibleProfessionalsAfterCreate.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(eligibleProfessionalsAfterCreate.StatusCode == HttpStatusCode.OK &&
+           eligibleProfessionalsAfterCreateBody.GetArrayLength() == 0,
+        "A membership disappears from eligible-professional discovery after profile creation.");
 
     var assignedInvalidAssignment = await PutWithCsrfAsync(
         mfaClient, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/services",
@@ -750,9 +764,19 @@ try
            assignedOwnProfessionalBody.GetProperty("serviceIds").GetArrayLength() == 1 &&
            assignedOwnProfessionalBody.GetProperty("serviceIds")[0].GetGuid() == salonServiceId,
         "Professional self-profile exposes only its own assigned services.");
+
+    var assignedOwnServices = await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals/me/services");
+    Ensure(assignedOwnServices.StatusCode == HttpStatusCode.OK,
+        "Professional can retrieve details of only their own assigned services.");
+    var assignedOwnServicesBody = await assignedOwnServices.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(assignedOwnServicesBody.GetArrayLength() == 1 &&
+           assignedOwnServicesBody[0].GetProperty("id").GetGuid() == salonServiceId &&
+           assignedOwnServicesBody[0].GetProperty("name").GetString() == "Corte de cabelo",
+        "Professional assigned-service details contain only the assigned salon service.");
     Ensure((await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals")).StatusCode == HttpStatusCode.Forbidden &&
+           (await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals/eligible-members")).StatusCode == HttpStatusCode.Forbidden &&
            (await assignedAssignedProfessionalClient.GetAsync("/api/v1/services")).StatusCode == HttpStatusCode.Forbidden,
-        "Professional cannot list other profiles or access the unscoped service catalogue.");
+        "Professional cannot list other profiles, discover eligible members or access the unscoped service catalogue.");
 
     var professionalAudit = await ReadProfessionalAuditAsync(
         migratorConnectionString, ownerTenantId, assignedAssignedProfessionalProfileId);
@@ -924,6 +948,8 @@ try
     Ensure(demotedOwnerMe.StatusCode == HttpStatusCode.OK &&
            demotedOwnerBody.GetProperty("role").GetString() == TenantRole.Receptionist.ToString(),
         "A live Owner-to-Receptionist role change is reflected on the next request.");
+    Ensure((await mfaClient.GetAsync("/api/v1/professionals/eligible-members")).StatusCode == HttpStatusCode.Forbidden,
+        "Receptionist cannot discover identities or create professional profiles.");
 
     // Isolate role-promotion login attempts from the earlier MFA and professional clients.
     promotionKeyRing = Path.Combine(Path.GetTempPath(), "atendee-promotion-" + Guid.NewGuid().ToString("N"));

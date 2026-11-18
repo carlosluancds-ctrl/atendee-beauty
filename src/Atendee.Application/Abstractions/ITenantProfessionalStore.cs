@@ -5,6 +5,8 @@ namespace Atendee.Application.Abstractions;
 public interface ITenantProfessionalStore
 {
     Task<IReadOnlyList<ProfessionalProfileModel>> ListAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProfessionalCandidateModel>> ListEligibleMembersAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SalonServiceModel>> ListOwnServicesAsync(Guid identityUserId, CancellationToken cancellationToken = default);
     Task<ProfessionalProfileModel?> GetOwnAsync(Guid identityUserId, CancellationToken cancellationToken = default);
     Task<ProfessionalProfileModel> CreateAsync(Guid identityUserId, CancellationToken cancellationToken = default);
     Task<ProfessionalProfileModel?> SetServicesAsync(

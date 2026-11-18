@@ -23,6 +23,7 @@ type SalonService = {
   currency: string;
   isActive: boolean;
 };
+type EligibleProfessional = { identityUserId: string; displayName: string };
 
 async function readJson(response: Response): Promise<unknown> {
   try { return await response.json(); } catch { return null; }
@@ -44,6 +45,9 @@ export default function ProfessionalPage() {
   const [tenant, setTenant] = useState<TenantProfile | null>(null);
   const [profiles, setProfiles] = useState<ProfessionalProfile[]>([]);
   const [services, setServices] = useState<SalonService[]>([]);
+  const [eligibleMembers, setEligibleMembers] = useState<EligibleProfessional[]>([]);
+  const [selectedMemberId, setSelectedMemberId] = useState("");
+  const [ownServices, setOwnServices] = useState<SalonService[]>([]);
   const [ownProfile, setOwnProfile] = useState<ProfessionalProfile | null>(null);
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
@@ -75,7 +79,18 @@ export default function ProfessionalPage() {
           if (response.status === 403) throw new Error("Seu perfil não tem acesso a esta área.");
           if (!response.ok) throw new Error("Não foi possível carregar seu perfil profissional.");
           const profile = await response.json() as ProfessionalProfile;
-          if (mounted) setOwnProfile(profile);
+          const ownServicesResponse = await fetch("/api/v1/professionals/me/services", {
+            method: "GET", credentials: "same-origin", cache: "no-store",
+            referrerPolicy: "no-referrer", headers: { Accept: "application/json" }
+          });
+          if (ownServicesResponse.status === 401) { window.location.replace("/login"); return; }
+          if (!ownServicesResponse.ok) throw new Error("Não foi possível carregar seus serviços atribuídos.");
+          const ownServicesBody: unknown = await ownServicesResponse.json();
+          if (!Array.isArray(ownServicesBody)) throw new Error("A resposta dos seus serviços está em formato inesperado.");
+          if (mounted) {
+            setOwnProfile(profile);
+            setOwnServices(ownServicesBody as SalonService[]);
+          }
           return;
         }
 
@@ -104,9 +119,23 @@ export default function ProfessionalPage() {
         if (!Array.isArray(teamBody) || !Array.isArray(serviceBody))
           throw new Error("A resposta da equipe está em formato inesperado.");
         const team = teamBody as ProfessionalProfile[];
+        let candidates: EligibleProfessional[] = [];
+        if (["Owner", "Manager"].includes(currentTenant.membership.role)) {
+          const candidatesResponse = await fetch("/api/v1/professionals/eligible-members", {
+            method: "GET", credentials: "same-origin", cache: "no-store",
+            referrerPolicy: "no-referrer", headers: { Accept: "application/json" }
+          });
+          if (candidatesResponse.status === 401) { window.location.replace("/login"); return; }
+          if (candidatesResponse.status === 403) throw new Error("Seu perfil não pode cadastrar profissionais.");
+          if (!candidatesResponse.ok) throw new Error("Não foi possível carregar os profissionais elegíveis.");
+          const candidatesBody: unknown = await candidatesResponse.json();
+          if (!Array.isArray(candidatesBody)) throw new Error("A resposta de profissionais elegíveis está em formato inesperado.");
+          candidates = candidatesBody as EligibleProfessional[];
+        }
         if (mounted) {
           setProfiles(team);
           setServices(serviceBody as SalonService[]);
+          setEligibleMembers(candidates);
           setSelections(Object.fromEntries(team.map(profile => [profile.id, profile.serviceIds])));
         }
       } catch (cause) {
@@ -129,6 +158,37 @@ export default function ProfessionalPage() {
           : selected.filter(id => id !== serviceId)
       };
     });
+  }
+
+  async function createProfessional(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedMemberId) return;
+    setError(null);
+    setNotice(null);
+    setBusyId("create");
+    try {
+      const token = await getAntiforgeryToken();
+      const response = await fetch("/api/v1/professionals", {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        referrerPolicy: "no-referrer",
+        headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-TOKEN": token },
+        body: JSON.stringify({ identityUserId: selectedMemberId })
+      });
+      if (response.status === 401) { window.location.replace("/login"); return; }
+      if (response.status === 403) throw new Error("Seu perfil não tem permissão para cadastrar profissionais.");
+      if (response.status === 400) throw new Error("A associação selecionada não é mais elegível para um perfil profissional.");
+      if (!response.ok) throw new Error("Não foi possível cadastrar o perfil profissional.");
+      const profile = await response.json() as ProfessionalProfile;
+      setProfiles(current => [...current, profile].sort((a, b) => a.displayName.localeCompare(b.displayName)));
+      setSelections(current => ({ ...current, [profile.id]: profile.serviceIds }));
+      setEligibleMembers(current => current.filter(member => member.identityUserId !== selectedMemberId));
+      setSelectedMemberId("");
+      setNotice("Perfil de " + profile.displayName + " criado.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível cadastrar o perfil profissional.");
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function saveAssignments(event: FormEvent<HTMLFormElement>, profile: ProfessionalProfile) {
@@ -222,12 +282,45 @@ export default function ProfessionalPage() {
               </div>
               <p>Perfil profissional vinculado à sua identidade nesta empresa.</p>
               <div className="professional-self-count">
-                <strong>{ownProfile.serviceIds.length}</strong>
+                <strong>{ownServices.length}</strong>
                 <span>serviço(s) atribuído(s)</span>
               </div>
+              {ownServices.length > 0 && (
+                <ul className="professional-own-services">
+                  {ownServices.map(service => (
+                    <li key={service.id}>
+                      <span><strong>{service.name}</strong><small>{service.durationMinutes} min · {service.isActive ? "Ativo" : "Inativo"}</small></span>
+                      <span>{(service.priceMinorUnits / 100).toLocaleString("pt-BR", { style: "currency", currency: service.currency })}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
           ) : <div className="empty-state">Seu perfil profissional não está disponível.</div>
-        ) : profiles.length === 0 ? (
+        ) : (
+          <>
+          {canManage && eligibleMembers.length > 0 && (
+            <section className="professional-create-panel" aria-labelledby="professional-create-title">
+              <div>
+                <h2 id="professional-create-title">Adicionar profissional</h2>
+                <p>Selecione uma associação Professional ativa deste salão que ainda não tenha perfil.</p>
+              </div>
+              <form onSubmit={event => void createProfessional(event)}>
+                <label htmlFor="eligible-professional">Profissional elegível</label>
+                <select id="eligible-professional" value={selectedMemberId}
+                  onChange={event => setSelectedMemberId(event.target.value)} required disabled={busyId !== null}>
+                  <option value="">Selecione uma pessoa</option>
+                  {eligibleMembers.map(member => (
+                    <option key={member.identityUserId} value={member.identityUserId}>{member.displayName}</option>
+                  ))}
+                </select>
+                <button type="submit" disabled={!selectedMemberId || busyId !== null}>
+                  {busyId === "create" ? "Criando…" : "Criar perfil"}
+                </button>
+              </form>
+            </section>
+          )}
+          {profiles.length === 0 ? (
           <div className="empty-state">
             <strong>Nenhum perfil profissional cadastrado</strong>
             <p>Os perfis precisam estar vinculados a uma associação Professional ativa do mesmo salão.</p>
@@ -280,6 +373,8 @@ export default function ProfessionalPage() {
               </article>
             ))}
           </div>
+          )}
+          </>
         )}
       </section>
       <footer>© {new Date().getFullYear()} Atendee Beauty</footer>

@@ -41,6 +41,58 @@ internal sealed class EfTenantProfessionalStore : ITenantProfessionalStore
         return await AttachServiceIdsAsync(profiles, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ProfessionalCandidateModel>> ListEligibleMembersAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var candidates = await _db.Database.SqlQueryRaw<TenantProfessionalCandidateLookup>(
+            """
+            SELECT u.identity_user_id AS "IdentityUserId",
+                   u.display_name AS "DisplayName"
+            FROM atendee.tenant_users AS u
+            WHERE u.tenant_id = {0}
+              AND u.role = 4
+              AND u.is_active = TRUE
+              AND NULLIF(BTRIM(u.display_name), '') IS NOT NULL
+              AND NOT EXISTS
+              (
+                  SELECT 1 FROM atendee.professionals AS p
+                  WHERE p.tenant_id = u.tenant_id
+                    AND p.identity_user_id = u.identity_user_id
+              )
+            ORDER BY u.display_name, u.identity_user_id
+            """,
+            _tenantId.Value).ToListAsync(cancellationToken);
+        return candidates.Select(candidate =>
+            new ProfessionalCandidateModel(candidate.IdentityUserId, candidate.DisplayName)).ToArray();
+    }
+
+    public async Task<IReadOnlyList<SalonServiceModel>> ListOwnServicesAsync(
+        Guid identityUserId, CancellationToken cancellationToken = default)
+    {
+        if (identityUserId == Guid.Empty)
+            return [];
+
+        var professionalId = await _db.TenantProfessionals.AsNoTracking()
+            .Where(profile => profile.IdentityUserId == identityUserId && profile.IsActive)
+            .Select(profile => (Guid?)profile.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (professionalId is null)
+            return [];
+
+        return await (
+            from assignment in _db.TenantProfessionalServices.AsNoTracking()
+            join service in _db.TenantServices.AsNoTracking()
+                on new { assignment.TenantId, assignment.ServiceId }
+                equals new { service.TenantId, ServiceId = service.Id }
+            where assignment.ProfessionalId == professionalId.Value
+            orderby service.Name, service.Id
+            select new SalonServiceModel(
+                service.Id, service.Name, service.DurationMinutes, service.PriceMinorUnits,
+                service.Currency, service.BufferBeforeMinutes, service.BufferAfterMinutes,
+                service.IsActive, service.CreatedAtUtc, service.UpdatedAtUtc))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<ProfessionalProfileModel?> GetOwnAsync(
         Guid identityUserId, CancellationToken cancellationToken = default)
     {

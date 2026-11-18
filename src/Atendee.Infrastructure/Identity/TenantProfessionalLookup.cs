@@ -16,3 +16,9 @@ public sealed class TenantProfessionalMembershipLookup
     public bool IsActive { get; set; }
     public string DisplayName { get; set; } = string.Empty;
 }
+
+public sealed class TenantProfessionalCandidateLookup
+{
+    public Guid IdentityUserId { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+}

@@ -24,6 +24,35 @@ public static class TenantProfessionalEndpoints
             return Results.Ok(profiles);
         });
 
+        group.MapGet("/eligible-members", async (
+            HttpContext context,
+            TrustedRequestContext current,
+            ITenantTransactionRunner transactionRunner,
+            ITenantProfessionalStore store) =>
+        {
+            if (!CanManage(current))
+                return Results.Forbid();
+            var candidates = await transactionRunner.ExecuteAsync(
+                token => store.ListEligibleMembersAsync(token), context.RequestAborted);
+            return Results.Ok(candidates);
+        });
+
+        group.MapGet("/me/services", async (
+            HttpContext context,
+            TrustedRequestContext current,
+            ITenantTransactionRunner transactionRunner,
+            ITenantProfessionalStore store) =>
+        {
+            if (current.Role != TenantRole.Professional ||
+                current.ActorId is not { } actorId ||
+                current.TenantStatus is not { } status ||
+                !TenantAccessPolicy.IsAllowed(status, TenantRole.Professional, TenantCapability.ReadData))
+                return Results.Forbid();
+            var services = await transactionRunner.ExecuteAsync(
+                token => store.ListOwnServicesAsync(actorId, token), context.RequestAborted);
+            return Results.Ok(services);
+        });
+
         group.MapGet("/me", async (
             HttpContext context,
             TrustedRequestContext current,
