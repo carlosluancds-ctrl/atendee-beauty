@@ -1,22 +1,21 @@
 {
-  "backup_version": "v56-isolate-onboarding-test-fixture",
+  "backup_version": "v57-isolate-role-promotion-test-host",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V56_2026-11-18.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V57_2026-11-18.md",
   "latest_repository_commit": "PENDING_COMMIT",
   "latest_ci": {
-    "v55_run": "44294386866",
-    "v55_status": "failure",
-    "v55_passed": ["frontend", "build", "domain", "PostgreSQL 18.7", "persistence/RLS", "Identity/TOTP", "onboarding completion and audit"],
-    "v55_failure": "later Professional login denied because test fixture remained SetupRequired; V56 resets it to Active after onboarding assertions",
-    "v56_status": "pending"
+    "v56_run": "44294775155",
+    "v56_status": "failure",
+    "v56_passed": ["frontend", "build", "domain", "PostgreSQL 18.7", "persistence/RLS", "Identity/TOTP", "onboarding profile/completion/audit/retry", "professional flows"],
+    "v56_failure": "role-promotion receptionist login exceeded shared test-host login budget; isolated in V57",
+    "v57_status": "pending"
   },
   "latest_implementation": {
-    "profile_endpoint": "GET /api/v1/tenant (existing)",
-    "onboarding_endpoint": "POST /api/v1/tenant/onboarding/complete",
+    "endpoint": "POST /api/v1/tenant/onboarding/complete",
     "migration": "db/migrations/015_complete_tenant_onboarding.sql",
-    "database_role": "explicit transaction + SET LOCAL ROLE atendee_runtime",
+    "database_role": "SET LOCAL ROLE atendee_runtime inside explicit transaction",
     "transition": "PendingVerification -> SetupRequired; active Owner, confirmed email and MFA; idempotent",
     "audit": "Existing PostgreSQL tenant status trigger"
   }

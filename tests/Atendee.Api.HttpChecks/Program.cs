@@ -21,6 +21,8 @@ Directory.CreateDirectory(keyRing);
 var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
 var apiContentRoot = Path.Combine(repositoryRoot, "src", "Atendee.Api");
 WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? mfaFactory = null;
+WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? promotionFactory = null;
+string? promotionKeyRing = null;
 string? mfaKeyRing = null;
 WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? roleMatrixFactory = null;
 string? roleMatrixKeyRing = null;
@@ -923,7 +925,25 @@ try
            demotedOwnerBody.GetProperty("role").GetString() == TenantRole.Receptionist.ToString(),
         "A live Owner-to-Receptionist role change is reflected on the next request.");
 
-    using var promotionClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
+    // Isolate role-promotion login attempts from the earlier MFA and professional clients.
+    promotionKeyRing = Path.Combine(Path.GetTempPath(), "atendee-promotion-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(promotionKeyRing);
+    promotionFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    {
+        web.UseContentRoot(apiContentRoot);
+        web.UseEnvironment("Development");
+        web.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Identity"] = identityConnectionString,
+                ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                ["DataProtection:KeyRingPath"] = promotionKeyRing
+            });
+        });
+    });
+
+    using var promotionClient = promotionFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
         HandleCookies = true,
@@ -933,7 +953,7 @@ try
     const string promotionPassword = "Atendee-Promotion-HTTP-2026!";
     var promotionTenantId = Guid.NewGuid();
     Guid promotionUserId;
-    await using (var scope = mfaFactory.Services.CreateAsyncScope())
+    await using (var scope = promotionFactory.Services.CreateAsyncScope())
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
         var receptionist = new OperationalIdentityUser
@@ -965,7 +985,7 @@ try
     Ensure((await promotionClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
         "A blocked Owner promotion leaves the existing receptionist session unchanged.");
 
-    await using (var scope = mfaFactory!.Services.CreateAsyncScope())
+    await using (var scope = promotionFactory!.Services.CreateAsyncScope())
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
         var receptionist = await users.FindByIdAsync(promotionUserId.ToString());
@@ -1266,6 +1286,7 @@ finally
 {
     factory.Dispose();
     mfaFactory?.Dispose();
+    promotionFactory?.Dispose();
     roleMatrixFactory?.Dispose();
     statusFactory?.Dispose();
     try
@@ -1274,6 +1295,8 @@ finally
             Directory.Delete(statusKeyRing, recursive: true);
         if (mfaKeyRing is not null && Directory.Exists(mfaKeyRing))
             Directory.Delete(mfaKeyRing, recursive: true);
+        if (promotionKeyRing is not null && Directory.Exists(promotionKeyRing))
+            Directory.Delete(promotionKeyRing, recursive: true);
         if (roleMatrixKeyRing is not null && Directory.Exists(roleMatrixKeyRing))
             Directory.Delete(roleMatrixKeyRing, recursive: true);
         if (Directory.Exists(keyRing))
