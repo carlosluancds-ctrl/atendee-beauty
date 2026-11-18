@@ -24,3 +24,7 @@ coverage/
 .env.*
 *.user
 *.suo
+
+# Frontend dependencies and generated output
+**/node_modules/
+web/**/dist/

@@ -1,0 +1,248 @@
+
+:root {
+  font-family: "Segoe UI", Arial, sans-serif;
+  color: #292722;
+  background: #f7f4ef;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --ink: #292722;
+  --muted: #77736b;
+  --line: #e8e2d9;
+  --accent: #806b52;
+  --accent-dark: #65533f;
+  --paper: #fffefa;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button, input { font: inherit; }
+
+.page-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px 24px;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(211, 194, 170, .24), transparent 54%),
+    #f7f4ef;
+}
+
+.activation-card {
+  width: min(100%, 468px);
+  padding: 42px 44px 34px;
+  background: var(--paper);
+  border: 1px solid rgba(112, 96, 75, .12);
+  border-radius: 18px;
+  box-shadow: 0 22px 70px rgba(55, 46, 34, .08);
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 42px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #e8dfd2;
+  color: #6b5844;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -.6px;
+}
+
+.brand-name span {
+  margin-left: 3px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.eyebrow {
+  margin-bottom: 12px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.7px;
+}
+
+h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(31px, 6vw, 38px);
+  font-weight: 500;
+  letter-spacing: -.8px;
+  line-height: 1.18;
+}
+
+.intro {
+  margin: 13px 0 30px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+form { display: flex; flex-direction: column; }
+
+label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+input {
+  width: 100%;
+  height: 48px;
+  padding: 0 13px;
+  border: 1px solid #dcd5ca;
+  border-radius: 8px;
+  outline: none;
+  background: #fff;
+  color: var(--ink);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(128, 107, 82, .13);
+}
+
+input:disabled { background: #f5f2ed; }
+
+.field-hint {
+  margin: 8px 0 22px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+form label:not(:first-child) { margin-top: 0; }
+form input + label { margin-top: 0; }
+
+button {
+  width: 100%;
+  min-height: 49px;
+  margin-top: 24px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent-dark);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
+}
+
+button:hover:not(:disabled) {
+  background: #514331;
+  transform: translateY(-1px);
+}
+
+button:focus-visible {
+  outline: 3px solid rgba(128, 107, 82, .3);
+  outline-offset: 3px;
+}
+
+button:disabled { opacity: .58; cursor: not-allowed; }
+
+.feedback {
+  margin: 17px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.error { color: #a43f36; }
+.success { color: #456c50; }
+
+.success-panel {
+  display: flex;
+  gap: 13px;
+  padding: 17px;
+  border: 1px solid #dce8dc;
+  border-radius: 10px;
+  background: #f5faf4;
+}
+
+.status-icon {
+  display: grid;
+  flex: 0 0 28px;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #e2eee1;
+  color: #456c50;
+  font-weight: 700;
+}
+
+.success-panel strong {
+  display: block;
+  margin: 2px 0 5px;
+  font-size: 13px;
+}
+
+.success-panel p {
+  margin: 0 0 9px;
+  color: #5d695c;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.success-panel p:last-child { margin-bottom: 0; }
+
+.security-note {
+  display: flex;
+  gap: 10px;
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.security-note span {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  font-size: 13px;
+}
+
+.security-note p {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+footer {
+  margin-top: 24px;
+  color: #989187;
+  font-size: 10px;
+  letter-spacing: .2px;
+}
+
+@media (max-width: 520px) {
+  .page-shell { justify-content: flex-start; padding: 26px 14px 20px; }
+  .activation-card { padding: 30px 24px 26px; border-radius: 14px; }
+  .brand-lockup { margin-bottom: 35px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}

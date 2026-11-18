@@ -23,6 +23,27 @@ jobs:
         with:
           dotnet-version: 10.0.404
 
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Restore frontend dependencies
+        working-directory: web/atendee-portal
+        run: npm ci
+
+      - name: Audit frontend dependencies
+        working-directory: web/atendee-portal
+        run: npm audit --audit-level=moderate
+
+      - name: Run frontend tests
+        working-directory: web/atendee-portal
+        run: npm test
+
+      - name: Build frontend
+        working-directory: web/atendee-portal
+        run: npm run build
+
       - name: Restore locked dependencies
         run: dotnet restore Atendee.sln --locked-mode
 

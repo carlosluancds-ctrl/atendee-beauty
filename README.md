@@ -9,6 +9,7 @@
 ## Conteúdo
 
 - `src/` — API, domínio, aplicação e infraestrutura.
+- `web/atendee-portal/` — frontend React/TypeScript da ativação de identidade operacional, com build estático e testes próprios.
 - `tests/` — verificações de domínio e integração de persistência.
 - `db/` — migração de laboratório, modelo de papéis e provas de conceito de RLS.
 - `.github/workflows/postgres18-persistence.yml` — CI Linux para build e validação de isolamento em PostgreSQL 18.7 descartável.
