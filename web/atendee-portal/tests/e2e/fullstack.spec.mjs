@@ -35,10 +35,10 @@ async function fillLogin(page, email, password) {
   await page.getByLabel("Senha").fill(password);
 }
 
-async function loginWithPassword(page, email, password) {
+async function loginWithPassword(page, email, password, expectedPath = "/services") {
   await fillLogin(page, email, password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page).toHaveURL(/\/services$/);
+  await expect(page).toHaveURL(new RegExp(expectedPath + "$"));
 }
 
 async function logout(page) {
@@ -153,7 +153,7 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   await logout(page);
 
   // Professional receives only their own assigned service details from the real API.
-  await loginWithPassword(page, professionalEmail, professionalPassword);
+  await loginWithPassword(page, professionalEmail, professionalPassword, "/my-services");
   await page.goto("/my-services");
   await expect(page.getByRole("heading", { name: "Meus serviços" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Beatriz E2E" })).toBeVisible();
