@@ -1,22 +1,35 @@
 {
-  "backup_version": "v57-isolate-role-promotion-test-host",
+  "backup_version": "v59-professional-team-workspace",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V57_2026-11-18.md",
-  "latest_repository_commit": "PENDING_COMMIT",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V59_2026-11-18.md",
+  "latest_repository_commit": "PENDING_CHECKPOINT_COMMIT",
   "latest_ci": {
-    "v56_run": "44294775155",
-    "v56_status": "failure",
-    "v56_passed": ["frontend", "build", "domain", "PostgreSQL 18.7", "persistence/RLS", "Identity/TOTP", "onboarding profile/completion/audit/retry", "professional flows"],
-    "v56_failure": "role-promotion receptionist login exceeded shared test-host login budget; isolated in V57",
-    "v57_status": "pending"
+    "v57_run": "44295220888",
+    "v57_sha": "0afbf4e85e46424cc71a47edffb614e428e640ff",
+    "v57_status": "success",
+    "v59_status": "pending_full_workflow_for_final_head",
+    "v59_frontend_validation": "audit_tests_build_passed_on_9e242b449c2221d08cb63a0f0e1e91ae6f78b4eb"
   },
   "latest_implementation": {
-    "endpoint": "POST /api/v1/tenant/onboarding/complete",
-    "migration": "db/migrations/015_complete_tenant_onboarding.sql",
-    "database_role": "SET LOCAL ROLE atendee_runtime inside explicit transaction",
-    "transition": "PendingVerification -> SetupRequired; active Owner, confirmed email and MFA; idempotent",
-    "audit": "Existing PostgreSQL tenant status trigger"
+    "frontend": "web/atendee-portal/src/ProfessionalPage.tsx",
+    "routes": [
+      "/team",
+      "/my-services"
+    ],
+    "team_api": [
+      "GET /api/v1/professionals",
+      "PUT /api/v1/professionals/{id}/services"
+    ],
+    "professional_self_api": "GET /api/v1/professionals/me",
+    "migration": "db/migrations/014_create_professional_profiles.sql",
+    "authorization": "Owner/Manager manage assignments; Receptionist read-only; Professional self-only"
+  },
+  "safeguards": {
+    "main_untouched": true,
+    "production_deploy_authorized": false,
+    "ses_configuration_authorized": false,
+    "billing_trial_activation_authorized": false
   }
 }
