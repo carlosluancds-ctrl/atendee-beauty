@@ -18,6 +18,8 @@ var keyRing = Path.Combine(Path.GetTempPath(), "atendee-http-" + Guid.NewGuid().
 Directory.CreateDirectory(keyRing);
 var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
 var apiContentRoot = Path.Combine(repositoryRoot, "src", "Atendee.Api");
+WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? mfaFactory = null;
+string? mfaKeyRing = null;
 
 // Minimal hosting reads its default configuration while Program.cs executes;
 // provide connection strings as process environment variables before the
@@ -180,13 +182,169 @@ try
     Ensure(disabledLogin.StatusCode == HttpStatusCode.Unauthorized,
         "Disabled operational identity cannot establish a new session.");
 
-    Console.WriteLine("RESULT: HTTP authentication, antiforgery, cookies and session-revocation checks passed.");
+    // Run privileged-account MFA checks in a fresh host so the independent
+    // per-IP login limiter starts with an isolated budget.
+    mfaKeyRing = Path.Combine(Path.GetTempPath(), "atendee-mfa-http-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(mfaKeyRing);
+    mfaFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    {
+        web.UseContentRoot(apiContentRoot);
+        web.UseEnvironment("Development");
+        web.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Identity"] = identityConnectionString,
+                ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                ["DataProtection:KeyRingPath"] = mfaKeyRing
+            });
+        });
+    });
+
+    using var mfaClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+
+    var ownerEmail = "http-mfa-owner-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string ownerPassword = "Atendee-MFA-HTTP-2026!";
+    var ownerTenantId = Guid.NewGuid();
+    Guid ownerUserId;
+    await using (var scope = mfaFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var owner = new OperationalIdentityUser
+        {
+            UserName = ownerEmail,
+            Email = ownerEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(owner, ownerPassword);
+        Ensure(created.Succeeded, "Synthetic owner identity is created.");
+        ownerUserId = owner.Id;
+    }
+
+    await SeedMembershipAsync(migratorConnectionString, ownerTenantId, ownerUserId, roleId: 1);
+
+    var mfaAntiforgeryResponse = await mfaClient.GetAsync("/api/v1/auth/antiforgery");
+    var mfaRequestToken = (await mfaAntiforgeryResponse.Content.ReadFromJsonAsync<JsonElement>())
+        .GetProperty("requestToken").GetString();
+    Ensure(mfaAntiforgeryResponse.StatusCode == HttpStatusCode.OK &&
+           !string.IsNullOrWhiteSpace(mfaRequestToken),
+        "MFA test client obtains an antiforgery token.");
+
+    var ownerLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
+    {
+        email = ownerEmail,
+        password = ownerPassword
+    });
+    var ownerLoginBody = await ownerLogin.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(ownerLogin.StatusCode == HttpStatusCode.Accepted &&
+           ownerLoginBody.GetProperty("state").GetString() == "mfa_setup_required",
+        "Owner without MFA receives only a short-lived MFA-setup session.");
+
+    var enrollmentStart = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/mfa/enrollment/start", mfaRequestToken!, new { });
+    Ensure(enrollmentStart.StatusCode == HttpStatusCode.OK,
+        "Owner can start authenticator enrollment within the setup session.");
+    var enrollmentBody = await enrollmentStart.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(!string.IsNullOrWhiteSpace(enrollmentBody.GetProperty("sharedKey").GetString()) &&
+           enrollmentBody.GetProperty("authenticatorUri").GetString()!.StartsWith("otpauth://totp/",
+               StringComparison.Ordinal),
+        "MFA enrollment returns an authenticator secret and provisioning URI.");
+
+    string enrollmentCode;
+    await using (var scope = mfaFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var owner = await users.FindByIdAsync(ownerUserId.ToString());
+        Ensure(owner is not null, "Owner identity remains available for TOTP verification.");
+        enrollmentCode = await users.GenerateTwoFactorTokenAsync(
+            owner!, TokenOptions.DefaultAuthenticatorProvider);
+    }
+
+    var enrollmentVerify = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/mfa/enrollment/verify", mfaRequestToken!, new
+        {
+            code = enrollmentCode
+        });
+    Ensure(enrollmentVerify.StatusCode == HttpStatusCode.OK,
+        "Valid TOTP completes owner MFA enrollment.");
+    var recoveryCodes = (await enrollmentVerify.Content.ReadFromJsonAsync<JsonElement>())
+        .GetProperty("recoveryCodes").EnumerateArray()
+        .Select(value => value.GetString()!).ToArray();
+    Ensure(recoveryCodes.Length == 10 && recoveryCodes.All(code => !string.IsNullOrWhiteSpace(code)),
+        "MFA enrollment returns ten one-time recovery codes.");
+
+    var ownerMe = await mfaClient.GetAsync("/api/v1/auth/me");
+    Ensure(ownerMe.StatusCode == HttpStatusCode.OK,
+        "Owner receives an authenticated application session only after MFA enrollment.");
+    var ownerMeBody = await ownerMe.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(ownerMeBody.GetProperty("role").GetString() == TenantRole.Owner.ToString(),
+        "Owner session carries the persisted owner membership role.");
+
+    var ownerLogout = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/logout", mfaRequestToken!, new { });
+    Ensure(ownerLogout.StatusCode == HttpStatusCode.NoContent,
+        "Authenticated owner can log out.");
+    Ensure((await mfaClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
+        "Logout clears the authenticated application session.");
+
+    var ownerMfaLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
+    {
+        email = ownerEmail,
+        password = ownerPassword
+    });
+    var ownerMfaLoginBody = await ownerMfaLogin.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(ownerMfaLogin.StatusCode == HttpStatusCode.Accepted &&
+           ownerMfaLoginBody.GetProperty("state").GetString() == "mfa_required",
+        "Owner with MFA enabled receives only a two-factor challenge session.");
+
+    var recoveryChallenge = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/mfa/challenge", mfaRequestToken!, new
+        {
+            code = recoveryCodes[0],
+            useRecoveryCode = true
+        });
+    var recoveryChallengeBody = await recoveryChallenge.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(recoveryChallenge.StatusCode == HttpStatusCode.OK &&
+           recoveryChallengeBody.GetProperty("state").GetString() == "authenticated",
+        "A valid one-time recovery code completes the MFA challenge.");
+
+    var replayLogout = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/logout", mfaRequestToken!, new { });
+    Ensure(replayLogout.StatusCode == HttpStatusCode.NoContent,
+        "Owner can terminate the recovery-code-authenticated session.");
+
+    var replayLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
+    {
+        email = ownerEmail,
+        password = ownerPassword
+    });
+    Ensure(replayLogin.StatusCode == HttpStatusCode.Accepted,
+        "Owner must complete MFA again after logout.");
+
+    var replayChallenge = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/mfa/challenge", mfaRequestToken!, new
+        {
+            code = recoveryCodes[0],
+            useRecoveryCode = true
+        });
+    Ensure(replayChallenge.StatusCode == HttpStatusCode.Unauthorized,
+        "A previously redeemed recovery code cannot be reused.");
+
+    Console.WriteLine("RESULT: HTTP authentication, antiforgery, cookies, session revocation, logout and MFA checks passed.");
 }
 finally
 {
     factory.Dispose();
+    mfaFactory?.Dispose();
     try
     {
+        if (mfaKeyRing is not null && Directory.Exists(mfaKeyRing))
+            Directory.Delete(mfaKeyRing, recursive: true);
         if (Directory.Exists(keyRing))
             Directory.Delete(keyRing, recursive: true);
     }
@@ -246,7 +404,7 @@ static async Task<HttpResponseMessage> PostWithCsrfAsync(
     return await client.SendAsync(request);
 }
 
-static async Task SeedMembershipAsync(string connectionString, Guid tenantId, Guid userId)
+static async Task SeedMembershipAsync(string connectionString, Guid tenantId, Guid userId, int roleId = 3)
 {
     await using var connection = new NpgsqlConnection(connectionString);
     await connection.OpenAsync();
@@ -268,11 +426,12 @@ static async Task SeedMembershipAsync(string connectionString, Guid tenantId, Gu
         """
         INSERT INTO atendee.tenant_users
             (tenant_id,identity_user_id,display_name,role,is_active,created_at_utc)
-        VALUES(@tenant,@user,'HTTP Synthetic Receptionist',3,true,now())
+        VALUES(@tenant,@user,'HTTP Synthetic User',@role,true,now())
         """, connection, transaction))
     {
         membership.Parameters.AddWithValue("tenant", tenantId);
         membership.Parameters.AddWithValue("user", userId);
+        membership.Parameters.AddWithValue("role", roleId);
         await membership.ExecuteNonQueryAsync();
     }
 
