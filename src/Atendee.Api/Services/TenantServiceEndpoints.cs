@@ -44,10 +44,11 @@ public static class TenantServiceEndpoints
             UpsertSalonServiceRequest request,
             HttpContext context,
             TrustedRequestContext current,
-            ILogger<TenantServiceEndpoints> logger,
+            ILoggerFactory loggerFactory,
             ITenantTransactionRunner transactionRunner,
             ITenantServiceStore store) =>
         {
+            var logger = loggerFactory.CreateLogger("Atendee.Api.Services.TenantServiceEndpoints");
             if (!CanManage(current))
                 return Results.Forbid();
             if (!request.IsComplete())
