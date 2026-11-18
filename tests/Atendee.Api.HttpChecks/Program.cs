@@ -270,9 +270,14 @@ try
         {
             code = enrollmentCode
         });
-    var enrollmentVerifyText = await enrollmentVerify.Content.ReadAsStringAsync();
-    Ensure(enrollmentVerify.StatusCode == HttpStatusCode.OK,
-        "Valid TOTP completes owner MFA enrollment (HTTP " + (int)enrollmentVerify.StatusCode + "): " + enrollmentVerifyText);
+    if (enrollmentVerify.StatusCode != HttpStatusCode.OK)
+    {
+        var failureBody = await enrollmentVerify.Content.ReadAsStringAsync();
+        throw new InvalidOperationException(
+            "FAIL: Valid TOTP enrollment returned HTTP " + (int)enrollmentVerify.StatusCode +
+            " with response: " + failureBody);
+    }
+    Ensure(true, "Valid TOTP completes owner MFA enrollment.");
     var recoveryCodes = (await enrollmentVerify.Content.ReadFromJsonAsync<JsonElement>())
         .GetProperty("recoveryCodes").EnumerateArray()
         .Select(value => value.GetString()!).ToArray();
@@ -313,6 +318,8 @@ try
     Ensure(recoveryChallenge.StatusCode == HttpStatusCode.OK &&
            recoveryChallengeBody.GetProperty("state").GetString() == "authenticated",
         "A valid one-time recovery code completes the MFA challenge.");
+    Ensure((await mfaClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.OK,
+        "MFA authentication claims survive security-stamp refresh on the next request.");
 
     var replayLogout = await PostWithCsrfAsync(
         mfaClient, "/api/v1/auth/logout", mfaRequestToken!, new { });
