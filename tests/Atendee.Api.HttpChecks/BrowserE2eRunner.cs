@@ -1,10 +1,13 @@
 using System.Diagnostics;
 using System.Net;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Atendee.Infrastructure.Identity;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +24,16 @@ internal static class BrowserE2eRunner
     {
         var keyRing = Path.Combine(Path.GetTempPath(), "atendee-browser-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(keyRing);
+
+        using var rsa = RSA.Create(2048);
+        var certificateRequest = new CertificateRequest(
+            "CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var subjectAlternativeNames = new SubjectAlternativeNameBuilder();
+        subjectAlternativeNames.AddDnsName("localhost");
+        subjectAlternativeNames.AddIpAddress(IPAddress.Loopback);
+        certificateRequest.CertificateExtensions.Add(subjectAlternativeNames.Build());
+        using var certificate = certificateRequest.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(2));
 
         var factory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
         {
@@ -41,13 +54,13 @@ internal static class BrowserE2eRunner
         {
             // .NET 10 WebApplicationFactory Kestrel mode gives the browser a real
             // network endpoint while preserving the production API middleware.
-            factory.UseKestrel(0);
+            factory.UseKestrel(options => options.Listen(IPAddress.Loopback, 0, listen => listen.UseHttps(certificate)));
             factory.StartServer();
 
             var server = factory.Services.GetRequiredService<IServer>();
             var addresses = server.Features.Get<IServerAddressesFeature>()?.Addresses;
             var apiAddress = addresses?.SingleOrDefault(address =>
-                address.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+                address.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
             if (string.IsNullOrWhiteSpace(apiAddress))
                 throw new InvalidOperationException("The browser API host did not publish its Kestrel address.");
 
@@ -82,6 +95,7 @@ internal static class BrowserE2eRunner
             };
             startInfo.ArgumentList.Add("run");
             startInfo.ArgumentList.Add("test:e2e:fullstack");
+            Console.WriteLine("Starting full-stack browser E2E against the temporary HTTPS Kestrel API.");
             foreach (var name in startInfo.Environment.Keys
                 .Where(name => name.StartsWith("ATENDEE_TEST_", StringComparison.Ordinal) ||
                                name.StartsWith("ConnectionStrings__", StringComparison.Ordinal) ||

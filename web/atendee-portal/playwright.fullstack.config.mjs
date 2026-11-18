@@ -8,14 +8,14 @@ export default defineConfig({
   retries: 0,
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:4176",
+    baseURL: "http://localhost:4176",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     ...devices["Desktop Chrome"]
   },
   webServer: {
     command: "npm run dev:server",
-    url: "http://127.0.0.1:4176",
+    url: "http://localhost:4176",
     env: {
       PORT: "4176",
       ATENDEE_API_PROXY_TARGET: process.env.ATENDEE_API_PROXY_TARGET ?? ""
