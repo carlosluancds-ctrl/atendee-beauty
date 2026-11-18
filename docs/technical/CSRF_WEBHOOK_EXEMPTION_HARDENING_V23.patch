@@ -1,0 +1,17 @@
+--- a/src/Atendee.Api/Program.cs
++++ b/src/Atendee.Api/Program.cs
+@@ -224,9 +224,11 @@
+                          HttpMethods.IsHead(method) ||
+                          HttpMethods.IsOptions(method) ||
+                          HttpMethods.IsTrace(method);
+-        var isSignedWebhook = context.Request.Path.StartsWithSegments("/api/v1/webhooks");
+-
+-        if (!safeMethod && !isSignedWebhook)
++        // Fail closed for every unsafe request. Webhook endpoints are not
++        // implemented yet; when introduced, they must opt out only through
++        // endpoint-specific signature-validation metadata, never a path prefix.
++
++        if (!safeMethod)
+         {
+             var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
+             try

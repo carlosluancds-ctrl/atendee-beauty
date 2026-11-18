@@ -224,9 +224,11 @@ if (identityEnabled)
                          HttpMethods.IsHead(method) ||
                          HttpMethods.IsOptions(method) ||
                          HttpMethods.IsTrace(method);
-        var isSignedWebhook = context.Request.Path.StartsWithSegments("/api/v1/webhooks");
+        // Fail closed for every unsafe request. Webhook endpoints are not
+        // implemented yet; when introduced, they must opt out only through
+        // endpoint-specific signature-validation metadata, never a path prefix.
 
-        if (!safeMethod && !isSignedWebhook)
+        if (!safeMethod)
         {
             var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
             try
