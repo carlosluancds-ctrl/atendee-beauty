@@ -1,4 +1,4 @@
-﻿# Atendee Beauty — continuidade V27 (2026-11-18)
+# Atendee Beauty — continuidade V27 (2026-11-18)
 
 ## Estado do repositório
 - Branch: security/csrf-webhook-antiforgery-v23
@@ -31,7 +31,7 @@
 ### Cobertura adicionada
 - Verifica que revogação de sessões e desativação produzem eventos persistidos.
 - Verifica que o papel de runtime não consegue reescrever eventos.
-- Build Release: sem warnings/erros.
+- Build Release: sem warnings/erros.\n- A primeira execu??o encontrou somente um defeito no helper de teste (reader Npgsql ainda aberto no commit da transa??o); o helper foi corrigido para descartar o reader antes do commit e a execu??o subsequente passou.
 - Domain checks: 15/15.
 - Os testes HTTP/PostgreSQL precisam ser confirmados pelo CI após o push; o ambiente remoto local não tem Docker disponível.
 
