@@ -16,9 +16,12 @@ var tenantConnectionString = Required("ATENDEE_TEST_CONNECTION_STRING");
 var migratorConnectionString = Required("ATENDEE_TEST_MIGRATOR_CONNECTION_STRING");
 var keyRing = Path.Combine(Path.GetTempPath(), "atendee-http-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(keyRing);
+var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
+var apiContentRoot = Path.Combine(repositoryRoot, "src", "Atendee.Api");
 
 var factory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
 {
+    web.UseContentRoot(apiContentRoot);
     web.UseEnvironment("Development");
     web.ConfigureAppConfiguration((_, configuration) =>
     {
@@ -184,6 +187,16 @@ finally
     {
         // Temporary test key cleanup must not hide the security-test result.
     }
+}
+
+static string FindRepositoryRoot(string startPath)
+{
+    var directory = new DirectoryInfo(startPath);
+    while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Atendee.sln")))
+        directory = directory.Parent;
+
+    return directory?.FullName
+        ?? throw new DirectoryNotFoundException("Could not locate Atendee.sln from " + startPath);
 }
 
 static string Required(string name)
