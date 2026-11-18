@@ -1,30 +1,27 @@
 {
-  "backup_version": "v59-professional-team-workspace",
+  "backup_version": "v60-scoped-professional-discovery-and-self-services",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V59_2026-11-18.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V60_2026-11-18.md",
   "latest_repository_commit": "PENDING_CHECKPOINT_COMMIT",
   "latest_ci": {
-    "v57_run": "44295220888",
-    "v57_sha": "0afbf4e85e46424cc71a47edffb614e428e640ff",
-    "v57_status": "success",
-    "v59_status": "pending_full_workflow_for_final_head",
-    "v59_frontend_validation": "audit_tests_build_passed_on_9e242b449c2221d08cb63a0f0e1e91ae6f78b4eb"
+    "v59_run": "44299982400",
+    "v59_status": "success",
+    "v60_code_run": "44302233456",
+    "v60_code_sha": "6a1c69c2d087556cbb482b549a3ae1933e9e46e2",
+    "v60_code_status": "in_progress_at_checkpoint; frontend_audit_tests_build_release_and_domain_passed",
+    "v60_ui_run": "44302278938",
+    "v60_ui_sha": "c9d27481743090ac7c6096e19f982525701c445f",
+    "v60_ui_status": "in_progress_at_checkpoint; frontend_audit_tests_build_passed"
   },
   "latest_implementation": {
-    "frontend": "web/atendee-portal/src/ProfessionalPage.tsx",
-    "routes": [
-      "/team",
-      "/my-services"
-    ],
-    "team_api": [
-      "GET /api/v1/professionals",
-      "PUT /api/v1/professionals/{id}/services"
-    ],
-    "professional_self_api": "GET /api/v1/professionals/me",
-    "migration": "db/migrations/014_create_professional_profiles.sql",
-    "authorization": "Owner/Manager manage assignments; Receptionist read-only; Professional self-only"
+    "eligible_members_endpoint": "GET /api/v1/professionals/eligible-members",
+    "eligible_members_authorization": "Owner/Manager with ManageTeamAndSettings; active Professional memberships in current tenant with no existing profile",
+    "create_profile_endpoint": "POST /api/v1/professionals",
+    "professional_assigned_services_endpoint": "GET /api/v1/professionals/me/services",
+    "self_service_authorization": "Professional with ReadData; assigned services only",
+    "integration_checks": "tests/Atendee.Api.HttpChecks/Program.cs"
   },
   "safeguards": {
     "main_untouched": true,
