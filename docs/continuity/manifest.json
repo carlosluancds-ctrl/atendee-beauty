@@ -1,36 +1,21 @@
 {
-  "backup_version": "v50-tenant-onboarding-backend",
+  "backup_version": "v51-fix-stale-http-test-symbol",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V50_2026-11-18.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V51_2026-11-18.md",
   "latest_repository_commit": "PENDING_COMMIT",
   "latest_ci": {
-    "status": "pending",
-    "tested_commit": null
+    "run_id": "44293354129",
+    "status": "failure",
+    "tested_commit": "759e9fa88eff6cb147f736a0695a658eebd03998",
+    "reason": "pre-existing stale variable reference in HTTP integration test; fixed in V51"
   },
   "latest_implementation": {
     "tenant_profile_endpoint": "GET /api/v1/tenant",
     "complete_onboarding_endpoint": "POST /api/v1/tenant/onboarding/complete",
     "database_migration": "db/migrations/012_complete_tenant_onboarding.sql",
-    "transition": "PendingVerification -> SetupRequired; owner-only, MFA and confirmed email, idempotent",
-    "audit": "Existing PostgreSQL tenant status trigger writes tenant_status.changed in same transaction"
-  },
-  "implemented_before_v50": [
-    "Offline first-Owner provisioning command",
-    "Protected operational identity create/reissue command",
-    "Atomic email activation with Amazon SES API v2 sender",
-    "React activation page",
-    "Login, TOTP/recovery challenge, MFA enrollment and one-time recovery codes",
-    "Browser mock-API E2E review of activation and MFA flows"
-  ],
-  "external_prerequisites_pending": [
-    "SES sender verification, DKIM, SPF/DMARC, production access and IAM",
-    "Production DB migration and restricted roles",
-    "IIS same-origin reverse proxy and TLS",
-    "Platform Admin store/MFA and break-glass",
-    "Non-Windows Data Protection protector",
-    "Distributed rate limiting and trusted proxy configuration",
-    "No production deployment authorized"
-  ]
+    "transition": "PendingVerification -> SetupRequired; active Owner only, confirmed email and MFA, idempotent",
+    "audit": "Existing PostgreSQL tenant status trigger"
+  }
 }

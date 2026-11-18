@@ -747,7 +747,7 @@ try
         "Professional cannot list other profiles or access the unscoped service catalogue.");
 
     var professionalAudit = await ReadProfessionalAuditAsync(
-        migratorConnectionString, ownerTenantId, professionalProfileId);
+        migratorConnectionString, ownerTenantId, assignedAssignedProfessionalProfileId);
     Ensure(professionalAudit.Contains("professional.created") &&
            professionalAudit.Contains("professional_service.assigned"),
         "Professional creation and service assignment are durably audited.");
