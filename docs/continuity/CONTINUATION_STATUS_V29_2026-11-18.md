@@ -27,7 +27,8 @@ Decisions and documented limitations:
 - Release build: 0 warnings / 0 errors locally. CI result is recorded below once observed.
 
 ## CI
-- Pending for this commit (see CI result section appended after observation).
+- GitHub Actions run 44213223276: completed / success on SHA 418699ddbcf22d198519570a7cc5412a678934cb (PostgreSQL 18.7, all steps including API HTTP authentication and session-security checks).
+- This is automated CI evidence only; it is not production approval.
 
 ## Remaining work
 - Audit membership role changes / activation / deactivation (needs trusted writer path).
