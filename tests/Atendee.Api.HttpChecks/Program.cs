@@ -19,6 +19,13 @@ Directory.CreateDirectory(keyRing);
 var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
 var apiContentRoot = Path.Combine(repositoryRoot, "src", "Atendee.Api");
 
+// Minimal hosting reads its default configuration while Program.cs executes;
+// provide connection strings as process environment variables before the
+// WebApplicationFactory starts the application.
+Environment.SetEnvironmentVariable("ConnectionStrings__Identity", identityConnectionString);
+Environment.SetEnvironmentVariable("ConnectionStrings__Tenant", tenantConnectionString);
+Environment.SetEnvironmentVariable("DataProtection__KeyRingPath", keyRing);
+
 var factory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
 {
     web.UseContentRoot(apiContentRoot);
