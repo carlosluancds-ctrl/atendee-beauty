@@ -102,8 +102,13 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   await page.getByLabel("Buffer antes (min)").fill("5");
   await page.getByLabel("Buffer depois (min)").fill("10");
   await page.getByLabel("Estado").selectOption("true");
+  const serviceCreateResponsePromise = page.waitForResponse(response =>
+    response.url().endsWith("/api/v1/services") && response.request().method() === "POST");
   await page.getByRole("button", { name: "Criar serviço" }).click();
-  await expect(page.getByRole("status")).toContainText("Serviço criado.");
+  const serviceCreateResponse = await serviceCreateResponsePromise;
+  const serviceCreateBody = await serviceCreateResponse.text();
+  if (!serviceCreateResponse.ok())
+    throw new Error("Real service-create API returned HTTP " + serviceCreateResponse.status() + ": " + serviceCreateBody);
   await expect(page.getByRole("heading", { name: "Corte E2E" })).toBeVisible();
   await logout(page);
 
