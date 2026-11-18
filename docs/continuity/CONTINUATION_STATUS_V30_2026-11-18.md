@@ -26,7 +26,7 @@ Limitations:
 - Release build 0 warnings / 0 errors locally. CI result: see below once observed.
 
 ## CI
-- Pending for this increment.
+- GitHub Actions run 44214087871: completed / success on SHA 4958b13140f817650e81c93102ffc67e290c881b (PostgreSQL 18.7; all steps green, including Identity/TOTP and API HTTP checks with the new trigger assertions). Run 44213787047 (docs commit 8e5985e) also succeeded. CI evidence only; not production approval.
 
 ## Remaining work
 - Audit MFA enrollment failures and password-verified-pending-MFA.

@@ -5,10 +5,10 @@
 ## Where things are
 - Repo (private): https://github.com/carlosluancds-ctrl/atendee-beauty
 - Work branch: security/csrf-webhook-antiforgery-v23 (base wip/operational-identity-v1). Never touch main.
-- Last verified code SHA with green CI: 418699ddbcf22d198519570a7cc5412a678934cb (run 44213223276, PostgreSQL 18.7). Docs-only commits may follow it; always re-check `git log` and the latest CI instead of trusting this file.
+- Last verified code SHA with green CI: 4958b13140f817650e81c93102ffc67e290c881b (run 44214087871, PostgreSQL 18.7). Docs-only commits may follow it; always re-check `git log` and the latest CI instead of trusting this file.
 - Previous remote workspace: Windows machine runnervm9zap3, clone at C:\Users\RDP\Documents\Atendee_Beauty_Git_wip_operational_identity_v1 (access via Desktop Commander connector + gh CLI; never ask for or print tokens).
 
-## Last completed step (V30, CI pending until recorded in CONTINUATION_STATUS_V30)
+## Last completed step (V30, green CI run 44214087871 at 4958b13)
 Database-trigger audit of membership created/role_changed/activated/deactivated (migration 005). Before it: V29 auth outcome audit (green CI at 418699d). Details: CONTINUATION_STATUS_V29 / V30.
 
 ## Next step
