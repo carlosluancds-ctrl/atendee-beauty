@@ -1,23 +1,23 @@
 {
-  "backup_version": "v62-browser-e2e-approved",
+  "backup_version": "v63-fullstack-browser-e2e-approved",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V62_2026-11-18.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V62_2026-11-18.md",
-  "latest_implementation_commit": "6ab1560e452776c6f1d4ccfc8900a4f04b47f48f",
-  "latest_documentation_parent_commit": "6ab1560e452776c6f1d4ccfc8900a4f04b47f48f",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V63_2026-11-18.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V63_2026-11-18.md",
+  "latest_implementation_commit": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
+  "latest_documentation_parent_commit": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
   "latest_ci": {
     "v61_run": "44303068000",
     "v61_status": "success",
     "v61_implementation_sha": "a2169023009bf240e9ad4a3ca39fdd6be29305df",
-    "v62_initial_run": "44308963259",
-    "v62_initial_status": "failure",
-    "v62_initial_reason": "Playwright 1.56.1 did not support Ubuntu 26.04 runner",
     "v62_run": "44309710988",
     "v62_status": "success",
     "v62_implementation_sha": "6ab1560e452776c6f1d4ccfc8900a4f04b47f48f",
-    "v62_checks": "npm ci; npm audit (zero vulnerabilities); 2 frontend unit tests; TypeScript/build; Chromium install; 8 Playwright browser E2E tests; locked .NET restore; Release build; domain checks; disposable PostgreSQL 18.7; EF Core/RLS; Identity/TOTP/tenant context; API HTTP authentication/session security"
+    "v63_run": "44319685006",
+    "v63_status": "success",
+    "v63_implementation_sha": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
+    "v63_checks": "npm ci; npm audit; 2 frontend unit tests; TypeScript/build; Chromium; 8 mocked Playwright tests; locked .NET restore; Release build; 26/26 domain checks; disposable PostgreSQL 18.7; 10/10 persistence/RLS checks; 49/49 Identity checks; API HTTP authentication/session security; 1 real full-stack browser E2E"
   },
   "v62_browser_suite": {
     "framework": "@playwright/test",
@@ -25,9 +25,24 @@
     "test_file": "web/atendee-portal/tests/e2e/portal.spec.mjs",
     "test_count": 8,
     "api_mode": "deterministic mocked responses; UI/browser interaction only",
-    "backend_authorization_source": "existing API HTTP, Identity/TOTP and PostgreSQL/RLS integration checks"
+    "backend_authorization_source": "API HTTP, Identity/TOTP and PostgreSQL/RLS integration checks"
   },
-  "next_step": "V63 full-stack browser test harness using real ASP.NET API, portal and disposable PostgreSQL with isolated synthetic identities and MFA; inspect WebApplicationFactory, API HTTP fixture, DB provisioning and Identity helpers before implementation",
+  "v63_fullstack_browser_suite": {
+    "runner": "tests/Atendee.Api.HttpChecks/BrowserE2eRunner.cs",
+    "test_file": "web/atendee-portal/tests/e2e/fullstack.spec.mjs",
+    "test_count": 1,
+    "api_mode": "real ASP.NET Core API via temporary HTTPS Kestrel",
+    "database": "disposable PostgreSQL 18.7 provisioned by CI",
+    "roles": ["Owner", "Manager", "Professional", "Receptionist"],
+    "key_security_assertions": [
+      "secure HttpOnly SameSite=Strict __Host- application cookie",
+      "antiforgery header on browser mutations",
+      "Manager MFA enrollment before privileged session",
+      "Receptionist direct eligible-members request returns 403",
+      "Professional reads own assigned services"
+    ]
+  },
+  "next_step": "V64 explicit two-tenant negative full-stack browser cases and authenticated antiforgery/session-transition regression tests",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
