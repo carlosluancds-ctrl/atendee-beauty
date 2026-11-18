@@ -1,4 +1,4 @@
-# Atendee Portal — login, MFA and activation frontend
+# Atendee Portal — identity onboarding and salon service catalogue
 
 React 19 + TypeScript single-page frontend for the operational identity onboarding flow.
 
@@ -26,7 +26,8 @@ Serve the `dist/` directory as static content. Configure IIS URL Rewrite/ARR (or
 
 The SPA provides:
 - `/activate#token=...` — one-time account activation.
-- `/login` — email/password login.
+- `/login` — email/password login and MFA.
+- `/services` — authenticated tenant service catalogue; Owner/Manager can create, edit and archive, Receptionist has read-only access.
 - MFA challenge for accounts with MFA already enabled.
 - MFA enrollment for provisioned identities without MFA.
 - One-time recovery-code display after successful MFA enrollment.
@@ -40,6 +41,8 @@ The SPA provides:
 - MFA recovery codes are shown once and are held only in component memory until the user confirms they have saved them.
 - A pending first Owner completes MFA without receiving an application session; the existing offline V41 command is still required to create the salon membership.
 - No permissive CORS, third-party scripts, external fonts or third-party QR service.
+- Service mutations obtain a fresh antiforgery token and send it in `X-CSRF-TOKEN`.
+- Currency is entered explicitly as ISO 4217 and prices are displayed as integer minor units; the UI does not assume two decimal places.
 
 ## Commands
 

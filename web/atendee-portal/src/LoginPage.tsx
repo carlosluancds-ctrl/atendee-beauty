@@ -114,8 +114,8 @@ export default function LoginPage() {
         await beginEnrollment();
       } else if (response.ok && payload.state === "authenticated") {
         setPassword("");
-        setStage("authenticated");
-        setNotice("Sua autenticação foi concluída.");
+        window.location.assign("/services");
+        return;
       } else {
         setError("E-mail ou senha inválidos ou conta indisponível.");
       }
@@ -138,8 +138,8 @@ export default function LoginPage() {
       });
       if (response.ok) {
         setCode("");
-        setStage("authenticated");
-        setNotice("Autenticação em duas etapas concluída.");
+        window.location.assign("/services");
+        return;
       } else if (response.status === 429) {
         setError("Muitas tentativas. Aguarde um momento antes de tentar novamente.");
       } else {
@@ -216,7 +216,11 @@ export default function LoginPage() {
     setRecoveryCodes([]);
     setSharedKey("");
     setAuthenticatorUri("");
-    setStage(membershipPending ? "pending-owner" : "authenticated");
+    if (!membershipPending) {
+      window.location.assign("/services");
+      return;
+    }
+    setStage("pending-owner");
     setNotice(null);
   }
 
