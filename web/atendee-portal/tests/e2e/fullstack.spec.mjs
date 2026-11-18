@@ -115,7 +115,8 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
       "; request body: " + serviceCreateRequest.postData() +
       "; content-type present: " + Boolean(headers["content-type"]) +
       "; antiforgery header present: " + Boolean(headers["x-csrf-token"]) +
-      "; auth cookie present: " + Boolean(headers.cookie?.includes("__Host-Atendee.Auth")));
+      "; auth cookie present: " + Boolean(headers.cookie?.includes("__Host-Atendee.Auth")) +
+      "; antiforgery cookie present: " + Boolean(headers.cookie?.includes("__Host-Atendee.AntiForgery")));
   }
   await expect(page.getByRole("heading", { name: "Corte E2E" })).toBeVisible();
   await logout(page);
