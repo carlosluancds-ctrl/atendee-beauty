@@ -640,8 +640,10 @@ try
         Ensure(enabled.Succeeded, "Promotion test identity completes MFA before role elevation.");
     }
     await UpdateMembershipAsync(migratorConnectionString, promotionUserId, roleId: 1, isActive: true);
-    Ensure((await promotionClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Forbidden,
-        "A password-only session cannot use Owner privileges even after a server-side MFA-ready promotion.");
+    var promotedOwnerSession = await promotionClient.GetAsync("/api/v1/auth/me");
+    Ensure(promotedOwnerSession.StatusCode == HttpStatusCode.Forbidden,
+        "A password-only session cannot use Owner privileges even after a server-side MFA-ready promotion (HTTP " +
+        (int)promotedOwnerSession.StatusCode + ").");
 
     using var deactivationClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
