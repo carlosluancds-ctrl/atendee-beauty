@@ -39,7 +39,7 @@ GET/POST /api/v1/customers
 GET/PATCH /api/v1/customers/{id}
 POST /api/v1/customers/{id}/archive
 GET/POST /api/v1/services
-GET/PATCH /api/v1/services/{id}
+GET/PUT /api/v1/services/{id}
 GET/POST /api/v1/professionals
 GET/POST /api/v1/availability
 GET/POST /api/v1/appointments

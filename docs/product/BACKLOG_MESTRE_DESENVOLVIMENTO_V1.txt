@@ -56,6 +56,7 @@ Aceite: proprietário e gerente autorizado podem convidar somente papéis inferi
 ÉPICO 4 — CATÁLOGO E PROFISSIONAIS (P1)
 4.1 CRUD de serviços.
 Aceite: duração, preço em centavos, buffers, status e moeda; não aceitar valores negativos ou flutuantes.
+Implementação backend V52-V55: catálogo tenant-scoped com RLS, preço inteiro em unidade monetária menor, moeda ISO 4217 explícita, duração/buffers em minutos, arquivamento lógico e auditoria por trigger; GET/POST/PUT protegidos por papel e status. CI PostgreSQL 18.7 aprovado no run 44288089463.
 4.2 CRUD de profissionais e especialidades.
 Aceite: usuário profissional sempre vinculado ao mesmo tenant; sem acesso a dados de outros profissionais fora das permissões.
 4.3 Associação profissional-serviço e disponibilidade.
