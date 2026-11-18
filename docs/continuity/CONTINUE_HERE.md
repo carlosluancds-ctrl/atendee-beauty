@@ -5,10 +5,11 @@
 ## Where things are
 - Repo (private): https://github.com/carlosluancds-ctrl/atendee-beauty
 - Work branch: security/csrf-webhook-antiforgery-v23 (base wip/operational-identity-v1). Never touch main.
-- Last verified code SHA with green CI: 57eb581ddd425087f5c05955e56e8ea86ce610a8 (run 44218855206, PostgreSQL 18.7). Docs-only commits follow it (V33 record, V34 design, V35 approval); always re-check `git log` and the latest CI instead of trusting this file.
+- Last verified code SHA with green CI: 7d681d5da2b8bf58bff8c4b1bd651983639b08ab (run 44223700861, PostgreSQL 18.7; V37 trusted actor propagation). Always re-check `git log` and the latest CI instead of trusting this file.
 - Previous remote workspace: Windows machine runnervm9zap3, clone at C:\Users\RDP\Documents\Atendee_Beauty_Git_wip_operational_identity_v1 (access via Desktop Commander connector + gh CLI; never ask for or print tokens). Desktop Commander processes return after ~3 s; poll with read_process_output. In PowerShell avoid complex gh --jq quoting; use `gh run list` / `gh run view --log | Select-String`. Use absolute paths in .NET file APIs. PowerShell 5 reads BOM-less scripts as ANSI: add a UTF-8 BOM to scripts containing accents.
 
 ## Last completed steps
+- V37: trusted actor propagation to trigger-written audit events; migration 008; transaction-local `app.actor_id`; adversarial HTTP and pooled-connection tests. Code commit 7d681d5, green PostgreSQL 18.7 CI run 44223700861. See CONTINUATION_STATUS_V37.
 - V35: owner APPROVED the tenant-status access matrix (2026-11-18, "Eu aprovo aquela tabela lá"). Docs only. See CONTINUATION_STATUS_V35.
 - V34: administrative actions design, docs only (docs/technical/ADMIN_ACTIONS_DESIGN_V1.md).
 - V33: tenant status change audit via DB trigger, migration 007 (57eb581, green CI 44218855206).
@@ -19,9 +20,9 @@
 - STILL OPEN (ask the owner, do not decide): PastDue grace period and PastDue -> Suspended process; post-Closed retention/export/deletion; who/how changes a tenant status; Platform Admin model, step-up window, four-eyes, status transition graph, audit retention, break-glass rules (ADMIN_ACTIONS_DESIGN_V1.md section 10, items 2-6).
 
 ## Next step
-1. Implementation step 1 of the admin design (safe without open decisions): trusted actor propagation to the database (transaction-local setting read by the triggers) with an adversarial test that a client-supplied value never reaches it. No endpoints.
-2. Then step 2 (TargetTenantId on identity-target events, tenant-scoped read view, read-only role).
-3. Ask the owner for the still-open decisions in one short message before any status-change flow or Platform Admin work.
+1. Extend identity-target audit events with a trusted `TargetTenantId`, resolved from persisted membership within the transaction, and test target consistency and grants.
+2. Do not expose a tenant-visible audit read view or export endpoint until the owner decides audit visibility, retention and post-Closed handling.
+3. Ask the owner for the remaining decisions in `ADMIN_ACTIONS_DESIGN_V1.md` before any status-change flow or Platform Admin work.
 
 ## Routine for every step
 Verify git status/HEAD/CI -> inspect code -> small change + negative tests -> git diff --check + Release build -> commit/push on the work branch -> watch CI for the exact SHA (confirm new assertions in the log) -> update CONTINUATION_STATUS_V<n> and this file -> clean working tree -> summarize.
