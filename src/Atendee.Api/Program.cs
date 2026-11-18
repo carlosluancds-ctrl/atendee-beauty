@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using Atendee.Api.Authentication;
 using Atendee.Api.Services;
+using Atendee.Api.Professionals;
 using Atendee.Infrastructure;
 using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.Antiforgery;
@@ -304,6 +305,7 @@ if (identityEnabled)
 {
     app.MapOperationalAuthentication();
     app.MapTenantServices();
+    app.MapTenantProfessionals();
 }
 
 app.Run();
