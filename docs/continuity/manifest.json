@@ -1,55 +1,50 @@
 {
-  "backup_version": "v56-service-catalogue-backend-ci-verified",
+  "backup_version": "v58-service-catalogue-frontend-browser-reviewed",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V56_2026-11-18.md",
-  "latest_repository_commit": "66bd77a2eccdd5cb52ffafd4a6f808e19669864e",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V58_2026-11-18.md",
+  "latest_repository_commit": "4af141c4eed1a9285c63f63769f49adcbb7942fd",
   "latest_ci": {
-    "run_id": "44288089463",
-    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44288089463",
+    "run_id": "44289289412",
+    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44289289412",
     "status": "success",
-    "tested_commit": "66bd77a2eccdd5cb52ffafd4a6f808e19669864e"
+    "tested_commit": "4af141c4eed1a9285c63f63769f49adcbb7942fd"
   },
-  "previous_implementation": {
-    "commit": "10ccc184fcd094a9ae6aa33ca90161cc90a2fcfd",
-    "ci_run": "44285681344",
+  "previous_service_backend": {
+    "commit": "66bd77a2eccdd5cb52ffafd4a6f808e19669864e",
+    "ci_run": "44288089463",
     "ci_status": "success"
   },
   "owner_decisions": {
-    "first_owner_provisioning": "approved offline operator command; implemented in V41 and unchanged",
+    "first_owner_provisioning": "approved offline operator command; implemented in V41",
     "initial_operational_identity": "approved separate protected operator command; implemented in V44",
-    "transactional_email_provider": "Amazon SES API v2 selected as default under owner's autonomy delegation",
+    "transactional_email_provider": "Amazon SES API v2 selected under owner's autonomy delegation",
     "tenant_status_policy": "approved status x role x capability matrix; status-change authority/process remains outside approval",
     "onboarding_transition": "blocked until contact verification, approved terms version/content, essential salon data and transition authority are specified"
   },
   "implemented": [
-    "ASP.NET Core Identity operational store and separate platform identity boundary",
+    "ASP.NET Core Identity, MFA, activation and offline provisioning",
     "Trusted single-tenant membership resolution and PostgreSQL RLS",
-    "TOTP, encrypted recovery material, replay guard and Owner/Manager MFA enforcement",
-    "Secure HttpOnly cookies, antiforgery and auth rate limits",
-    "Offline first-Owner provisioning and operational identity create/reissue commands",
-    "Amazon SES v2 sender and atomic activation API",
-    "React activation, login, TOTP/recovery challenge, MFA setup and one-time recovery-code UI",
-    "Authenticated GET /api/v1/tenant with minimal profile projection (migration 012)",
-    "Tenant-scoped service domain, repository, EF mapping and API GET/POST/PUT",
-    "Migration 013 with service RLS, restricted runtime grants, append-only audit table and trigger",
-    "Role/status authorization for service read/manage",
-    "Domain and HTTP tests for service validation, role restrictions, RLS and audit",
-    "Technical service catalogue specification and updated API/backlog docs"
+    "Authenticated GET /api/v1/tenant with migration 012",
+    "Tenant-scoped service catalogue backend with migration 013, RLS and append-only audit",
+    "Service API GET/POST/PUT with role/status authorization",
+    "React /services page with role-aware list/create/edit/archive",
+    "Login/MFA success redirect to /services",
+    "Same-origin antiforgery mutations and secure cookie use",
+    "Browser E2E mock-API review for Owner, Receptionist and Professional roles"
   ],
   "not_production_ready": [
-    "Service catalogue frontend UI pending",
-    "Professional profile and professional-service association pending",
-    "Availability and appointment modules pending",
-    "Tenant onboarding status transition pending approved terms and authority contract",
-    "IIS same-origin /api proxy and TLS not configured",
+    "Professional profile and professional-service assignments pending",
+    "Availability and appointments pending",
+    "Salon onboarding status transition pending approved terms/authority",
+    "IIS same-origin /api reverse proxy and TLS not configured",
     "SES sender identity/DNS, DKIM, SPF/DMARC, production access and IAM not configured",
     "Apply migrations through 013 and provision restricted roles in target environment",
     "Platform Admin identity/MFA/break-glass and WebAuthn/passkey pending",
     "Non-Windows production Data Protection, distributed rate limiting and trusted proxy pending",
     "Real ASP.NET API browser E2E through production-style reverse proxy not performed",
-    "No production deployment authorized or performed"
+    "No production deployment authorized"
   ],
-  "local_worktree": "temporary remote snapshot at C:\\Temp\\atendee-work used for build and browser review; not a persistent workstation clone"
+  "local_worktree": "temporary remote snapshot at C:\\Temp\\atendee-work used for frontend build and mock-API browser review; not a persistent workstation clone"
 }
