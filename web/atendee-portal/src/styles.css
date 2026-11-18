@@ -521,3 +521,93 @@ select { font: inherit; }
   .section-heading { align-items: flex-start; }
   .form-actions button { width: 100%; }
 }
+
+
+/* Professional team workspace */
+.professional-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.professional-card, .professional-self-card {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 10px 28px rgba(55, 46, 34, .035);
+}
+.professional-card h2, .professional-self-card h2 {
+  margin: 0;
+  font-family: Georgia, serif;
+  font-size: 20px;
+  font-weight: 500;
+}
+.professional-card .service-card-top p, .professional-self-card > p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.professional-assignment-form { margin-top: 20px; }
+.professional-assignment-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.professional-assignment-form legend {
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.professional-service-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 9px 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+}
+.professional-service-option:last-child { margin-bottom: 0; }
+.professional-service-option input {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent-dark);
+}
+.professional-assignment-form button { margin-top: 13px; }
+.professional-readonly-services {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.professional-readonly-services strong { font-size: 11px; }
+.professional-readonly-services p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.professional-self-count {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.professional-self-count strong {
+  font-family: Georgia, serif;
+  font-size: 34px;
+  font-weight: 500;
+}
+.professional-self-count span { color: var(--muted); font-size: 11px; }
+.professional-assignment-form fieldset:disabled { opacity: .65; }
+
+@media (max-width: 760px) {
+  .professional-grid { grid-template-columns: 1fr; }
+}
