@@ -1,26 +1,23 @@
 {
-  "backup_version": "v55-fix-https-test-client",
+  "backup_version": "v56-isolate-onboarding-test-fixture",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V55_2026-11-18.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V56_2026-11-18.md",
   "latest_repository_commit": "PENDING_COMMIT",
   "latest_ci": {
-    "v53_run": "44294027003",
-    "v53_status": "failure",
-    "v53_onboarding_checks": "passed",
-    "v53_failure": "later professional HTTP test client used HTTP with Secure antiforgery cookie; fixed in V55",
-    "v54_run": "44294201306",
-    "v54_status": "pending_at_checkpoint",
-    "v55_status": "pending"
+    "v55_run": "44294386866",
+    "v55_status": "failure",
+    "v55_passed": ["frontend", "build", "domain", "PostgreSQL 18.7", "persistence/RLS", "Identity/TOTP", "onboarding completion and audit"],
+    "v55_failure": "later Professional login denied because test fixture remained SetupRequired; V56 resets it to Active after onboarding assertions",
+    "v56_status": "pending"
   },
   "latest_implementation": {
-    "tenant_profile_endpoint": "GET /api/v1/tenant (existing)",
-    "complete_onboarding_endpoint": "POST /api/v1/tenant/onboarding/complete",
-    "database_migration": "db/migrations/015_complete_tenant_onboarding.sql",
-    "workflow_applies_migration": true,
+    "profile_endpoint": "GET /api/v1/tenant (existing)",
+    "onboarding_endpoint": "POST /api/v1/tenant/onboarding/complete",
+    "migration": "db/migrations/015_complete_tenant_onboarding.sql",
     "database_role": "explicit transaction + SET LOCAL ROLE atendee_runtime",
-    "transition": "PendingVerification -> SetupRequired; active Owner, confirmed email and MFA, idempotent",
+    "transition": "PendingVerification -> SetupRequired; active Owner, confirmed email and MFA; idempotent",
     "audit": "Existing PostgreSQL tenant status trigger"
   }
 }

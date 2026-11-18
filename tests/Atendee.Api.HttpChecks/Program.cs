@@ -628,6 +628,11 @@ try
            (await ReadTenantStatusAuditAsync(migratorConnectionString, ownerTenantId)).Length == 1,
         "Repeating onboarding completion is idempotent and does not create a second status audit event.");
 
+    // The remaining service/professional integration checks share this tenant
+    // fixture and require an operational status. Reset through the migrator only
+    // after the PendingVerification -> SetupRequired behavior has been asserted.
+    await UpdateTenantStatusAsync(migratorConnectionString, ownerTenantId, statusId: 3);
+
     var createSalonService = await PostWithCsrfAsync(mfaClient, "/api/v1/services", mfaRequestToken!, new
     {
         name = "Corte de cabelo",
