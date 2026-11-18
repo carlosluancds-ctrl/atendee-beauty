@@ -262,7 +262,7 @@ try
         var owner = await users.FindByIdAsync(ownerUserId.ToString());
         Ensure(owner is not null, "Owner identity remains available for TOTP verification.");
         enrollmentCode = await users.GenerateTwoFactorTokenAsync(
-            owner!, TokenOptions.DefaultAuthenticatorProvider);
+            owner!, users.Options.Tokens.AuthenticatorTokenProvider);
     }
 
     var enrollmentVerify = await PostWithCsrfAsync(
@@ -270,8 +270,9 @@ try
         {
             code = enrollmentCode
         });
+    var enrollmentVerifyText = await enrollmentVerify.Content.ReadAsStringAsync();
     Ensure(enrollmentVerify.StatusCode == HttpStatusCode.OK,
-        "Valid TOTP completes owner MFA enrollment.");
+        "Valid TOTP completes owner MFA enrollment (HTTP " + (int)enrollmentVerify.StatusCode + "): " + enrollmentVerifyText);
     var recoveryCodes = (await enrollmentVerify.Content.ReadFromJsonAsync<JsonElement>())
         .GetProperty("recoveryCodes").EnumerateArray()
         .Select(value => value.GetString()!).ToArray();
