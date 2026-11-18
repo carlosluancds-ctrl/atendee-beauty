@@ -1,34 +1,23 @@
 {
-  "backup_version": "v61-manager-mfa-authorization-and-minor-unit-pricing",
+  "backup_version": "v62-browser-e2e-planning",
   "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V61_2026-11-18.md",
-  "latest_repository_commit": "70eaf13404d71da04c7fae8248d4ad156c2020a3",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V62_PLAN_2026-11-18.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V61_2026-11-18.md",
+  "latest_implementation_commit": "a2169023009bf240e9ad4a3ca39fdd6be29305df",
+  "latest_documentation_parent_commit": "33ee7a2507e12f2003999bca5d4ecdf33e26139a",
   "latest_ci": {
-    "v59_run": "44299982400",
-    "v59_status": "success",
-    "v60_code_run": "44302233456",
-    "v60_code_sha": "6a1c69c2d087556cbb482b549a3ae1933e9e46e2",
-    "v60_ui_run": "44302278938",
-    "v60_ui_sha": "c9d27481743090ac7c6096e19f982525701c445f",
     "v61_run": "44303068000",
-    "v61_sha": "a2169023009bf240e9ad4a3ca39fdd6be29305df",
     "v61_status": "success",
-    "v61_checks": "frontend audit/tests/build; locked restore; Release build; domain checks; PostgreSQL 18.7; EF Core/RLS; Identity/TOTP/tenant context; API HTTP authentication/session security"
+    "v61_implementation_sha": "a2169023009bf240e9ad4a3ca39fdd6be29305df"
   },
-  "latest_implementation": {
-    "eligible_members_endpoint": "GET /api/v1/professionals/eligible-members",
-    "professional_assigned_services_endpoint": "GET /api/v1/professionals/me/services",
-    "manager_mfa_and_team_authorization_checks": "tests/Atendee.Api.HttpChecks/Program.cs",
-    "professional_price_display": "web/atendee-portal/src/ProfessionalPage.tsx; stored minor-unit amount displayed without assuming two decimal places"
-  },
-  "next_step": "V62 browser E2E; inspect portal runtime and CI before selecting browser automation; Playwright not currently declared in web/atendee-portal/package.json",
+  "next_step": "Implement V62 browser E2E with a real npm-generated lockfile and an isolated test-host/seed handoff; decide full-stack harness vs explicitly frontend-only mocked browser tests before coding.",
+  "v62_status": "planning_and_architecture_inspection_only; no browser tests implemented or run",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
     "ses_configuration_authorized": false,
     "billing_trial_activation_authorized": false
-  },
-  "latest_checkpoint_commit": "70eaf13404d71da04c7fae8248d4ad156c2020a3"
+  }
 }
