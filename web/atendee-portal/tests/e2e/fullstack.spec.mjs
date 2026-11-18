@@ -43,7 +43,30 @@ async function loginWithPassword(page, email, password, expectedPath = "/service
 
 async function logout(page) {
   await page.getByRole("button", { name: "Sair" }).click();
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\\/login$/);
+}
+
+async function getAntiforgeryToken(page) {
+  return page.evaluate(async () => {
+    const response = await fetch("/api/v1/auth/antiforgery", { credentials: "same-origin" });
+    if (!response.ok) throw new Error("Could not obtain antiforgery token: " + response.status);
+    return (await response.json()).requestToken;
+  });
+}
+
+async function postWithToken(page, path, token, body = null) {
+  return page.evaluate(async ({ path, token, body }) => {
+    const headers = { "X-CSRF-TOKEN": token };
+    if (body !== null) headers["content-type"] = "application/json";
+    const response = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers,
+      body: body === null ? undefined : JSON.stringify(body)
+    });
+    const payload = await response.json().catch(() => null);
+    return { status: response.status, error: payload?.error ?? null };
+  }, { path, token, body });
 }
 
 test("real API browser flow: Owner, Manager MFA enrollment, Professional and Receptionist", async ({ page, context }) => {
@@ -77,6 +100,10 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
       eligibleRequests.push(request.method());
   });
 
+  // Capture an anonymous request token so the authenticated session can prove it is rejected.
+  await page.goto("/");
+  const anonymousRequestToken = await getAntiforgeryToken(page);
+
   // Owner uses an authenticator key persisted by the trusted first-Owner test fixture.
   await fillLogin(page, ownerEmail, ownerPassword);
   await page.getByRole("button", { name: "Entrar" }).click();
@@ -84,6 +111,17 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   await page.getByLabel("Código de autenticação").fill(totp(ownerSecret));
   await page.getByRole("button", { name: "Confirmar código" }).click();
   await expect(page).toHaveURL(/\/services$/);
+
+  const staleAnonymousMutation = await postWithToken(page, "/api/v1/services", anonymousRequestToken, {
+    name: "Stale anonymous token",
+    durationMinutes: 30,
+    priceMinorUnits: 1000,
+    currency: "BRL",
+    bufferBeforeMinutes: 0,
+    bufferAfterMinutes: 0,
+    isActive: true
+  });
+  expect(staleAnonymousMutation).toEqual({ status: 400, error: "antiforgery_validation_failed" });
 
   const cookies = await context.cookies();
   const authCookie = cookies.find(cookie => cookie.name === "__Host-Atendee.Auth");
@@ -119,7 +157,13 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
       "; antiforgery cookie present: " + Boolean(headers.cookie?.includes("__Host-Atendee.AntiForgery")));
   }
   await expect(page.getByRole("heading", { name: "Corte E2E" })).toBeVisible();
+
+  const ownerAuthenticatedRequestToken = await getAntiforgeryToken(page);
   await logout(page);
+  const staleAuthenticatedLogout = await postWithToken(
+    page, "/api/v1/auth/logout", ownerAuthenticatedRequestToken);
+  expect(staleAuthenticatedLogout).toEqual({ status: 400, error: "antiforgery_validation_failed" });
+
 
   // Manager must enroll MFA before the API issues a full application session.
   await fillLogin(page, managerEmail, managerPassword);
