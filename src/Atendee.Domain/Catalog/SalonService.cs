@@ -18,6 +18,8 @@ public sealed record SalonService(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc)
 {
+    private static readonly HashSet<string> IsoCurrencyCodes = BuildIsoCurrencyCodes();
+
     public static SalonService Create(
         Guid id,
         string name,
@@ -102,12 +104,32 @@ public sealed record SalonService(
         ArgumentException.ThrowIfNullOrWhiteSpace(currency);
         var normalizedCurrency = currency.Trim().ToUpperInvariant();
         if (normalizedCurrency.Length != 3 ||
-            !CultureInfo.GetISOCurrencyCodes().Contains(normalizedCurrency, StringComparer.Ordinal))
+            !IsoCurrencyCodes.Contains(normalizedCurrency))
             throw new ArgumentException("Currency must be a valid ISO 4217 code.", nameof(currency));
         if (bufferBeforeMinutes is < 0 or > 1440)
             throw new ArgumentOutOfRangeException(nameof(bufferBeforeMinutes), "Pre-service buffer must be between 0 and 1440 minutes.");
         if (bufferAfterMinutes is < 0 or > 1440)
             throw new ArgumentOutOfRangeException(nameof(bufferAfterMinutes), "Post-service buffer must be between 0 and 1440 minutes.");
+    }
+
+    private static HashSet<string> BuildIsoCurrencyCodes()
+    {
+        var codes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var culture in CultureInfo.GetCultures(CultureTypes.SpecificCultures))
+        {
+            try
+            {
+                var code = new RegionInfo(culture.Name).ISOCurrencySymbol;
+                if (code.Length == 3 && code.All(char.IsAsciiLetter))
+                    codes.Add(code.ToUpperInvariant());
+            }
+            catch (ArgumentException)
+            {
+                // Some specific cultures do not map to a region.
+            }
+        }
+
+        return codes;
     }
 
     private static void ValidateUtc(DateTimeOffset value, string parameterName)
