@@ -91,7 +91,7 @@ export default function ServiceCatalogPage() {
         if (!mounted) return;
         setTenant(profile);
         if (profile.membership.role === "Professional") {
-          setError("O catálogo completo não está disponível para o perfil Profissional. A consulta será liberada por serviço atribuído.");
+          window.location.replace("/my-services");
           return;
         }
         const servicesResponse = await fetch("/api/v1/services", {
@@ -211,6 +211,7 @@ export default function ServiceCatalogPage() {
             <strong>{tenant?.name ?? "Seu salão"}</strong>
             <span>{tenant?.membership.displayName ?? ""} · {tenant?.membership.role ?? ""}</span>
           </div>
+          <a className="text-button" href="/team">Equipe</a>
           <button className="text-button" type="button" onClick={logout} disabled={busy}>Sair</button>
         </div>
       </header>
