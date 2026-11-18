@@ -1209,18 +1209,33 @@ try
            professionalMeBody.GetProperty("role").GetString() == TenantRole.Professional.ToString(),
         "Professional session resolves its current role from server-side membership.");
 
-    await SeedAdditionalMembershipAsync(migratorConnectionString, managerTenantId, professionalUserId, roleId: 4);
+    var managerProfessionalEmail = "http-role-manager-professional-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var managerProfessionalUserId = Guid.NewGuid();
+    await using (var scope = mfaFactory!.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var managerProfessional = new OperationalIdentityUser
+        {
+            Id = managerProfessionalUserId,
+            UserName = managerProfessionalEmail,
+            Email = managerProfessionalEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(managerProfessional, "Atendee-Manager-Professional-2026!");
+        Ensure(created.Succeeded, "Manager-tenant Professional identity is created independently of other salon fixtures.");
+    }
+    await SeedAdditionalMembershipAsync(migratorConnectionString, managerTenantId, managerProfessionalUserId, roleId: 4);
     var managerEligibleMembers = await managerClient.GetAsync("/api/v1/professionals/eligible-members");
     Ensure(managerEligibleMembers.StatusCode == HttpStatusCode.OK,
         "Manager can discover eligible Professional memberships in the current salon.");
     var managerEligibleMembersBody = await managerEligibleMembers.Content.ReadFromJsonAsync<JsonElement>();
     Ensure(managerEligibleMembersBody.GetArrayLength() == 1 &&
-           managerEligibleMembersBody[0].GetProperty("identityUserId").GetGuid() == professionalUserId,
+           managerEligibleMembersBody[0].GetProperty("identityUserId").GetGuid() == managerProfessionalUserId,
         "Manager candidate discovery is scoped to its own salon and returns only an unprofiled Professional.");
     var managerCreateProfessional = await PostWithCsrfAsync(
         managerClient, "/api/v1/professionals", managerToken!, new
         {
-            identityUserId = professionalUserId
+            identityUserId = managerProfessionalUserId
         });
     Ensure(managerCreateProfessional.StatusCode == HttpStatusCode.Created,
         "Manager can create a profile for an active Professional membership in the current salon.");
