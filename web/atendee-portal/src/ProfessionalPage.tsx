@@ -189,7 +189,7 @@ export default function ProfessionalPage() {
             <strong>{tenant?.name ?? "Seu salão"}</strong>
             <span>{tenant?.membership.displayName ?? ""} · {tenant?.membership.role ?? ""}</span>
           </div>
-          <a className="text-button" href="/services">Serviços</a>
+          {!isProfessional && <a className="text-button" href="/services">Serviços</a>}
           <button className="text-button" type="button" onClick={logout}>Sair</button>
         </div>
       </header>
