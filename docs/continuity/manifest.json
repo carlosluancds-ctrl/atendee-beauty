@@ -1,28 +1,20 @@
 {
-  "backup_version": "v22-identity-ci-passed",
-  "updated_at": "2026-11-17T21:28:08Z",
+  "backup_version": "v42-initial-operational-identity-decision",
+  "updated_at": "2026-11-18",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
-  "branch": "wip/operational-identity-v1",
-  "tested_code_commit": "c815881200ea29831a6814aa45917fdf1cac3470",
-  "main_base_commit": "44640018f6fa596755d93f9aa0e5affb713f8344",
-  "identity_ci": {
-    "run_id": "44179994461",
-    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44179994461",
+  "branch": "security/csrf-webhook-antiforgery-v23",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V42_2026-11-18.md",
+  "latest_code_commit": "5e37dbbcc23ddd40a7cf478b2b2947ad74bfcba5",
+  "latest_code_ci": {
+    "run_id": "44235109072",
+    "url": "https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/44235109072",
     "status": "success",
-    "locked_restore": "passed",
-    "release_build": "passed; 0 warnings; 0 errors",
-    "domain_checks": "15/15",
-    "postgres_version": "18.7",
-    "persistence_rls_pool_checks": "9/9",
-    "identity_totp_tenant_context_checks": "23/23",
-    "database_cleanup": "passed",
-    "critical_tests_skipped": 0
+    "tested_code_commit": "5e37dbbcc23ddd40a7cf478b2b2947ad74bfcba5"
   },
-  "previous_postgres_gate": {
-    "run_id": "44166541043",
-    "status": "success",
-    "domain_checks": "15/15",
-    "persistence_checks": "9/9"
+  "owner_decisions": {
+    "first_owner_provisioning": "approved offline operator command; implemented in V41",
+    "initial_operational_identity": "approved separate protected operator command that initiates activation; recorded in V42",
+    "outbound_email_provider": "not selected; activation delivery implementation blocked pending owner choice"
   },
   "implemented": [
     "ASP.NET Core Identity operational store",
@@ -38,19 +30,20 @@
     "Owner and Manager MFA enforcement and amr=mfa marker",
     "Secure HttpOnly SameSite Strict cookies",
     "Antiforgery validation and auth IP rate limits",
-    "PostgreSQL 18.7 migrations and integration CI"
+    "PostgreSQL 18.7 migrations and integration CI",
+    "Offline first-Owner provisioning command (V41)"
   ],
   "not_production_ready": [
-    "Email provider / verified signup / invitation / password reset pending",
+    "Initial operational identity creation/activation command not implemented",
+    "Outbound email provider and delivery not selected",
+    "Password setup and email confirmation activation flow pending",
     "Platform Admin store, MFA and break-glass pending",
     "WebAuthn/passkey migration pending",
-    "HTTP end-to-end session and CSRF tests pending",
-    "Session revocation, account disablement and audit event pipeline pending",
+    "Further HTTP end-to-end session and CSRF acceptance tests pending",
+    "Session revocation/account disablement/audit pipeline completion pending",
     "Non-Windows production Data Protection protector pending",
     "Distributed rate limiting and trusted proxy configuration pending",
-    "Tenant status authorization matrix pending",
     "No production deployment authorized or performed"
   ],
-  "next_blocking_step": "Security review of identity SQL and authentication flow, then HTTP end-to-end tests for cookie/MFA/CSRF/session revocation/disablement/enumeration/audit before proposing PR to main.",
-  "handoff_file": "docs/continuity/BACKUP_HANDOFF_2026-11-17.md"
+  "local_worktree": "not_verified_in_this_session; prior Windows clone unavailable"
 }
