@@ -109,7 +109,17 @@ public sealed class NpgsqlTenantTransactionRunner : ITenantTransactionRunner
             }
             catch
             {
-                await transaction.RollbackAsync(CancellationToken.None);
+                try
+                {
+                    await transaction.RollbackAsync(CancellationToken.None);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Npgsql can mark a transaction completed when COMMIT fails
+                    // on a deferred constraint. Preserve the original database
+                    // exception; the connection is closed in the outer finally.
+                }
+
                 throw;
             }
         }
