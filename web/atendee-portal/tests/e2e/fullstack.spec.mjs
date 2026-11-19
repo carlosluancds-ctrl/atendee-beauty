@@ -182,7 +182,7 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   // A second independently provisioned salon must not read or mutate Salon A resources.
   // Keep both Owner sessions alive in separate browser contexts to exercise both directions
   // without consuming extra login-rate-limit permits.
-  const secondOwnerContext = await context.browser().newContext({ ignoreHTTPSErrors: true });
+  const secondOwnerContext = await context.browser().newContext({ baseURL: "http://localhost:4176", ignoreHTTPSErrors: true });
   try {
     const secondOwnerPage = await secondOwnerContext.newPage();
     secondOwnerPage.on("request", request => {
