@@ -260,10 +260,48 @@ try
            TenantRole.Receptionist.ToString(),
         "Tenant profile includes only the caller's persisted membership role.");
 
+    var forgedRequestTenantId = Guid.NewGuid();
+    using (var forgedContextRequest = new HttpRequestMessage(
+        HttpMethod.Get,
+        $"/api/v1/tenant?tenantId={forgedRequestTenantId:D}&actorId={spoofedActorId:D}&role=Owner&status=PendingVerification"))
+    {
+        forgedContextRequest.Headers.Add("X-Tenant-Id", forgedRequestTenantId.ToString("D"));
+        forgedContextRequest.Headers.Add("X-Actor-Id", spoofedActorId.ToString("D"));
+        forgedContextRequest.Headers.Add("X-Tenant-Role", "Owner");
+        forgedContextRequest.Headers.Add("X-Tenant-Status", "PendingVerification");
+        using var forgedContextResponse = await client.SendAsync(forgedContextRequest);
+        var forgedContextBody = await forgedContextResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Ensure(forgedContextResponse.StatusCode == HttpStatusCode.OK &&
+               forgedContextBody.GetProperty("tenantId").GetString() == tenantId.ToString() &&
+               forgedContextBody.GetProperty("status").GetString() == TenantStatus.Active.ToString() &&
+               forgedContextBody.GetProperty("membership").GetProperty("role").GetString() == TenantRole.Receptionist.ToString(),
+            "Forged tenant, actor, role and status headers/query parameters cannot override persisted request context.");
+    }
+
     var receptionistServices = await client.GetAsync("/api/v1/services");
     Ensure(receptionistServices.StatusCode == HttpStatusCode.OK,
         "Receptionist can read the tenant service catalogue when tenant status allows ReadData.");
     var receptionistRequestToken = await GetAntiforgeryRequestTokenAsync(client);
+    using (var forgedOwnerOnboarding = new HttpRequestMessage(
+        HttpMethod.Post, "/api/v1/tenant/onboarding/complete"))
+    {
+        forgedOwnerOnboarding.Headers.Add("X-CSRF-TOKEN", receptionistRequestToken);
+        forgedOwnerOnboarding.Headers.Add("X-Tenant-Id", forgedRequestTenantId.ToString("D"));
+        forgedOwnerOnboarding.Headers.Add("X-Actor-Id", spoofedActorId.ToString("D"));
+        forgedOwnerOnboarding.Headers.Add("X-Tenant-Role", "Owner");
+        forgedOwnerOnboarding.Headers.Add("X-Tenant-Status", "PendingVerification");
+        forgedOwnerOnboarding.Content = JsonContent.Create(new
+        {
+            tenantId = forgedRequestTenantId,
+            actorId = spoofedActorId,
+            role = "Owner",
+            status = "PendingVerification"
+        });
+        using var forgedOwnerOnboardingResponse = await client.SendAsync(forgedOwnerOnboarding);
+        Ensure(forgedOwnerOnboardingResponse.StatusCode == HttpStatusCode.Forbidden,
+            "A receptionist cannot escalate to Owner or complete onboarding through forged tenant/actor/role headers or body fields.");
+    }
+
     var receptionistCreate = await PostWithCsrfAsync(client, "/api/v1/services", receptionistRequestToken, new
     {
         name = "Unauthorized service",
