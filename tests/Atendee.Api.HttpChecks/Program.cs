@@ -1199,6 +1199,13 @@ try
            managerFailureAudit.Count(type => type == "operational_auth.login_failed") == 1 &&
            !managerFailureAudit.Contains("operational_auth.password_verified_mfa_pending"),
         "An incorrect password never produces a pending-MFA event; it is audited as a login failure.");
+    await using (var scope = roleMatrixFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var manager = await users.FindByIdAsync(managerUserId.ToString());
+        Ensure(manager is not null && manager.AccessFailedCount == 1,
+            "An incorrect password increments the account failure counter together with its audit event.");
+    }
 
     var managerLogin = await PostWithCsrfAsync(managerClient, "/api/v1/auth/login", managerToken!, new
     {
@@ -1209,6 +1216,13 @@ try
     Ensure(managerLogin.StatusCode == HttpStatusCode.Accepted &&
            managerLoginBody.GetProperty("state").GetString() == "mfa_setup_required",
         "Manager without MFA receives only the restricted MFA-setup session.");
+    await using (var scope = roleMatrixFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var manager = await users.FindByIdAsync(managerUserId.ToString());
+        Ensure(manager is not null && manager.AccessFailedCount == 0,
+            "A successful password verification resets the accumulated failed-attempt counter.");
+    }
     Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, managerUserId))
                .Count(type => type == "operational_auth.password_verified_mfa_pending") == 1,
         "Manager password verification that requires MFA setup is audited as pending exactly once.");
