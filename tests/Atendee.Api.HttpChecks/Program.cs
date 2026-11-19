@@ -145,10 +145,14 @@ try
         forwardedHeadersLoggerFactory,
         Options.Create(trustedForwardedHeaders));
     await trustedForwardedMiddleware.Invoke(trustedForwardedContext);
-    Ensure(trustedForwardedContext.Connection.RemoteIpAddress == IPAddress.Parse("203.0.113.42") &&
-           trustedForwardedContext.Request.Scheme == "https" &&
-           trustedForwardedContext.Request.Host == new HostString("api.example.invalid"),
-        "A known proxy may supply the client IP and HTTPS scheme, but cannot override the host header.");
+    Console.WriteLine(
+        $"Forwarded proxy result: RemoteIpAddress={trustedForwardedContext.Connection.RemoteIpAddress}, Scheme={trustedForwardedContext.Request.Scheme}, Host={trustedForwardedContext.Request.Host}");
+    Ensure(trustedForwardedContext.Connection.RemoteIpAddress == IPAddress.Parse("203.0.113.42"),
+        "A known proxy may supply the client IP.");
+    Ensure(trustedForwardedContext.Request.Scheme == "https",
+        "A known proxy may supply the HTTPS scheme.");
+    Ensure(trustedForwardedContext.Request.Host == new HostString("api.example.invalid"),
+        "X-Forwarded-Host is ignored unless explicitly enabled.");
 
     var previousInvalidProxyEnvironmentValue =
         Environment.GetEnvironmentVariable(trustedProxyEnvironmentKey);
