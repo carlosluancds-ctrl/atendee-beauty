@@ -7,9 +7,12 @@ using Atendee.Infrastructure.Identity;
 using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -2006,6 +2009,8 @@ try
     var revokeUpdateFailureEmail = "http-revoke-update-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     var disableAuditFailureEmail = "http-disable-audit-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     var revokeAuditFailureEmail = "http-revoke-audit-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var disableResultFailureEmail = "http-disable-result-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var revokeResultFailureEmail = "http-revoke-result-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string racePassword = "Atendee-InFlight-Race-2026!";
     Guid raceLoginUserId;
     Guid raceChallengeUserId;
@@ -2016,6 +2021,8 @@ try
     Guid revokeUpdateFailureUserId;
     Guid disableAuditFailureUserId;
     Guid revokeAuditFailureUserId;
+    Guid disableResultFailureUserId;
+    Guid revokeResultFailureUserId;
     using var raceFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
@@ -2028,6 +2035,11 @@ try
                 ["ConnectionStrings:Tenant"] = tenantConnectionString,
                 ["DataProtection:KeyRingPath"] = revocationKeyRing
             });
+        });
+        web.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IUserStore<OperationalIdentityUser>>();
+            services.AddScoped<IUserStore<OperationalIdentityUser>, FailureInjectingOperationalIdentityUserStore>();
         });
     });
     await using (var scope = raceFactory.Services.CreateAsyncScope())
@@ -2118,6 +2130,10 @@ try
             disableAuditFailureEmail, "Disable-audit-failure");
         revokeAuditFailureUserId = await CreateAccountSecurityFailureIdentityAsync(
             revokeAuditFailureEmail, "Revoke-audit-failure");
+        disableResultFailureUserId = await CreateAccountSecurityFailureIdentityAsync(
+            disableResultFailureEmail, "Disable-IdentityResult-failure");
+        revokeResultFailureUserId = await CreateAccountSecurityFailureIdentityAsync(
+            revokeResultFailureEmail, "Revoke-IdentityResult-failure");
     }
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceLoginUserId, roleId: 2);
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceChallengeUserId, roleId: 2);
@@ -2380,6 +2396,8 @@ try
     string revokeUpdateOriginalStamp;
     string disableAuditOriginalStamp;
     string revokeAuditOriginalStamp;
+    string disableResultOriginalStamp;
+    string revokeResultOriginalStamp;
     await using (var scope = raceFactory.Services.CreateAsyncScope())
     {
         var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
@@ -2387,13 +2405,18 @@ try
         var revokeUpdateUser = await users.FindByIdAsync(revokeUpdateFailureUserId.ToString());
         var disableAuditUser = await users.FindByIdAsync(disableAuditFailureUserId.ToString());
         var revokeAuditUser = await users.FindByIdAsync(revokeAuditFailureUserId.ToString());
+        var disableResultUser = await users.FindByIdAsync(disableResultFailureUserId.ToString());
+        var revokeResultUser = await users.FindByIdAsync(revokeResultFailureUserId.ToString());
         Ensure(disableUpdateUser is not null && revokeUpdateUser is not null &&
-               disableAuditUser is not null && revokeAuditUser is not null,
+               disableAuditUser is not null && revokeAuditUser is not null &&
+               disableResultUser is not null && revokeResultUser is not null,
             "All account-security failure identities remain available.");
         disableUpdateOriginalStamp = disableUpdateUser!.SecurityStamp!;
         revokeUpdateOriginalStamp = revokeUpdateUser!.SecurityStamp!;
         disableAuditOriginalStamp = disableAuditUser!.SecurityStamp!;
         revokeAuditOriginalStamp = revokeAuditUser!.SecurityStamp!;
+        disableResultOriginalStamp = disableResultUser!.SecurityStamp!;
+        revokeResultOriginalStamp = revokeResultUser!.SecurityStamp!;
     }
 
     await SetIdentityMutationFailureTriggerAsync(
@@ -2521,6 +2544,67 @@ try
     Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, revokeAuditFailureUserId))
                .Count(type => type == "operational_account.sessions_revoked") == 0,
         "A rejected session-revocation audit event is not persisted.");
+
+    FailureInjectingOperationalIdentityUserStore.ForcedFailureUserId = disableResultFailureUserId;
+    var disableIdentityResultFailed = false;
+    try
+    {
+        await using var scope = raceFactory.Services.CreateAsyncScope();
+        var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+        await security.DisableAsync(disableResultFailureUserId);
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.StartsWith("Could not disable the operational identity.", StringComparison.Ordinal))
+    {
+        disableIdentityResultFailed = true;
+    }
+    finally
+    {
+        FailureInjectingOperationalIdentityUserStore.ForcedFailureUserId = null;
+    }
+    Ensure(disableIdentityResultFailed,
+        "A failed IdentityResult from the UserManager store aborts account disablement before audit.");
+    await using (var scope = raceFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var user = await users.FindByIdAsync(disableResultFailureUserId.ToString());
+        Ensure(user is not null && user.LockoutEnd is null &&
+               user.SecurityStamp == disableResultOriginalStamp,
+            "A failed IdentityResult during account disablement leaves persisted lockout and security stamp unchanged.");
+    }
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, disableResultFailureUserId))
+               .Count(type => type == "operational_account.disabled") == 0,
+        "A failed account-disable IdentityResult writes no audit event.");
+
+    FailureInjectingOperationalIdentityUserStore.ForcedFailureUserId = revokeResultFailureUserId;
+    var revokeIdentityResultFailed = false;
+    try
+    {
+        await using var scope = raceFactory.Services.CreateAsyncScope();
+        var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+        await security.RevokeSessionsAsync(revokeResultFailureUserId);
+    }
+    catch (InvalidOperationException exception) when (
+        exception.Message.StartsWith("Could not revoke existing operational sessions.", StringComparison.Ordinal))
+    {
+        revokeIdentityResultFailed = true;
+    }
+    finally
+    {
+        FailureInjectingOperationalIdentityUserStore.ForcedFailureUserId = null;
+    }
+    Ensure(revokeIdentityResultFailed,
+        "A failed IdentityResult from the UserManager store aborts session revocation before audit.");
+    await using (var scope = raceFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var user = await users.FindByIdAsync(revokeResultFailureUserId.ToString());
+        Ensure(user is not null && user.SecurityStamp == revokeResultOriginalStamp,
+            "A failed IdentityResult during session revocation leaves the persisted security stamp unchanged.");
+    }
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, revokeResultFailureUserId))
+               .Count(type => type == "operational_account.sessions_revoked") == 0,
+        "A failed session-revocation IdentityResult writes no audit event.");
 
     // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
     // logins their own per-IP login budget (4 of 5 permits are used here).
@@ -3581,4 +3665,28 @@ static async Task<int> CountAuditEventsWithActorAsync(
     var count = Convert.ToInt32(await command.ExecuteScalarAsync());
     await transaction.CommitAsync();
     return count;
+}
+
+internal sealed class FailureInjectingOperationalIdentityUserStore(
+    AtendeeIdentityDbContext context)
+    : UserStore<OperationalIdentityUser, AtendeeIdentityDbContext, Guid>(context),
+      IUserStore<OperationalIdentityUser>
+{
+    public static Guid? ForcedFailureUserId { get; set; }
+
+    Task<IdentityResult> IUserStore<OperationalIdentityUser>.UpdateAsync(
+        OperationalIdentityUser user,
+        CancellationToken cancellationToken)
+    {
+        if (ForcedFailureUserId == user.Id)
+        {
+            return Task.FromResult(IdentityResult.Failed(new IdentityError
+            {
+                Code = "ForcedUserStoreUpdateFailure",
+                Description = "Forced IdentityResult failure for account-security integration test."
+            }));
+        }
+
+        return base.UpdateAsync(user, cancellationToken);
+    }
 }
