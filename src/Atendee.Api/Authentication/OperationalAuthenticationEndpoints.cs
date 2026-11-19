@@ -473,6 +473,14 @@ public static class OperationalAuthenticationEndpoints
         if (user is null || user.TwoFactorEnabled)
             return Results.Unauthorized();
 
+        var setupTicket = await httpContext.AuthenticateAsync(MfaSetupScheme);
+        if (!setupTicket.Succeeded)
+        {
+            await httpContext.SignOutAsync(MfaSetupScheme);
+            return Results.Unauthorized();
+        }
+        var setupExpiresUtc = setupTicket.Properties?.ExpiresUtc;
+
         var membership = await membershipResolver.ResolveAsync(
             user.Id,
             httpContext.RequestAborted);
@@ -512,6 +520,33 @@ public static class OperationalAuthenticationEndpoints
             return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
 
         await transaction.CommitAsync(httpContext.RequestAborted);
+
+        var refreshedSecurityStamp = user.SecurityStamp;
+        if (string.IsNullOrWhiteSpace(refreshedSecurityStamp) ||
+            setupExpiresUtc is not { } setupExpiry ||
+            setupExpiry <= DateTimeOffset.UtcNow)
+        {
+            await httpContext.SignOutAsync(MfaSetupScheme);
+            return Results.Unauthorized();
+        }
+
+        // ResetAuthenticatorKeyAsync rotates the Identity security stamp. Reissue
+        // the setup ticket with that new stamp but preserve its original expiry.
+        var refreshedSetupClaims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim("atendee:auth_stage", "mfa_setup"),
+            new Claim(SecurityStampClaimType, refreshedSecurityStamp)
+        };
+        await httpContext.SignInAsync(
+            MfaSetupScheme,
+            new ClaimsPrincipal(new ClaimsIdentity(refreshedSetupClaims, MfaSetupScheme)),
+            new AuthenticationProperties
+            {
+                IsPersistent = false,
+                AllowRefresh = false,
+                ExpiresUtc = setupExpiry
+            });
 
         var issuer = UrlEncoder.Default.Encode("Atendee Beauty");
         var account = UrlEncoder.Default.Encode(user.Email ?? user.UserName ?? user.Id.ToString());

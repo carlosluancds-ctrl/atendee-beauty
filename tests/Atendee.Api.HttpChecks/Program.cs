@@ -558,8 +558,13 @@ try
 
     var enrollmentStart = await PostWithCsrfAsync(
         mfaClient, "/api/v1/auth/mfa/enrollment/start", mfaRequestToken!, new { });
-    Ensure(enrollmentStart.StatusCode == HttpStatusCode.OK,
-        "Owner can start authenticator enrollment within the setup session.");
+    var enrollmentStartCookies = enrollmentStart.Headers.TryGetValues("Set-Cookie", out var enrollmentCookieValues)
+        ? enrollmentCookieValues.ToArray()
+        : Array.Empty<string>();
+    Ensure(enrollmentStart.StatusCode == HttpStatusCode.OK &&
+           enrollmentStartCookies.Any(value => value.StartsWith("__Host-Atendee.MfaSetup=", StringComparison.Ordinal)),
+        "Owner can start authenticator enrollment and receives a setup ticket bound to the rotated security stamp.");
+    var enrollmentRequestToken = await GetAntiforgeryRequestTokenAsync(mfaClient);
     var enrollmentBody = await enrollmentStart.Content.ReadFromJsonAsync<JsonElement>();
     Ensure(!string.IsNullOrWhiteSpace(enrollmentBody.GetProperty("sharedKey").GetString()) &&
            enrollmentBody.GetProperty("authenticatorUri").GetString()!.StartsWith("otpauth://totp/",
@@ -578,7 +583,7 @@ try
 
     var auditBeforeInvalidEnrollment = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
     var blankEnrollment = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/auth/mfa/enrollment/verify", mfaRequestToken!, new { code = " " });
+        mfaClient, "/api/v1/auth/mfa/enrollment/verify", enrollmentRequestToken, new { code = " " });
     Ensure(blankEnrollment.StatusCode == HttpStatusCode.BadRequest &&
            (await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId)).Length ==
                auditBeforeInvalidEnrollment.Length,
@@ -586,7 +591,7 @@ try
 
     var wrongEnrollmentCode = enrollmentCode == "000000" ? "000001" : "000000";
     var invalidEnrollment = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/auth/mfa/enrollment/verify", mfaRequestToken!, new
+        mfaClient, "/api/v1/auth/mfa/enrollment/verify", enrollmentRequestToken, new
         {
             code = wrongEnrollmentCode
         });
@@ -602,7 +607,7 @@ try
         "Pending-MFA and enrollment-failure events carry no actor: the identity is not yet authenticated.");
 
     var enrollmentVerify = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/auth/mfa/enrollment/verify", mfaRequestToken!, new
+        mfaClient, "/api/v1/auth/mfa/enrollment/verify", enrollmentRequestToken, new
         {
             code = enrollmentCode
         });
@@ -624,12 +629,13 @@ try
     Ensure(enrollmentAudit.Contains("operational_mfa.enrolled"),
         "Successful MFA enrollment is durably audited.");
 
+    var postEnrollmentToken = await GetAntiforgeryRequestTokenAsync(mfaClient);
     var ownerMeBeforeMembership = await mfaClient.GetAsync("/api/v1/auth/me");
     Ensure(ownerMeBeforeMembership.StatusCode == HttpStatusCode.Unauthorized,
         "Pre-membership MFA enrollment does not issue an application session.");
 
     await SeedMembershipAsync(migratorConnectionString, ownerTenantId, ownerUserId, roleId: 1, statusId: 0);
-    var ownerFirstLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
+    var ownerFirstLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", postEnrollmentToken, new
     {
         email = ownerEmail,
         password = ownerPassword
@@ -638,8 +644,9 @@ try
     Ensure(ownerFirstLogin.StatusCode == HttpStatusCode.Accepted &&
            ownerFirstLoginBody.GetProperty("state").GetString() == "mfa_required",
         "MFA-ready Owner can be attached to the salon and must complete an MFA challenge to sign in.");
+    var ownerPostLoginToken = await GetAntiforgeryRequestTokenAsync(mfaClient);
     var ownerFirstChallenge = await PostWithCsrfAsync(
-        mfaClient, "/api/v1/auth/mfa/challenge", mfaRequestToken!, new
+        mfaClient, "/api/v1/auth/mfa/challenge", ownerPostLoginToken, new
         {
             code = recoveryCodes[1],
             useRecoveryCode = true
@@ -1689,6 +1696,7 @@ try
         "/api/v1/auth/mfa/enrollment/start", enrollmentCrossFlowToken, new { }))
         Ensure(response.StatusCode == HttpStatusCode.OK,
             "Cross-flow enrollment session initializes its TOTP secret.");
+    var enrollmentCrossFlowPostStartToken = await GetAntiforgeryRequestTokenAsync(enrollmentCrossFlowClient);
 
     string invalidChallengeCrossFlowCode;
     string invalidEnrollmentCrossFlowCode;
@@ -1763,7 +1771,7 @@ try
     {
         enrollmentCrossFlowResponses = await Task.WhenAll(
             PostWithCsrfAsync(enrollmentCrossFlowClient, "/api/v1/auth/mfa/enrollment/verify",
-                enrollmentCrossFlowToken, new { code = invalidEnrollmentCrossFlowCode }),
+                enrollmentCrossFlowPostStartToken, new { code = invalidEnrollmentCrossFlowCode }),
             PostWithCsrfAsync(enrollmentCrossFlowWrongLoginClient, "/api/v1/auth/login",
                 enrollmentWrongLoginToken, new
                 {
@@ -1794,7 +1802,7 @@ try
            enrollmentCrossFlowEvents.Count(type => type == "operational_mfa.enrollment_failed") == 1,
         "Cross-flow password and enrollment failures each write exactly one mandatory audit event.");
     using (var response = await PostWithCsrfAsync(enrollmentCrossFlowClient,
-        "/api/v1/auth/mfa/enrollment/verify", enrollmentCrossFlowToken,
+        "/api/v1/auth/mfa/enrollment/verify", enrollmentCrossFlowPostStartToken,
         new { code = invalidEnrollmentCrossFlowCode }))
         Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
             "An already-locked MFA enrollment session is rejected before another counter or audit mutation.");
@@ -1894,16 +1902,34 @@ try
 
     using (var response = await PostWithCsrfAsync(revokedChallengeClient, "/api/v1/auth/login",
         revokedChallengeToken, new { email = revokedChallengeEmail, password = revocationPassword }))
-        Ensure(response.StatusCode == HttpStatusCode.Accepted,
+    {
+        var cookies = response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.ToArray()
+            : Array.Empty<string>();
+        Ensure(response.StatusCode == HttpStatusCode.Accepted &&
+               cookies.Any(value => value.StartsWith("__Host-Atendee.MfaChallenge=", StringComparison.Ordinal)),
             "MFA challenge identity receives a short-lived password-verified challenge cookie.");
+    }
     using (var response = await PostWithCsrfAsync(revokedSetupClient, "/api/v1/auth/login",
         revokedSetupToken, new { email = revokedSetupEmail, password = revocationPassword }))
-        Ensure(response.StatusCode == HttpStatusCode.Accepted,
+    {
+        var cookies = response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.ToArray()
+            : Array.Empty<string>();
+        Ensure(response.StatusCode == HttpStatusCode.Accepted &&
+               cookies.Any(value => value.StartsWith("__Host-Atendee.MfaSetup=", StringComparison.Ordinal)),
             "Unenrolled identity receives a short-lived MFA setup cookie before session revocation.");
+    }
     using (var response = await PostWithCsrfAsync(disabledSetupClient, "/api/v1/auth/login",
         disabledSetupToken, new { email = disabledSetupEmail, password = revocationPassword }))
-        Ensure(response.StatusCode == HttpStatusCode.Accepted,
+    {
+        var cookies = response.Headers.TryGetValues("Set-Cookie", out var values)
+            ? values.ToArray()
+            : Array.Empty<string>();
+        Ensure(response.StatusCode == HttpStatusCode.Accepted &&
+               cookies.Any(value => value.StartsWith("__Host-Atendee.MfaSetup=", StringComparison.Ordinal)),
             "Unenrolled identity receives a short-lived MFA setup cookie before disablement.");
+    }
 
     var revokedChallengePostLoginToken = await GetAntiforgeryRequestTokenAsync(revokedChallengeClient);
     var revokedSetupPostLoginToken = await GetAntiforgeryRequestTokenAsync(revokedSetupClient);
@@ -1918,6 +1944,18 @@ try
             "Session revocation commits for the pending MFA setup identity.");
         Ensure(await accountSecurity.DisableAsync(disabledSetupUserId),
             "Account disable commits for the pending MFA setup identity.");
+    }
+    await using (var scope = revocationFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var revokedChallengeUser = await users.FindByIdAsync(revokedChallengeUserId.ToString());
+        var revokedSetupUser = await users.FindByIdAsync(revokedSetupUserId.ToString());
+        var disabledSetupUser = await users.FindByIdAsync(disabledSetupUserId.ToString());
+        Ensure(revokedChallengeUser is not null && !await users.IsLockedOutAsync(revokedChallengeUser) &&
+               revokedSetupUser is not null && !await users.IsLockedOutAsync(revokedSetupUser),
+            "Session revocation changes the security stamp without locking either pending-MFA identity.");
+        Ensure(disabledSetupUser is not null && await users.IsLockedOutAsync(disabledSetupUser),
+            "Account disablement applies the expected lockout state.");
     }
 
     string validRevokedChallengeCode;
