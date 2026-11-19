@@ -1,3 +1,4 @@
+using Atendee.Application.Models;
 using Atendee.Domain.Scheduling;
 
 namespace Atendee.Infrastructure.Persistence;
