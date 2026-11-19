@@ -2033,10 +2033,8 @@ try
         raceLoginUserId = loginUser.Id;
         var loginKey = await users.ResetAuthenticatorKeyAsync(loginUser);
         var loginMfa = await users.SetTwoFactorEnabledAsync(loginUser, true);
-        loginUser.AccessFailedCount = 1;
-        var loginSeed = await users.UpdateAsync(loginUser);
-        Ensure(loginKey.Succeeded && loginMfa.Succeeded && loginSeed.Succeeded,
-            "In-flight password-verification identity is MFA-enabled and seeded for a successful lockout-counter reset.");
+        Ensure(loginKey.Succeeded && loginMfa.Succeeded,
+            "In-flight password-verification identity is MFA-enabled.");
 
         var challengeUser = new OperationalIdentityUser
         {
@@ -2073,21 +2071,23 @@ try
         BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false
     });
     var raceLoginToken = await GetAntiforgeryRequestTokenAsync(raceLoginClient);
-    await SetIdentityUpdateDelayTriggerAsync(migratorConnectionString, raceLoginUserId, enabled: true);
+    // Pause the mandatory pending-MFA audit after password verification has
+    // committed its identity lock, but before the challenge cookie is emitted.
+    // Revocation must win this final issuance window: the subsequently emitted
+    // challenge ticket carries the pre-revocation stamp and cannot be used.
+    await SetSecurityAuditDelayTriggerAsync(migratorConnectionString, raceLoginUserId,
+        "operational_auth.password_verified_mfa_pending", enabled: true);
     await using (var auditDelayLock = await AcquireSecurityAuditDelayLockAsync(migratorConnectionString))
     {
         var loginTask = PostWithCsrfAsync(raceLoginClient, "/api/v1/auth/login", raceLoginToken,
             new { email = raceLoginEmail, password = racePassword });
         try
         {
-            await WaitForIdentityUpdateDelayAsync(migratorConnectionString);
-            var revokeTask = Task.Run(async () =>
-            {
-                await using var scope = raceFactory.Services.CreateAsyncScope();
-                var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
-                return await security.RevokeSessionsAsync(raceLoginUserId);
-            });
-            await WaitForIdentityRowLockAsync(migratorConnectionString);
+            await WaitForSecurityAuditDelayAsync(migratorConnectionString);
+            await using var scope = raceFactory.Services.CreateAsyncScope();
+            var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+            Ensure(await security.RevokeSessionsAsync(raceLoginUserId),
+                "Session revocation commits after password verification but before challenge-cookie issuance.");
             await ReleaseSecurityAuditDelayLockAsync(auditDelayLock);
             using var response = await loginTask;
             var cookies = response.Headers.TryGetValues("Set-Cookie", out var values)
@@ -2095,16 +2095,15 @@ try
                 : Array.Empty<string>();
             Ensure(response.StatusCode == HttpStatusCode.Accepted &&
                    cookies.Any(value => value.StartsWith("__Host-Atendee.MfaChallenge=", StringComparison.Ordinal)),
-                "Password verification may finish its response, but its challenge cookie is bound to the pre-revocation stamp.");
-            Ensure(await revokeTask,
-                "Session revocation commits immediately after the in-flight password-verification transaction.");
+                "The in-flight password response emits a challenge cookie bound to the pre-revocation stamp.");
         }
         finally
         {
             await ReleaseSecurityAuditDelayLockAsync(auditDelayLock);
         }
     }
-    await SetIdentityUpdateDelayTriggerAsync(migratorConnectionString, raceLoginUserId, enabled: false);
+    await SetSecurityAuditDelayTriggerAsync(migratorConnectionString, raceLoginUserId,
+        "operational_auth.password_verified_mfa_pending", enabled: false);
     var raceLoginPostToken = await GetAntiforgeryRequestTokenAsync(raceLoginClient);
     string raceLoginChallengeCode;
     await using (var scope = raceFactory.Services.CreateAsyncScope())
@@ -2963,81 +2962,6 @@ static async Task SetPendingMfaAuditFailureTriggerAsync(string connectionString,
     }
 
     await transaction.CommitAsync();
-}
-
-static async Task SetIdentityUpdateDelayTriggerAsync(
-    string connectionString,
-    Guid targetUserId,
-    bool enabled)
-{
-    await using var connection = new NpgsqlConnection(connectionString);
-    await connection.OpenAsync();
-    await using var transaction = await connection.BeginTransactionAsync();
-    await using (var role = new NpgsqlCommand(
-        "SET LOCAL ROLE atendee_identity_owner", connection, transaction))
-        await role.ExecuteNonQueryAsync();
-
-    if (enabled)
-    {
-        var createFunctionSql = $"""
-            CREATE OR REPLACE FUNCTION identity.delay_identity_update_for_test()
-            RETURNS trigger
-            LANGUAGE plpgsql
-            AS $function$
-            BEGIN
-                IF NEW."Id" = '{targetUserId:D}'::uuid
-                   AND NEW."AccessFailedCount" IS DISTINCT FROM OLD."AccessFailedCount" THEN
-                    PERFORM pg_advisory_xact_lock(846271903514::bigint);
-                END IF;
-                RETURN NEW;
-            END;
-            $function$;
-            """;
-        await using (var createFunction = new NpgsqlCommand(createFunctionSql, connection, transaction))
-            await createFunction.ExecuteNonQueryAsync();
-
-        await using (var dropTrigger = new NpgsqlCommand(
-            "DROP TRIGGER IF EXISTS \"TR_TestDelayIdentityUpdate\" ON identity.\"AspNetUsers\"",
-            connection, transaction))
-            await dropTrigger.ExecuteNonQueryAsync();
-
-        await using var createTrigger = new NpgsqlCommand(
-            """
-            CREATE TRIGGER "TR_TestDelayIdentityUpdate"
-                BEFORE UPDATE OF "AccessFailedCount" ON identity."AspNetUsers"
-                FOR EACH ROW EXECUTE FUNCTION identity.delay_identity_update_for_test()
-            """, connection, transaction);
-        await createTrigger.ExecuteNonQueryAsync();
-    }
-    else
-    {
-        await using (var dropTrigger = new NpgsqlCommand(
-            "DROP TRIGGER IF EXISTS \"TR_TestDelayIdentityUpdate\" ON identity.\"AspNetUsers\"",
-            connection, transaction))
-            await dropTrigger.ExecuteNonQueryAsync();
-
-        await using var dropFunction = new NpgsqlCommand(
-            "DROP FUNCTION IF EXISTS identity.delay_identity_update_for_test()", connection, transaction);
-        await dropFunction.ExecuteNonQueryAsync();
-    }
-
-    await transaction.CommitAsync();
-}
-
-static async Task WaitForIdentityUpdateDelayAsync(string connectionString)
-{
-    await WaitForPostgresActivityAsync(connectionString,
-        """
-        SELECT EXISTS (
-            SELECT 1
-              FROM pg_stat_activity
-             WHERE wait_event_type = 'Lock'
-               AND wait_event = 'advisory'
-               AND query ILIKE '%AspNetUsers%'
-               AND query ILIKE '%UPDATE%'
-        )
-        """,
-        "The password-verification request did not reach the test-only Identity update advisory lock.");
 }
 
 static async Task SetSecurityAuditDelayTriggerAsync(
