@@ -56,6 +56,89 @@ var checks = new (string Name, Action Run)[]
     }),
     ("customer rejects non-UTC timestamps", () =>
         Throws<ArgumentException>(() => Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc.ToOffset(TimeSpan.FromHours(-3))))),
+    ("service availability intersects salon and professional hours and applies service buffers", () =>
+    {
+        var date = new DateOnly(2026, 11, 23); // Monday
+        var service = SalonService.Create(Guid.NewGuid(), "Color", 60, 12000, "BRL", 10, 15, true, nowUtc);
+        var windows = ServiceAvailabilityCalculator.Calculate(
+            date, date, "America/Sao_Paulo",
+            new[]
+            {
+                new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(12, 0)),
+                new BusinessHoursInterval(1, new TimeOnly(13, 0), new TimeOnly(18, 0))
+            },
+            new[] { new ProfessionalAvailabilityInterval(1, new TimeOnly(10, 0), new TimeOnly(17, 0)) },
+            Array.Empty<ProfessionalTimeOffInterval>(), service);
+        Assert(windows.Count == 2);
+        Assert(TimeZoneInfo.ConvertTime(windows[0].EarliestStartUtc, TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo")).TimeOfDay == new TimeSpan(10, 10, 0));
+        Assert(TimeZoneInfo.ConvertTime(windows[0].LatestStartUtc, TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo")).TimeOfDay == new TimeSpan(10, 45, 0));
+        Assert(TimeZoneInfo.ConvertTime(windows[1].EarliestStartUtc, TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo")).TimeOfDay == new TimeSpan(13, 10, 0));
+        Assert(TimeZoneInfo.ConvertTime(windows[1].LatestStartUtc, TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo")).TimeOfDay == new TimeSpan(15, 45, 0));
+    }),
+    ("service availability subtracts partial and full-day time off", () =>
+    {
+        var date = new DateOnly(2026, 11, 23);
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var hours = new[] { new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(17, 0)) };
+        var professional = new[] { new ProfessionalAvailabilityInterval(1, new TimeOnly(9, 0), new TimeOnly(17, 0)) };
+        var partial = ServiceAvailabilityCalculator.Calculate(date, date, "America/Sao_Paulo",
+            hours, professional,
+            new[] { new ProfessionalTimeOffInterval(date, new TimeOnly(12, 0), new TimeOnly(13, 0)) }, service);
+        Assert(partial.Count == 2);
+        var full = ServiceAvailabilityCalculator.Calculate(date, date, "America/Sao_Paulo",
+            hours, professional,
+            new[] { new ProfessionalTimeOffInterval(date, null, null) }, service);
+        Assert(full.Count == 0);
+    }),
+    ("service availability is bounded to requested local dates", () =>
+    {
+        var date = new DateOnly(2026, 11, 23);
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var windows = ServiceAvailabilityCalculator.Calculate(date, date, "America/Sao_Paulo",
+            new[] { new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(17, 0)) },
+            new[] { new ProfessionalAvailabilityInterval(1, new TimeOnly(9, 0), new TimeOnly(17, 0)) },
+            Array.Empty<ProfessionalTimeOffInterval>(), service);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+        Assert(windows.Count == 1 &&
+               DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(windows[0].EarliestStartUtc, zone).DateTime) == date);
+    }),
+    ("service availability skips nonexistent spring-forward wall time without inventing UTC time", () =>
+    {
+        var date = new DateOnly(2026, 3, 8); // DST starts in New York
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "USD", 0, 0, true, nowUtc);
+        var windows = ServiceAvailabilityCalculator.Calculate(date, date, "America/New_York",
+            new[] { new BusinessHoursInterval(7, new TimeOnly(1, 0), new TimeOnly(4, 0)) },
+            new[] { new ProfessionalAvailabilityInterval(7, new TimeOnly(1, 0), new TimeOnly(4, 0)) },
+            Array.Empty<ProfessionalTimeOffInterval>(), service);
+        Assert(windows.Count == 1);
+        Assert(windows[0].EarliestStartUtc == new DateTimeOffset(2026, 3, 8, 6, 0, 0, TimeSpan.Zero));
+        Assert(windows[0].LatestStartUtc == new DateTimeOffset(2026, 3, 8, 7, 30, 0, TimeSpan.Zero));
+    }),
+    ("service availability preserves both ambiguous fall-back wall-time occurrences", () =>
+    {
+        var date = new DateOnly(2026, 11, 1); // DST ends in New York
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "USD", 0, 0, true, nowUtc);
+        var windows = ServiceAvailabilityCalculator.Calculate(date, date, "America/New_York",
+            new[] { new BusinessHoursInterval(7, new TimeOnly(1, 0), new TimeOnly(2, 0)) },
+            new[] { new ProfessionalAvailabilityInterval(7, new TimeOnly(1, 0), new TimeOnly(2, 0)) },
+            Array.Empty<ProfessionalTimeOffInterval>(), service);
+        Assert(windows.Count == 1);
+        Assert(windows[0].EarliestStartUtc == new DateTimeOffset(2026, 11, 1, 5, 0, 0, TimeSpan.Zero));
+        Assert(windows[0].LatestStartUtc == new DateTimeOffset(2026, 11, 1, 6, 30, 0, TimeSpan.Zero));
+    }),
+    ("service availability rejects inactive services and oversized date ranges", () =>
+    {
+        var date = new DateOnly(2026, 11, 23);
+        var inactive = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, false, nowUtc);
+        Throws<ArgumentException>(() => ServiceAvailabilityCalculator.Calculate(date, date, "America/Sao_Paulo",
+            Array.Empty<BusinessHoursInterval>(), Array.Empty<ProfessionalAvailabilityInterval>(),
+            Array.Empty<ProfessionalTimeOffInterval>(), inactive));
+        var active = inactive with { IsActive = true };
+        Throws<ArgumentOutOfRangeException>(() => ServiceAvailabilityCalculator.Calculate(
+            date, date.AddDays(31), "America/Sao_Paulo",
+            Array.Empty<BusinessHoursInterval>(), Array.Empty<ProfessionalAvailabilityInterval>(),
+            Array.Empty<ProfessionalTimeOffInterval>(), active));
+    }),
     ("business-hours schedule sorts intervals by ISO weekday and local start time", () =>
     {
         var schedule = BusinessHoursSchedule.Create(new[]

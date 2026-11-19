@@ -453,6 +453,7 @@ if (identityEnabled)
     app.MapTenantProfessionals();
     app.MapTenantProfessionalAvailability();
     app.MapTenantProfessionalTimeOff();
+    app.MapTenantAvailability();
 }
 
 app.Run();

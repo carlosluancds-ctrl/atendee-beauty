@@ -1355,6 +1355,47 @@ try
            professionalTimeOffAudit.Contains("professional_time_off.archived"),
         "Time-off creation and archive are recorded in the mandatory tenant audit ledger.");
 
+    var availableBeforeTimeOff = await mfaClient.GetAsync(
+        $"/api/v1/availability?from=2026-12-07&to=2026-12-07&serviceId={salonServiceId:D}&professionalId={assignedAssignedProfessionalProfileId:D}");
+    var availableBeforeTimeOffBody = await availableBeforeTimeOff.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(availableBeforeTimeOff.StatusCode == HttpStatusCode.OK &&
+           availableBeforeTimeOffBody.GetProperty("timeZoneId").GetString() == "America/Sao_Paulo" &&
+           availableBeforeTimeOffBody.GetProperty("professionals").GetArrayLength() == 1 &&
+           availableBeforeTimeOffBody.GetProperty("professionals")[0].GetProperty("windows").GetArrayLength() == 2,
+        "Authoritative availability intersects tenant business hours, professional recurring hours and active service assignment.");
+
+    var createAvailabilityTimeOff = await PostWithCsrfAsync(
+        mfaClient,
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off",
+        ownerAuthenticatedToken,
+        new { date = "2026-12-07", startTime = "10:00", endTime = "10:30" });
+    Ensure(createAvailabilityTimeOff.StatusCode == HttpStatusCode.Created,
+        "Owner can create a partial-day exception for authoritative availability calculation.");
+
+    var availableAfterTimeOff = await mfaClient.GetAsync(
+        $"/api/v1/availability?from=2026-12-07&to=2026-12-07&serviceId={salonServiceId:D}&professionalId={assignedAssignedProfessionalProfileId:D}");
+    var availableAfterTimeOffBody = await availableAfterTimeOff.Content.ReadFromJsonAsync<JsonElement>();
+    var availabilityWindows = availableAfterTimeOffBody.GetProperty("professionals")[0].GetProperty("windows");
+    var firstAvailabilityStart = DateTimeOffset.Parse(availabilityWindows[0].GetProperty("earliestStartUtc").GetString()!);
+    var firstAvailabilityLatest = DateTimeOffset.Parse(availabilityWindows[0].GetProperty("latestStartUtc").GetString()!);
+    var secondAvailabilityStart = DateTimeOffset.Parse(availabilityWindows[1].GetProperty("earliestStartUtc").GetString()!);
+    var saoPaulo = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+    Ensure(availableAfterTimeOff.StatusCode == HttpStatusCode.OK &&
+           availabilityWindows.GetArrayLength() == 2 &&
+           TimeZoneInfo.ConvertTime(firstAvailabilityStart, saoPaulo).TimeOfDay == new TimeSpan(10, 35, 0) &&
+           TimeZoneInfo.ConvertTime(firstAvailabilityLatest, saoPaulo).TimeOfDay == new TimeSpan(11, 5, 0) &&
+           TimeZoneInfo.ConvertTime(secondAvailabilityStart, saoPaulo).TimeOfDay == new TimeSpan(13, 5, 0),
+        "Authoritative availability subtracts partial time off and applies service duration and before/after buffers.");
+
+    var unassignedProfessionalAvailability = await mfaClient.GetAsync(
+        $"/api/v1/availability?from=2026-12-07&to=2026-12-07&serviceId={Guid.NewGuid():D}&professionalId={assignedAssignedProfessionalProfileId:D}");
+    Ensure(unassignedProfessionalAvailability.StatusCode == HttpStatusCode.NotFound,
+        "Availability does not expose a service that is not active in the tenant catalog.");
+
+    var invalidAvailabilityRange = await mfaClient.GetAsync(
+        $"/api/v1/availability?from=2026-12-07&to=2027-01-08&serviceId={salonServiceId:D}");
+    Ensure(invalidAvailabilityRange.StatusCode == HttpStatusCode.BadRequest,
+        "Authoritative availability rejects date ranges exceeding the bounded query window.");
     await using (var crossTenantTimeOffConnection = new NpgsqlConnection(tenantConnectionString))
     {
         await crossTenantTimeOffConnection.OpenAsync();
@@ -1589,6 +1630,19 @@ try
         $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability");
     Ensure(assignedOwnAvailabilityById.StatusCode == HttpStatusCode.OK,
         "Professional can read their own availability when addressing their own profile ID.");
+    var professionalServiceAvailability = await assignedAssignedProfessionalClient.GetAsync(
+        $"/api/v1/availability?from=2026-12-07&to=2026-12-07&serviceId={salonServiceId:D}&professionalId={assignedAssignedProfessionalProfileId:D}");
+    var professionalServiceAvailabilityBody =
+        await professionalServiceAvailability.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(professionalServiceAvailability.StatusCode == HttpStatusCode.OK &&
+           professionalServiceAvailabilityBody.GetProperty("professionals").GetArrayLength() == 1 &&
+           professionalServiceAvailabilityBody.GetProperty("professionals")[0].GetProperty("professionalId").GetGuid() ==
+               assignedAssignedProfessionalProfileId,
+        "Professional can query service availability for their own profile only.");
+    var professionalCannotQueryOtherAvailability = await assignedAssignedProfessionalClient.GetAsync(
+        $"/api/v1/availability?from=2026-12-07&to=2026-12-07&serviceId={salonServiceId:D}&professionalId={Guid.NewGuid():D}");
+    Ensure(professionalCannotQueryOtherAvailability.StatusCode == HttpStatusCode.Forbidden,
+        "Professional cannot query another profile's service availability by supplying an arbitrary UUID.");
     var unknownProfessionalAvailability = await assignedAssignedProfessionalClient.GetAsync(
         $"/api/v1/professionals/{Guid.NewGuid()}/availability");
     Ensure(unknownProfessionalAvailability.StatusCode == HttpStatusCode.NotFound,
