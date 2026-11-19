@@ -4,13 +4,11 @@ Read `CLAUDE.md` and the highest-numbered continuity status before editing.
 
 - Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
 - Working branch: `security/csrf-webhook-antiforgery-v23`; never modify `main`.
-- Latest work-in-progress checkpoint: `docs/continuity/CONTINUATION_STATUS_V64_2026-11-18.md`.
-- Latest approved checkpoint: `docs/continuity/CONTINUATION_STATUS_V63_2026-11-18.md`.
-- Latest approved implementation commit: `e106c5926b93168ca4e0c9b7b2a6e762fc6606a4`; V63 full CI and continuity CI both passed (runs 44319685006 and 44320319677).
-- V64 work-in-progress commits: `b27b4030bb8f8a44a6184d1fc8acaac3f8b6c8f9` and `aa38361ed16017a9642145400a94d9b3a4088286`.
-- V64 adds real-browser checks that an anonymous antiforgery request token is rejected after Owner login, and an authenticated token is rejected after logout. Both expect HTTP 400 `antiforgery_validation_failed`.
-- V64 is NOT approved. Runs 44321104904 and 44321314420 failed before any job steps/logs were available; a retry had the same result. No compiler/test diagnostic was produced. First restore a diagnosable GitHub Actions run, then verify the assertions.
-- Preserve authentication-before-antiforgery ordering, fresh request tokens after login/MFA/logout, V41 first-Owner provisioning, tenant isolation, RLS, transaction runner and backend-first authorization.
-- Next after V64 CSRF regression: add explicit two-tenant negative full-stack browser cases without weakening API/RLS checks.
-- Local `C:\\Temp\\atendee-work` is stale. Use GitHub branch and CI.
-- Do not deploy, configure SES, activate billing/trial or change production data without explicit authorization.
+- Latest continuity checkpoint: `docs/continuity/CONTINUATION_STATUS_V65_2026-11-19.md` (approved).
+- Latest approved implementation: V65, validated commit `0a06ab045691a336c6114bf173f1383e3aafb4ac`; documentation checkpoint commit `0d2d08aa89b0dd9c7ee81b688e9d7a7691bce88b`.
+- V65 CI run `44451964941` completed successfully. It validates two independent salon tenants, tenant-scoped service listings, cross-tenant service read/update rejection in both directions (HTTP 404), RLS, antiforgery session transitions, frontend, Release build, domain checks, Identity/TOTP, PostgreSQL 18.7 and full-stack browser execution.
+- V64 stale antiforgery token assertions were exercised in the same passing full-stack run. See V65 status for evidence and note about the preserved historical V64 document.
+- Previous continuity files V23–V64 are preserved. Do not rewrite historical checkpoints.
+- Next: continue backend-first with a focused review and negative tests for remaining cross-tenant read/mutation surfaces. Read approved tenant-status and authorization policies before changing scope or policy.
+- Preserve authentication-before-antiforgery ordering, fresh request tokens after login/MFA/logout, first-Owner provisioning, tenant isolation, RLS, transaction runner and backend-first authorization.
+- Do not deploy, configure SES, activate billing/trial, change production data, or modify `main`. Do not implement cross-tenant administrative disable/revoke or tenant status changes without explicit approval.
