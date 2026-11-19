@@ -1,36 +1,38 @@
 {
-  "backup_version": "v81-canonical-trusted-proxy-address-tests",
+  "backup_version": "v82-cross-platform-data-protection-certificate",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V81_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V81_2026-11-19.md",
-  "latest_implementation_commit": "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
-  "latest_documentation_parent_commit": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V82_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V82_2026-11-19.md",
+  "latest_implementation_commit": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
+  "latest_documentation_parent_commit": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44580208061",
+    "run": "44584885716",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+    "validated_head_sha": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
     "portal_browser_tests": "8 passed",
     "domain_checks": "26/26 passed",
     "postgres_rls_checks": "10/10 passed",
     "identity_checks": "49/49 passed",
-    "forwarded_proxy_positive_address_forms": "3 passed",
-    "forwarded_proxy_invalid_address_checks": "9 passed",
+    "data_protection_certificate_checks": "4 passed",
     "fullstack_browser_result": "1 passed",
     "key_checks": [
       "frontend dependency audit, tests and build",
       "portal browser E2E 8/8",
-      "Release build",
+      "locked dependency restore",
+      "Release build with 0 warnings",
       "domain checks 26/26",
       "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
       "Identity/TOTP/tenant-context checks 49/49",
-      "IPv6, IPv4 and IPv4-mapped IPv6 trusted-proxy positive cases",
-      "nine invalid trusted-proxy address startup rejection cases",
+      "production RSA PFX certificate validation and encrypted persistent Data Protection key ring",
+      "second production host decrypts previously protected payload after restart",
+      "incorrect certificate password fails startup closed",
+      "non-Windows production without explicit certificate fails startup closed",
       "HTTP authentication, antiforgery, cookies, session security, audit, role-matrix and tenant-status checks",
       "real Kestrel + disposable PostgreSQL full-stack browser E2E",
       "disposable credentials cleared and PostgreSQL container removed"
@@ -66,7 +68,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Continue unrelated backend work without adding A1/A2 administrative HTTP endpoints until explicit owner approval of actor/tenant/role scope, self/last-Owner rules, Platform Admin realm, step-up MFA/four-eyes and tenant-scoped audit requirements. Keep the trusted-proxy allowlist deny-all unless exact proxy IPs are supplied through approved runtime settings.",
+  "next_step": "Implement and validate a shared/distributed authentication rate limiter with multi-instance concurrency tests without assuming an unverified production Redis/managed-service topology; continue endpoint authorization coverage. Keep A1/A2 administrative endpoints blocked until the product owner explicitly approves their authorization, step-up MFA/four-eyes and audit model.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -231,7 +233,7 @@
       "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
     ]
   },
-  "latest_validated_head": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+  "latest_validated_head": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
   "v76": {
     "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
     "test_commit": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
@@ -349,6 +351,35 @@
       "the middleware accepts the canonicalized mapped IPv4 proxy for one forwarding hop",
       "V80 invalid-address startup rejection cases remain passing",
       "all frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
+    ]
+  },
+  "v82": {
+    "implementation_commit": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
+    "approval": "approved",
+    "ci_run": "44584885716",
+    "validated_head": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
+    "scope": "explicit RSA certificate-backed persistent ASP.NET Core Data Protection key protection for non-Windows production, retaining Windows DPAPI default",
+    "configuration": {
+      "key_ring": "DataProtection:KeyRingPath (required outside Development)",
+      "certificate_path": "DataProtection:CertificatePath (PKCS#12/PFX)",
+      "certificate_password": "DataProtection:CertificatePassword (secret-manager injection only)",
+      "windows_default": "DPAPI when no certificate is configured",
+      "non_windows": "certificate path and password required; startup fails closed otherwise"
+    },
+    "assertions": [
+      "production key ring is persisted with certificate-encrypted key material rather than plaintext",
+      "a restarted production host decrypts data protected by the previous host using the same persistent key ring and certificate",
+      "incorrect PFX password fails production startup closed",
+      "Linux production without explicit certificate configuration fails startup closed",
+      "certificate validity and RSA public/private key availability are checked before configuring protection",
+      "all frontend, Release, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
+    ],
+    "operational_constraints": [
+      "PFX and password are never committed and must be injected from a deployment secret manager or protected mount",
+      "key ring must be persistent, permission-restricted and shared by replicas with the same application name and certificate",
+      "encrypted key ring backups must be paired with the matching private certificate and restoration tested",
+      "only one active certificate is currently supported; do not rotate it without a coordinated old-key decryption plan",
+      "no production configuration or deployment was changed"
     ]
   }
 }
