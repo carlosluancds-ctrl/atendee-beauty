@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Encodings.Web;
 using Atendee.Application.Abstractions;
 using Atendee.Domain.Tenants;
@@ -26,7 +27,9 @@ public static class OperationalAuthenticationEndpoints
         });
 
     public const string MfaSetupScheme = "Atendee.MfaSetup";
+    public const string MfaChallengeScheme = "Atendee.MfaChallenge";
     public const string MfaSetupPolicy = "Atendee.MfaSetupOnly";
+    public const string SecurityStampClaimType = "atendee:security_stamp";
 
     public static IEndpointRouteBuilder MapOperationalAuthentication(
         this IEndpointRouteBuilder endpoints)
@@ -127,6 +130,11 @@ public static class OperationalAuthenticationEndpoints
         ITenantMembershipResolver membershipResolver,
         ISecurityAuditWriter auditWriter)
     {
+        httpContext.Response.Headers.CacheControl = "no-store";
+        await httpContext.SignOutAsync(MfaChallengeScheme);
+        await httpContext.SignOutAsync(MfaSetupScheme);
+        await httpContext.SignOutAsync(IdentityConstants.TwoFactorUserIdScheme);
+
         if (string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password) ||
             request.Email.Length > 256 ||
@@ -156,6 +164,7 @@ public static class OperationalAuthenticationEndpoints
         // Keep the counter mutation and mandatory audit event in this transaction.
         // Commit before resolving membership, whose resolver opens its own short
         // transaction on this DbContext.
+        string? passwordVerifiedSecurityStamp = null;
         await using (var passwordTransaction = await identityDb.Database.BeginTransactionAsync(
             httpContext.RequestAborted))
         {
@@ -183,6 +192,7 @@ public static class OperationalAuthenticationEndpoints
                 return GenericLoginFailure();
             }
 
+            passwordVerifiedSecurityStamp = user.SecurityStamp;
             await passwordTransaction.CommitAsync(httpContext.RequestAborted);
         }
 
@@ -212,27 +222,34 @@ public static class OperationalAuthenticationEndpoints
 
         if (user.TwoFactorEnabled)
         {
-            // Identity creates its short-lived two-factor user-id cookie; the
-            // full application cookie is issued only after the challenge.
-            var signIn = await signInManager.PasswordSignInAsync(
-                user,
-                request.Password,
-                isPersistent: false,
-                lockoutOnFailure: true);
+            // The stamp is captured while the identity row is locked during the
+            // password check. If sessions are revoked before MFA completes, the
+            // short-lived challenge cookie will no longer match the persisted stamp.
+            if (string.IsNullOrWhiteSpace(passwordVerifiedSecurityStamp))
+                return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
 
-            httpContext.Response.Headers.CacheControl = "no-store";
+            // Audit first: no usable MFA challenge cookie exists if this mandatory
+            // event fails. The custom cookie is bound to the password-verified stamp.
+            await auditWriter.WriteAsync("operational_auth.password_verified_mfa_pending",
+                null, user.Id, httpContext.RequestAborted);
 
-            if (signIn.RequiresTwoFactor)
+            var challengeClaims = new[]
             {
-                // Password verified, challenge still pending: null actor, no
-                // application cookie. A failed mandatory audit write fails the request.
-                await auditWriter.WriteAsync("operational_auth.password_verified_mfa_pending",
-                    null, user.Id, httpContext.RequestAborted);
-                return Results.Accepted(value: new LoginStateResponse("mfa_required"));
-            }
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim("atendee:auth_stage", "mfa_challenge"),
+                new Claim(SecurityStampClaimType, passwordVerifiedSecurityStamp)
+            };
+            await httpContext.SignInAsync(
+                MfaChallengeScheme,
+                new ClaimsPrincipal(new ClaimsIdentity(challengeClaims, MfaChallengeScheme)),
+                new AuthenticationProperties
+                {
+                    IsPersistent = false,
+                    AllowRefresh = false,
+                    ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(5)
+                });
 
-            if (!signIn.Succeeded)
-                return GenericLoginFailure();
+            return Results.Accepted(value: new LoginStateResponse("mfa_required"));
         }
         else
         {
@@ -255,6 +272,10 @@ public static class OperationalAuthenticationEndpoints
         HttpContext httpContext,
         ISecurityAuditWriter auditWriter)
     {
+        var securityStamp = user.SecurityStamp;
+        if (string.IsNullOrWhiteSpace(securityStamp))
+            return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
         // The actor is intentionally null: password verification is not a
         // completed application authentication. Audit before issuing setup cookie.
         await auditWriter.WriteAsync("operational_auth.password_verified_mfa_pending",
@@ -263,7 +284,8 @@ public static class OperationalAuthenticationEndpoints
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim("atendee:auth_stage", "mfa_setup")
+            new Claim("atendee:auth_stage", "mfa_setup"),
+            new Claim(SecurityStampClaimType, securityStamp)
         };
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity(claims, MfaSetupScheme));
@@ -296,9 +318,27 @@ public static class OperationalAuthenticationEndpoints
         if (string.IsNullOrWhiteSpace(request.Code) || request.Code.Length > 64)
             return Results.Unauthorized();
 
-        var user = await signInManager.GetTwoFactorAuthenticationUserAsync();
-        if (user is null || await userManager.IsLockedOutAsync(user))
+        var challengeTicket = await httpContext.AuthenticateAsync(MfaChallengeScheme);
+        var challengeUserId = challengeTicket.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+        var challengeSecurityStamp = challengeTicket.Principal?.FindFirstValue(SecurityStampClaimType);
+        if (!challengeTicket.Succeeded ||
+            challengeTicket.Principal?.FindFirstValue("atendee:auth_stage") != "mfa_challenge" ||
+            !Guid.TryParse(challengeUserId, out var challengeUserGuid) ||
+            challengeUserGuid == Guid.Empty ||
+            string.IsNullOrWhiteSpace(challengeSecurityStamp))
+        {
+            await httpContext.SignOutAsync(MfaChallengeScheme);
             return Results.Unauthorized();
+        }
+
+        var user = await userManager.FindByIdAsync(challengeUserGuid.ToString());
+        if (user is null ||
+            await userManager.IsLockedOutAsync(user) ||
+            !SecurityStampMatches(user.SecurityStamp, challengeSecurityStamp))
+        {
+            await httpContext.SignOutAsync(MfaChallengeScheme);
+            return Results.Unauthorized();
+        }
 
         var membership = await membershipResolver.ResolveAsync(
             user.Id,
@@ -309,7 +349,7 @@ public static class OperationalAuthenticationEndpoints
             !TenantAccessPolicy.IsAllowed(
                 membership.TenantStatus, membership.Role, TenantCapability.Login))
         {
-            await signInManager.SignOutAsync();
+            await httpContext.SignOutAsync(MfaChallengeScheme);
             return Results.Unauthorized();
         }
 
@@ -321,8 +361,12 @@ public static class OperationalAuthenticationEndpoints
             await using var transaction = await identityDb.Database.BeginTransactionAsync(
                 httpContext.RequestAborted);
             if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
-                await userManager.IsLockedOutAsync(user))
+                await userManager.IsLockedOutAsync(user) ||
+                !SecurityStampMatches(user.SecurityStamp, challengeSecurityStamp))
+            {
+                await httpContext.SignOutAsync(MfaChallengeScheme);
                 return Results.Unauthorized();
+            }
 
             var redeemed = await userManager.RedeemTwoFactorRecoveryCodeAsync(user, code);
             if (!redeemed.Succeeded)
@@ -334,6 +378,8 @@ public static class OperationalAuthenticationEndpoints
                 await auditWriter.WriteAsync("operational_mfa.challenge_failed",
                     null, user.Id, httpContext.RequestAborted);
                 await transaction.CommitAsync(httpContext.RequestAborted);
+                if (await userManager.IsLockedOutAsync(user))
+                    await httpContext.SignOutAsync(MfaChallengeScheme);
                 return Results.Unauthorized();
             }
 
@@ -360,8 +406,12 @@ public static class OperationalAuthenticationEndpoints
                 await using var failureTransaction = await identityDb.Database.BeginTransactionAsync(
                     httpContext.RequestAborted);
                 if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
-                    await userManager.IsLockedOutAsync(user))
+                    await userManager.IsLockedOutAsync(user) ||
+                    !SecurityStampMatches(user.SecurityStamp, challengeSecurityStamp))
+                {
+                    await httpContext.SignOutAsync(MfaChallengeScheme);
                     return Results.Unauthorized();
+                }
 
                 var failed = await userManager.AccessFailedAsync(user);
                 if (!failed.Succeeded)
@@ -370,14 +420,20 @@ public static class OperationalAuthenticationEndpoints
                 await auditWriter.WriteAsync("operational_mfa.challenge_failed",
                     null, user.Id, httpContext.RequestAborted);
                 await failureTransaction.CommitAsync(httpContext.RequestAborted);
+                if (await userManager.IsLockedOutAsync(user))
+                    await httpContext.SignOutAsync(MfaChallengeScheme);
                 return Results.Unauthorized();
             }
 
             await using var transaction = await identityDb.Database.BeginTransactionAsync(
                 httpContext.RequestAborted);
             if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
-                await userManager.IsLockedOutAsync(user))
+                await userManager.IsLockedOutAsync(user) ||
+                !SecurityStampMatches(user.SecurityStamp, challengeSecurityStamp))
+            {
+                await httpContext.SignOutAsync(MfaChallengeScheme);
                 return Results.Unauthorized();
+            }
 
             var reset = await userManager.ResetAccessFailedCountAsync(user);
             if (!reset.Succeeded)
@@ -391,6 +447,7 @@ public static class OperationalAuthenticationEndpoints
         // Issue the full application cookie only once and include the signed
         // MFA marker. The trusted-tenant middleware requires it for Owner and
         // Manager on every request.
+        await httpContext.SignOutAsync(MfaChallengeScheme);
         await signInManager.SignInWithClaimsAsync(
             user,
             isPersistent: false,
@@ -406,6 +463,7 @@ public static class OperationalAuthenticationEndpoints
     private static async Task<IResult> StartMfaEnrollmentAsync(
         HttpContext httpContext,
         UserManager<OperationalIdentityUser> userManager,
+        AtendeeIdentityDbContext identityDb,
         ITenantMembershipResolver membershipResolver)
     {
         httpContext.Response.Headers.CacheControl = "no-store";
@@ -428,6 +486,17 @@ public static class OperationalAuthenticationEndpoints
             return Results.Forbid();
         }
 
+        await using var transaction = await identityDb.Database.BeginTransactionAsync(
+            httpContext.RequestAborted);
+        if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
+            await userManager.IsLockedOutAsync(user) ||
+            user.TwoFactorEnabled ||
+            !SecurityStampMatches(user.SecurityStamp, httpContext.User.FindFirstValue(SecurityStampClaimType)))
+        {
+            await httpContext.SignOutAsync(MfaSetupScheme);
+            return Results.Unauthorized();
+        }
+
         var sharedKey = await userManager.GetAuthenticatorKeyAsync(user);
         if (string.IsNullOrWhiteSpace(sharedKey))
         {
@@ -440,6 +509,8 @@ public static class OperationalAuthenticationEndpoints
 
         if (string.IsNullOrWhiteSpace(sharedKey))
             return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
+        await transaction.CommitAsync(httpContext.RequestAborted);
 
         var issuer = UrlEncoder.Default.Encode("Atendee Beauty");
         var account = UrlEncoder.Default.Encode(user.Email ?? user.UserName ?? user.Id.ToString());
@@ -502,7 +573,8 @@ public static class OperationalAuthenticationEndpoints
                 {
                     if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
                         await userManager.IsLockedOutAsync(user) ||
-                        user.TwoFactorEnabled)
+                        user.TwoFactorEnabled ||
+                        !SecurityStampMatches(user.SecurityStamp, httpContext.User.FindFirstValue(SecurityStampClaimType)))
                     {
                         await httpContext.SignOutAsync(MfaSetupScheme);
                         return Results.Unauthorized();
@@ -530,7 +602,8 @@ public static class OperationalAuthenticationEndpoints
                 httpContext.RequestAborted);
             if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
                 await userManager.IsLockedOutAsync(user) ||
-                user.TwoFactorEnabled)
+                user.TwoFactorEnabled ||
+                !SecurityStampMatches(user.SecurityStamp, httpContext.User.FindFirstValue(SecurityStampClaimType)))
             {
                 await httpContext.SignOutAsync(MfaSetupScheme);
                 return Results.Unauthorized();
@@ -589,6 +662,7 @@ public static class OperationalAuthenticationEndpoints
     {
         await signInManager.SignOutAsync();
         await httpContext.SignOutAsync(MfaSetupScheme);
+        await httpContext.SignOutAsync(MfaChallengeScheme);
         return Results.NoContent();
     }
 
@@ -630,15 +704,38 @@ public static class OperationalAuthenticationEndpoints
         HttpContext context,
         UserManager<OperationalIdentityUser> userManager)
     {
-        var value = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var principal = await context.AuthenticateAsync(MfaSetupScheme);
+        if (!principal.Succeeded || principal.Principal is null)
+        {
+            await context.SignOutAsync(MfaSetupScheme);
+            return null;
+        }
+
+        var value = principal.Principal.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(value, out var userId) || userId == Guid.Empty)
             return null;
 
         var user = await userManager.FindByIdAsync(userId.ToString());
-        if (user is null || await userManager.IsLockedOutAsync(user))
+        var issuedSecurityStamp = principal.Principal.FindFirstValue(SecurityStampClaimType);
+        if (user is null ||
+            await userManager.IsLockedOutAsync(user) ||
+            !SecurityStampMatches(user.SecurityStamp, issuedSecurityStamp))
+        {
+            await context.SignOutAsync(MfaSetupScheme);
             return null;
+        }
 
         return user;
+    }
+
+    private static bool SecurityStampMatches(string? currentStamp, string? issuedStamp)
+    {
+        if (string.IsNullOrWhiteSpace(currentStamp) || string.IsNullOrWhiteSpace(issuedStamp))
+            return false;
+
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(currentStamp),
+            Encoding.UTF8.GetBytes(issuedStamp));
     }
 
     private static IResult GenericLoginFailure()

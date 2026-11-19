@@ -1,6 +1,7 @@
 using Atendee.Application.Abstractions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Atendee.Infrastructure.Identity;
 
@@ -18,6 +19,9 @@ public sealed class OperationalAccountSecurityService(
             return false;
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        if (!await LockAndReloadAsync(user, cancellationToken))
+            return false;
+
         if (!user.LockoutEnabled)
         {
             var lockoutEnabled = await userManager.SetLockoutEnabledAsync(user, true);
@@ -44,12 +48,42 @@ public sealed class OperationalAccountSecurityService(
             return false;
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        if (!await LockAndReloadAsync(user, cancellationToken))
+            return false;
+
         var stamp = await userManager.UpdateSecurityStampAsync(user);
         EnsureSucceeded(stamp, "Could not revoke existing operational sessions.");
 
         await auditWriter.WriteAsync("operational_account.sessions_revoked", actorContext.ActorId,
             identityUserId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    private async Task<bool> LockAndReloadAsync(
+        OperationalIdentityUser user,
+        CancellationToken cancellationToken)
+    {
+        var transaction = db.Database.CurrentTransaction
+            ?? throw new InvalidOperationException("An identity transaction is required before locking a user row.");
+        var connection = db.Database.GetDbConnection();
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction.GetDbTransaction();
+        command.CommandText = """
+            SELECT "Id"
+              FROM identity."AspNetUsers"
+             WHERE "Id" = @user_id
+             FOR UPDATE
+            """;
+        var userIdParameter = command.CreateParameter();
+        userIdParameter.ParameterName = "user_id";
+        userIdParameter.Value = user.Id;
+        command.Parameters.Add(userIdParameter);
+
+        if (await command.ExecuteScalarAsync(cancellationToken) is not Guid)
+            return false;
+
+        await db.Entry(user).ReloadAsync(cancellationToken);
         return true;
     }
 

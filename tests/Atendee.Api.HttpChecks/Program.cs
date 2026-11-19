@@ -31,6 +31,7 @@ string? statusKeyRing = null;
 string? lockoutKeyRing = null;
 string? sequentialLockoutKeyRing = null;
 string? crossFlowKeyRing = null;
+string? revocationKeyRing = null;
 
 // Minimal hosting reads its default configuration while Program.cs executes;
 // provide connection strings as process environment variables before the
@@ -1801,6 +1802,160 @@ try
                .Count(type => type == "operational_mfa.enrollment_failed") == 1,
         "An already-locked MFA enrollment attempt does not create an extra failure audit event.");
 
+    // Temporary MFA cookies must be bound to the security stamp that existed
+    // when the password was verified. Revoking sessions or disabling the account
+    // before MFA completion must invalidate pending challenge/setup cookies.
+    var revokedChallengeEmail = "http-revoked-challenge-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var revokedSetupEmail = "http-revoked-setup-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var disabledSetupEmail = "http-disabled-setup-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string revocationPassword = "Atendee-Revocation-Cookie-2026!";
+    Guid revokedChallengeUserId;
+    Guid revokedSetupUserId;
+    Guid disabledSetupUserId;
+    revocationKeyRing = Path.Combine(Path.GetTempPath(), "atendee-revocation-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(revocationKeyRing);
+    using var revocationFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    {
+        web.UseContentRoot(apiContentRoot);
+        web.UseEnvironment("Development");
+        web.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Identity"] = identityConnectionString,
+                ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                ["DataProtection:KeyRingPath"] = revocationKeyRing
+            });
+        });
+    });
+    await using (var scope = revocationFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var challengeUser = new OperationalIdentityUser
+        {
+            UserName = revokedChallengeEmail,
+            Email = revokedChallengeEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = true
+        };
+        var challengeCreated = await users.CreateAsync(challengeUser, revocationPassword);
+        Ensure(challengeCreated.Succeeded, "Pending-challenge revocation identity is created.");
+        revokedChallengeUserId = challengeUser.Id;
+        var authenticatorKey = await users.ResetAuthenticatorKeyAsync(challengeUser);
+        Ensure(authenticatorKey.Succeeded, "Pending-challenge revocation identity receives an authenticator key.");
+        var enabled = await users.SetTwoFactorEnabledAsync(challengeUser, true);
+        Ensure(enabled.Succeeded, "Pending-challenge revocation identity is MFA-enabled.");
+
+        var setupUser = new OperationalIdentityUser
+        {
+            UserName = revokedSetupEmail,
+            Email = revokedSetupEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = true
+        };
+        var setupCreated = await users.CreateAsync(setupUser, revocationPassword);
+        Ensure(setupCreated.Succeeded, "Pending-setup revocation identity is created.");
+        revokedSetupUserId = setupUser.Id;
+
+        var disabledUser = new OperationalIdentityUser
+        {
+            UserName = disabledSetupEmail,
+            Email = disabledSetupEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = true
+        };
+        var disabledCreated = await users.CreateAsync(disabledUser, revocationPassword);
+        Ensure(disabledCreated.Succeeded, "Pending-setup disable identity is created.");
+        disabledSetupUserId = disabledUser.Id;
+    }
+    await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), revokedChallengeUserId, roleId: 2);
+
+    using var revokedChallengeClient = revocationFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    using var revokedSetupClient = revocationFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    using var disabledSetupClient = revocationFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    var revokedChallengeToken = await GetAntiforgeryRequestTokenAsync(revokedChallengeClient);
+    var revokedSetupToken = await GetAntiforgeryRequestTokenAsync(revokedSetupClient);
+    var disabledSetupToken = await GetAntiforgeryRequestTokenAsync(disabledSetupClient);
+
+    using (var response = await PostWithCsrfAsync(revokedChallengeClient, "/api/v1/auth/login",
+        revokedChallengeToken, new { email = revokedChallengeEmail, password = revocationPassword }))
+        Ensure(response.StatusCode == HttpStatusCode.Accepted,
+            "MFA challenge identity receives a short-lived password-verified challenge cookie.");
+    using (var response = await PostWithCsrfAsync(revokedSetupClient, "/api/v1/auth/login",
+        revokedSetupToken, new { email = revokedSetupEmail, password = revocationPassword }))
+        Ensure(response.StatusCode == HttpStatusCode.Accepted,
+            "Unenrolled identity receives a short-lived MFA setup cookie before session revocation.");
+    using (var response = await PostWithCsrfAsync(disabledSetupClient, "/api/v1/auth/login",
+        disabledSetupToken, new { email = disabledSetupEmail, password = revocationPassword }))
+        Ensure(response.StatusCode == HttpStatusCode.Accepted,
+            "Unenrolled identity receives a short-lived MFA setup cookie before disablement.");
+
+    var revokedChallengePostLoginToken = await GetAntiforgeryRequestTokenAsync(revokedChallengeClient);
+    var revokedSetupPostLoginToken = await GetAntiforgeryRequestTokenAsync(revokedSetupClient);
+    var disabledSetupPostLoginToken = await GetAntiforgeryRequestTokenAsync(disabledSetupClient);
+
+    await using (var scope = revocationFactory.Services.CreateAsyncScope())
+    {
+        var accountSecurity = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+        Ensure(await accountSecurity.RevokeSessionsAsync(revokedChallengeUserId),
+            "Session revocation commits for the pending MFA challenge identity.");
+        Ensure(await accountSecurity.RevokeSessionsAsync(revokedSetupUserId),
+            "Session revocation commits for the pending MFA setup identity.");
+        Ensure(await accountSecurity.DisableAsync(disabledSetupUserId),
+            "Account disable commits for the pending MFA setup identity.");
+    }
+
+    string validRevokedChallengeCode;
+    await using (var scope = revocationFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var challengeUser = await users.FindByIdAsync(revokedChallengeUserId.ToString());
+        Ensure(challengeUser is not null, "Revoked MFA challenge identity remains persisted.");
+        validRevokedChallengeCode = await users.GenerateTwoFactorTokenAsync(
+            challengeUser!, users.Options.Tokens.AuthenticatorTokenProvider);
+    }
+
+    using (var response = await PostWithCsrfAsync(revokedChallengeClient, "/api/v1/auth/mfa/challenge",
+        revokedChallengePostLoginToken, new { code = validRevokedChallengeCode, useRecoveryCode = false }))
+        Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
+            "A pending MFA challenge cannot create a new application session after session revocation.");
+    Ensure((await revokedChallengeClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
+        "A revoked pending MFA challenge cannot establish an authenticated application session.");
+
+    using (var response = await PostWithCsrfAsync(revokedSetupClient, "/api/v1/auth/mfa/enrollment/start",
+        revokedSetupPostLoginToken, new { }))
+        Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
+            "A pending MFA setup cookie is rejected after session revocation changes the security stamp.");
+    using (var response = await PostWithCsrfAsync(disabledSetupClient, "/api/v1/auth/mfa/enrollment/start",
+        disabledSetupPostLoginToken, new { }))
+        Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
+            "A pending MFA setup cookie is rejected after the account is disabled.");
+
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, revokedChallengeUserId))
+               .Count(type => type == "operational_account.sessions_revoked") == 1,
+        "Pending MFA challenge session revocation is audited exactly once.");
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, revokedSetupUserId))
+               .Count(type => type == "operational_account.sessions_revoked") == 1,
+        "Pending MFA setup session revocation is audited exactly once.");
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, disabledSetupUserId))
+               .Count(type => type == "operational_account.disabled") == 1,
+        "Pending MFA setup account disablement is audited exactly once.");
+
     // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
     // logins their own per-IP login budget (4 of 5 permits are used here).
     statusKeyRing = Path.Combine(Path.GetTempPath(), "atendee-status-" + Guid.NewGuid().ToString("N"));
@@ -1950,6 +2105,8 @@ finally
             Directory.Delete(sequentialLockoutKeyRing, recursive: true);
         if (crossFlowKeyRing is not null && Directory.Exists(crossFlowKeyRing))
             Directory.Delete(crossFlowKeyRing, recursive: true);
+        if (revocationKeyRing is not null && Directory.Exists(revocationKeyRing))
+            Directory.Delete(revocationKeyRing, recursive: true);
         if (mfaKeyRing is not null && Directory.Exists(mfaKeyRing))
             Directory.Delete(mfaKeyRing, recursive: true);
         if (promotionKeyRing is not null && Directory.Exists(promotionKeyRing))
