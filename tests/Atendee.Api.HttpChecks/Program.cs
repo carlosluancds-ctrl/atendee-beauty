@@ -2001,11 +2001,13 @@ try
     var raceChallengeEmail = "http-race-challenge-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     var raceEnrollmentEmail = "http-race-enrollment-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     var raceDirectLoginEmail = "http-race-direct-login-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var raceSetupEmail = "http-race-setup-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string racePassword = "Atendee-InFlight-Race-2026!";
     Guid raceLoginUserId;
     Guid raceChallengeUserId;
     Guid raceEnrollmentUserId;
     Guid raceDirectLoginUserId;
+    Guid raceSetupUserId;
     using var raceFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
@@ -2074,11 +2076,23 @@ try
         var directLoginCreated = await users.CreateAsync(directLoginUser, racePassword);
         Ensure(directLoginCreated.Succeeded, "In-flight direct-login identity is created.");
         raceDirectLoginUserId = directLoginUser.Id;
+
+        var setupUser = new OperationalIdentityUser
+        {
+            UserName = raceSetupEmail,
+            Email = raceSetupEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = true
+        };
+        var setupCreated = await users.CreateAsync(setupUser, racePassword);
+        Ensure(setupCreated.Succeeded, "In-flight MFA setup identity is created.");
+        raceSetupUserId = setupUser.Id;
     }
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceLoginUserId, roleId: 2);
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceChallengeUserId, roleId: 2);
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceEnrollmentUserId, roleId: 2);
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceDirectLoginUserId, roleId: 3);
+    await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceSetupUserId, roleId: 2);
 
     using var raceLoginClient = raceFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
@@ -2283,6 +2297,50 @@ try
         "operational_auth.login_succeeded", enabled: false);
     Ensure((await raceDirectLoginClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "An application cookie emitted by direct login racing with account disablement is unusable.");
+
+    // The privileged-role setup branch must also fail closed when the account
+    // is disabled after password verification but before its initial setup ticket.
+    using var raceSetupClient = raceFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false
+    });
+    var raceSetupLoginToken = await GetAntiforgeryRequestTokenAsync(raceSetupClient);
+    await SetSecurityAuditDelayTriggerAsync(migratorConnectionString, raceSetupUserId,
+        "operational_auth.password_verified_mfa_pending", enabled: true);
+    await using (var auditDelayLock = await AcquireSecurityAuditDelayLockAsync(migratorConnectionString))
+    {
+        var setupLoginTask = PostWithCsrfAsync(raceSetupClient, "/api/v1/auth/login",
+            raceSetupLoginToken, new { email = raceSetupEmail, password = racePassword });
+        try
+        {
+            await WaitForSecurityAuditDelayAsync(migratorConnectionString);
+            await using var scope = raceFactory.Services.CreateAsyncScope();
+            var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+            Ensure(await security.DisableAsync(raceSetupUserId),
+                "Account disablement commits after password verification but before initial MFA setup-ticket issuance.");
+            await ReleaseSecurityAuditDelayLockAsync(auditDelayLock);
+            using var response = await setupLoginTask;
+            var cookies = response.Headers.TryGetValues("Set-Cookie", out var values)
+                ? values.ToArray()
+                : Array.Empty<string>();
+            Ensure(response.StatusCode == HttpStatusCode.Accepted &&
+                   cookies.Any(value => value.StartsWith("__Host-Atendee.MfaSetup=", StringComparison.Ordinal)),
+                "The in-flight setup response emits a ticket bound to the pre-disable security stamp.");
+        }
+        finally
+        {
+            await ReleaseSecurityAuditDelayLockAsync(auditDelayLock);
+        }
+    }
+    await SetSecurityAuditDelayTriggerAsync(migratorConnectionString, raceSetupUserId,
+        "operational_auth.password_verified_mfa_pending", enabled: false);
+    var raceSetupPostToken = await GetAntiforgeryRequestTokenAsync(raceSetupClient);
+    using (var response = await PostWithCsrfAsync(raceSetupClient, "/api/v1/auth/mfa/enrollment/start",
+        raceSetupPostToken, new { }))
+        Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
+            "An initial MFA setup ticket emitted after account disablement cannot initialize enrollment.");
+    Ensure((await raceSetupClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
+        "The disabled setup identity cannot establish an application session.");
 
     // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
     // logins their own per-IP login budget (4 of 5 permits are used here).
