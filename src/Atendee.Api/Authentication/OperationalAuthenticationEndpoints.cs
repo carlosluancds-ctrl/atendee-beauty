@@ -119,6 +119,7 @@ public static class OperationalAuthenticationEndpoints
         LoginRequest request,
         HttpContext httpContext,
         UserManager<OperationalIdentityUser> userManager,
+        AtendeeIdentityDbContext identityDb,
         IPasswordHasher<OperationalIdentityUser> passwordHasher,
         SignInManager<OperationalIdentityUser> signInManager,
         ITenantMembershipResolver membershipResolver,
@@ -154,20 +155,31 @@ public static class OperationalAuthenticationEndpoints
         // audited (the email must never be persisted).
         var alreadyLockedOut = await userManager.IsLockedOutAsync(user);
 
-        var passwordCheck = await signInManager.CheckPasswordSignInAsync(
-            user,
-            request.Password,
-            lockoutOnFailure: true);
-
-        if (!passwordCheck.Succeeded)
+        // A failed password changes AccessFailedCount and writes a mandatory audit
+        // event. Keep both effects in one identity-database transaction so neither
+        // can commit without the other. Commit before resolving membership, whose
+        // resolver opens its own short transaction on this DbContext.
+        await using (var passwordTransaction = await identityDb.Database.BeginTransactionAsync(
+            httpContext.RequestAborted))
         {
-            if (!alreadyLockedOut)
+            var passwordCheck = await signInManager.CheckPasswordSignInAsync(
+                user,
+                request.Password,
+                lockoutOnFailure: true);
+
+            if (!passwordCheck.Succeeded)
             {
-                await auditWriter.WriteAsync("operational_auth.login_failed",
-                    null, user.Id, httpContext.RequestAborted);
+                if (!alreadyLockedOut)
+                {
+                    await auditWriter.WriteAsync("operational_auth.login_failed",
+                        null, user.Id, httpContext.RequestAborted);
+                }
+
+                await passwordTransaction.CommitAsync(httpContext.RequestAborted);
+                return GenericLoginFailure();
             }
 
-            return GenericLoginFailure();
+            await passwordTransaction.CommitAsync(httpContext.RequestAborted);
         }
 
         var membership = await membershipResolver.ResolveAsync(
