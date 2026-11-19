@@ -29,3 +29,12 @@ The health endpoint is a scaffold convenience, not a production readiness check.
 - Customer list is bounded and paginated (default 50, maximum 100). Contact fields are minimized to display name and optional normalized phone/email; at least one contact is required. Phone values are normalized to E.164 syntax but are not claimed to be verified or deliverable.
 - Shared phone numbers are allowed; no unique contact constraint or automatic merge was added. A duplicate-resolution policy remains open.
 - A phone/email on a customer record is not marketing consent. No WhatsApp/email campaign, free-form notes, consent inference, physical deletion or retention policy was added. Consent, contact verification, export/erasure and retention require separately reviewed workflows.
+
+## Tenant business-hours configuration (V84)
+
+- `atendee.business_hours` stores recurring weekly intervals as local wall-clock `TIME WITHOUT TIME ZONE` values. The API always returns the tenant's configured time-zone ID with the schedule; clients must not interpret these values as UTC.
+- ISO weekday numbering is Monday=1 through Sunday=7. Empty schedule means closed. The domain and database enforce at most four intervals per day, at most 28 per week, start-before-end, same-day intervals and no overlaps. Overnight spans must be represented as two day intervals; no implicit overnight conversion is performed.
+- Owner/Manager may replace the schedule; Receptionist may read; Professional has no salon-wide business-hours endpoint access. All writes are tenant-scoped, antiforgery-protected and audited.
+- Full replacements acquire a transaction-scoped advisory lock derived from tenant ID. A deferred constraint trigger independently serializes and rejects overlapping intervals/max-count violations, including direct SQL and concurrent writes. Removed intervals are soft-archived; runtime has no DELETE/TRUNCATE grant. No default hours are inferred.
+- This increment does not calculate appointment availability or create bookings. Date-specific time-zone conversion, daylight-saving ambiguous/nonexistent local-time policy and conversion to UTC appointment instants must be implemented and tested in the availability/booking layer before booking endpoints exist.
+- The tenant transaction runner preserves the original database exception when a deferred constraint fails at COMMIT and Npgsql has already marked the transaction complete; rollback cleanup must not mask the database failure.
