@@ -5,6 +5,7 @@ using Atendee.Application.Abstractions;
 using Atendee.Domain.Tenants;
 using Atendee.Infrastructure.Identity;
 using Atendee.Infrastructure.Web;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
