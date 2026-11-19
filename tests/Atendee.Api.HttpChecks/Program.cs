@@ -1427,16 +1427,13 @@ try
                 insertOverlappingAvailability.Parameters.AddWithValue("professional_id", assignedAssignedProfessionalProfileId);
                 await insertOverlappingAvailability.ExecuteNonQueryAsync();
             }
-            await using var forceDeferredAvailabilityCheck = new NpgsqlCommand(
-                "SET CONSTRAINTS tr_professional_availability_no_overlap IMMEDIATE",
-                overlapAvailabilityConnection,
-                overlapAvailabilityTransaction);
-            await forceDeferredAvailabilityCheck.ExecuteNonQueryAsync();
+            await overlapAvailabilityTransaction.CommitAsync();
         }
         catch (PostgresException exception) when (exception.SqlState == "23P01")
         {
+            // The initially-deferred constraint trigger is evaluated by COMMIT.
+            // Npgsql marks the transaction complete after the server rejects it.
             databaseAvailabilityOverlapRejected = true;
-            await overlapAvailabilityTransaction.RollbackAsync();
         }
     }
     Ensure(databaseAvailabilityOverlapRejected,
