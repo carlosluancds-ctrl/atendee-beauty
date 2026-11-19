@@ -1,21 +1,21 @@
 {
-  "backup_version": "v76-account-security-transaction-failure-tests-approved",
+  "backup_version": "v77-account-security-identityresult-failure-tests-approved",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V76_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V76_2026-11-19.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V77_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V77_2026-11-19.md",
   "latest_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
-  "latest_documentation_parent_commit": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
+  "latest_documentation_parent_commit": "c3d8ad0fc9f43a76ba82309e72d5a51a51342211",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44566734046",
+    "run": "44568548323",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
+    "validated_head_sha": "c3d8ad0fc9f43a76ba82309e72d5a51a51342211",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
-    "portal_browser_tests": "8 passed (5.8s)",
+    "portal_browser_tests": "8 passed (4.6s)",
     "domain_checks": "26/26 passed",
     "postgres_rls_checks": "10/10 passed",
     "identity_checks": "49/49 passed",
@@ -26,11 +26,10 @@
       "domain checks 26/26",
       "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
       "Identity/TOTP/tenant-context checks 49/49",
-      "DisableAsync Identity LockoutEnd update failure rolls back lockout, stamp and audit",
-      "RevokeSessionsAsync Identity SecurityStamp update failure rolls back stamp and audit",
-      "DisableAsync mandatory audit-write failure rolls back lockout and stamp with no partial audit event",
-      "RevokeSessionsAsync mandatory audit-write failure rolls back stamp with no partial audit event",
-      "V64-V75 security regressions remain passing",
+      "DisableAsync explicit IdentityResult.Failed aborts before security-stamp update and audit persistence",
+      "RevokeSessionsAsync explicit IdentityResult.Failed aborts before audit persistence",
+      "persisted LockoutEnd and SecurityStamp remain unchanged after both explicit IdentityResult failures",
+      "V64-V76 security regressions remain passing",
       "HTTP authentication/session security and real Kestrel full-stack browser checks",
       "disposable credentials cleared and PostgreSQL container removed"
     ]
@@ -65,7 +64,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Test explicit IdentityResult.Failed responses from the UserManager store for DisableAsync and RevokeSessionsAsync, separately from database-exception failures, and prove EnsureSucceeded aborts before audit persistence.",
+  "next_step": "Perform a read-only authorization-surface review of every IOperationalAccountSecurityService call site and route registration; confirm no unapproved cross-tenant administrative endpoint exposes disable/revoke and document required actor/tenant authorization boundaries.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -230,7 +229,7 @@
       "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
     ]
   },
-  "latest_validated_head": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
+  "latest_validated_head": "c3d8ad0fc9f43a76ba82309e72d5a51a51342211",
   "v76": {
     "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
     "test_commit": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
@@ -242,6 +241,22 @@
       "Identity SecurityStamp update failure aborts RevokeSessionsAsync without audit",
       "mandatory disabled audit failure rolls back lockout/security stamp and leaves no audit row",
       "mandatory sessions-revoked audit failure rolls back security stamp and leaves no audit row"
+    ]
+  },
+  "v77": {
+    "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+    "test_commits": [
+      "67e4f49504638776ef736c2770d0b4a9ed4c9bf8",
+      "c3d8ad0fc9f43a76ba82309e72d5a51a51342211"
+    ],
+    "approval": "approved",
+    "ci_run": "44568548323",
+    "scope": "test-only explicit IdentityResult failure handling in account disablement and session revocation",
+    "assertions": [
+      "DisableAsync aborts on UserManager store IdentityResult.Failed before security-stamp update and audit",
+      "RevokeSessionsAsync aborts on UserManager store IdentityResult.Failed before audit",
+      "persisted LockoutEnd and SecurityStamp remain unchanged after failed IdentityResult responses",
+      "no misleading account-disabled or sessions-revoked audit event persists"
     ]
   }
 }
