@@ -1350,7 +1350,7 @@ try
         "Archived time-off entries are excluded from active listings while full-day entries remain.");
 
     var professionalTimeOffAudit = await ReadProfessionalAuditAsync(
-        tenantConnectionString, ownerTenantId, assignedAssignedProfessionalProfileId);
+        migratorConnectionString, ownerTenantId, assignedAssignedProfessionalProfileId);
     Ensure(professionalTimeOffAudit.Contains("professional_time_off.created") &&
            professionalTimeOffAudit.Contains("professional_time_off.archived"),
         "Time-off creation and archive are recorded in the mandatory tenant audit ledger.");
