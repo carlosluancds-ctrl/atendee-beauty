@@ -96,42 +96,52 @@ try
         "Untrusted forwarded IP, protocol and host headers cannot spoof the request origin or rate-limit partition.");
 
     const string trustedProxyEnvironmentKey = "ForwardedHeaders__KnownProxies__0";
-    var previousTrustedProxyEnvironmentValue =
-        Environment.GetEnvironmentVariable(trustedProxyEnvironmentKey);
-    ForwardedHeadersOptions trustedForwardedHeaders;
-    try
+    var trustedProxyAddressCases = new (string ConfiguredAddress, IPAddress ExpectedAddress)[]
     {
-        // Program.cs reads the proxy allowlist before WebApplicationFactory's
-        // ConfigureAppConfiguration callback runs. Supply this startup setting
-        // through the environment provider so the application sees it early.
-        Environment.SetEnvironmentVariable(trustedProxyEnvironmentKey, "127.0.0.1");
-        using var trustedProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
-            .WithWebHostBuilder(web =>
-            {
-                web.UseContentRoot(apiContentRoot);
-                web.UseEnvironment("Development");
-                web.ConfigureAppConfiguration((_, configuration) =>
+        ("::1", IPAddress.IPv6Loopback),
+        ("127.0.0.1", IPAddress.Loopback),
+        ("::ffff:127.0.0.1", IPAddress.Loopback)
+    };
+    ForwardedHeadersOptions trustedForwardedHeaders = new();
+    foreach (var trustedProxyAddressCase in trustedProxyAddressCases)
+    {
+        var previousTrustedProxyEnvironmentValue =
+            Environment.GetEnvironmentVariable(trustedProxyEnvironmentKey);
+        try
+        {
+            // Program.cs reads the proxy allowlist before WebApplicationFactory's
+            // ConfigureAppConfiguration callback runs. Supply this startup setting
+            // through the environment provider so the application sees it early.
+            Environment.SetEnvironmentVariable(
+                trustedProxyEnvironmentKey, trustedProxyAddressCase.ConfiguredAddress);
+            using var trustedProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+                .WithWebHostBuilder(web =>
                 {
-                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                    web.UseContentRoot(apiContentRoot);
+                    web.UseEnvironment("Development");
+                    web.ConfigureAppConfiguration((_, configuration) =>
                     {
-                        ["ConnectionStrings:Identity"] = null,
-                        ["ConnectionStrings:Tenant"] = null,
-                        ["DataProtection:KeyRingPath"] = null
+                        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                        {
+                            ["ConnectionStrings:Identity"] = null,
+                            ["ConnectionStrings:Tenant"] = null,
+                            ["DataProtection:KeyRingPath"] = null
+                        });
                     });
                 });
-            });
-        trustedForwardedHeaders = trustedProxyFactory.Services
-            .GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
-    }
-    finally
-    {
-        Environment.SetEnvironmentVariable(
-            trustedProxyEnvironmentKey, previousTrustedProxyEnvironmentValue);
-    }
+            trustedForwardedHeaders = trustedProxyFactory.Services
+                .GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(
+                trustedProxyEnvironmentKey, previousTrustedProxyEnvironmentValue);
+        }
 
-    Ensure(trustedForwardedHeaders.KnownProxies.Contains(IPAddress.Loopback) &&
-           trustedForwardedHeaders.ForwardLimit == 1,
-        "An explicitly configured exact proxy IP is trusted for one forwarding hop.");
+        Ensure(trustedForwardedHeaders.KnownProxies.Contains(trustedProxyAddressCase.ExpectedAddress) &&
+               trustedForwardedHeaders.ForwardLimit == 1,
+            $"Explicit proxy address '{trustedProxyAddressCase.ConfiguredAddress}' is trusted and canonicalized for one forwarding hop.");
+    }
 
     var trustedForwardedContext = new DefaultHttpContext();
     trustedForwardedContext.Connection.RemoteIpAddress = IPAddress.Loopback;
