@@ -35,6 +35,11 @@ public static class TenantOnboardingEndpoints
 
             await using var connection = new NpgsqlConnection(connectionString);
             await connection.OpenAsync(context.RequestAborted);
+            await using (var resetActorCommand = new NpgsqlCommand(
+                "SELECT set_config('app.actor_id', '', false)", connection))
+            {
+                await resetActorCommand.ExecuteScalarAsync(context.RequestAborted);
+            }
             await using var transaction = await connection.BeginTransactionAsync(context.RequestAborted);
 
             // atendee_app_login has no direct table or schema privileges. Enter the
@@ -43,6 +48,16 @@ public static class TenantOnboardingEndpoints
                 "SET LOCAL ROLE atendee_runtime", connection, transaction))
             {
                 await roleCommand.ExecuteNonQueryAsync(context.RequestAborted);
+            }
+
+            // The tenant-status audit trigger reads app.actor_id from transaction-local
+            // state. Propagate only the actor already resolved by trusted middleware;
+            // never accept an actor identifier from the request.
+            await using (var actorCommand = new NpgsqlCommand(
+                "SELECT set_config('app.actor_id', @actor_id, true)", connection, transaction))
+            {
+                actorCommand.Parameters.AddWithValue("actor_id", actorId.ToString("D"));
+                await actorCommand.ExecuteScalarAsync(context.RequestAborted);
             }
 
             Guid tenantId;
