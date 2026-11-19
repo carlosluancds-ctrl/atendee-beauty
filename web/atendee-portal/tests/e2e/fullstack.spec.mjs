@@ -177,6 +177,8 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   const ownerServiceId = ownerServicePayload.id;
   expect(ownerServiceId).toBeTruthy();
 
+  const ownerAuthenticatedRequestToken = await getAntiforgeryToken(page);
+
   // A second independently provisioned salon must not read or mutate Salon A resources.
   // Keep both Owner sessions alive in separate browser contexts to exercise both directions
   // without consuming extra login-rate-limit permits.
@@ -257,7 +259,6 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
     await secondOwnerContext.close();
   }
 
-  const ownerAuthenticatedRequestToken = await getAntiforgeryToken(page);
   await logout(page);
   const staleAuthenticatedLogout = await postWithToken(
     page, "/api/v1/auth/logout", ownerAuthenticatedRequestToken);
