@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Atendee.Api.Authentication;
 
@@ -145,23 +146,43 @@ public static class OperationalAuthenticationEndpoints
             return GenericLoginFailure();
         }
 
-        // Verify the password and account confirmation before querying tenant
-        // membership. A known login with an incorrect password does not reveal
-        // whether the identity has a salon membership.
-        // Failed attempts against an account that is already locked out are not
-        // audited individually: the lockout itself is the recorded event and this
-        // bounds audit-table growth from credential-stuffing floods. Attempts
-        // against unknown emails have no trusted target identity and are not
-        // audited (the email must never be persisted).
-        var alreadyLockedOut = await userManager.IsLockedOutAsync(user);
-
         // A failed password changes AccessFailedCount and writes a mandatory audit
-        // event. Keep both effects in one identity-database transaction so neither
-        // can commit without the other. Commit before resolving membership, whose
-        // resolver opens its own short transaction on this DbContext.
+        // event. Serialize attempts for this identity by locking its row before
+        // refreshing the tracked user and reading lockout state. Without this lock,
+        // concurrent requests can race on Identity's ConcurrencyStamp: one counter
+        // update may be rejected as a concurrency conflict while its login failure
+        // is still audited, weakening the five-attempt lockout threshold.
+        // Keep the counter mutation and mandatory audit event in this transaction.
+        // Commit before resolving membership, whose resolver opens its own short
+        // transaction on this DbContext.
         await using (var passwordTransaction = await identityDb.Database.BeginTransactionAsync(
             httpContext.RequestAborted))
         {
+            var connection = identityDb.Database.GetDbConnection();
+            await using (var lockUser = connection.CreateCommand())
+            {
+                lockUser.Transaction = passwordTransaction.GetDbTransaction();
+                lockUser.CommandText = """
+                    SELECT "Id"
+                      FROM identity."AspNetUsers"
+                     WHERE "Id" = @user_id
+                     FOR UPDATE
+                    """;
+                var userIdParameter = lockUser.CreateParameter();
+                userIdParameter.ParameterName = "user_id";
+                userIdParameter.Value = user.Id;
+                lockUser.Parameters.Add(userIdParameter);
+
+                if (await lockUser.ExecuteScalarAsync(httpContext.RequestAborted) is not Guid)
+                    return GenericLoginFailure();
+            }
+
+            // FindByEmailAsync ran before the transaction. Refresh after acquiring
+            // the row lock so a request queued behind another failed attempt sees
+            // the committed counter, lockout end and concurrency stamp.
+            await identityDb.Entry(user).ReloadAsync(httpContext.RequestAborted);
+            var alreadyLockedOut = await userManager.IsLockedOutAsync(user);
+
             var passwordCheck = await signInManager.CheckPasswordSignInAsync(
                 user,
                 request.Password,

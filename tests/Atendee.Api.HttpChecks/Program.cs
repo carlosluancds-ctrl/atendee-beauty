@@ -28,6 +28,8 @@ WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? roleMatrixFactory = null;
 string? roleMatrixKeyRing = null;
 WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? statusFactory = null;
 string? statusKeyRing = null;
+string? lockoutKeyRing = null;
+string? sequentialLockoutKeyRing = null;
 
 // Minimal hosting reads its default configuration while Program.cs executes;
 // provide connection strings as process environment variables before the
@@ -1408,6 +1410,184 @@ try
     Ensure((await auditFailureClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "A failed pending-MFA audit cannot be upgraded to an application session.");
 
+    // Sequential failures must include the threshold-causing attempt in the audit,
+    // while the following request is rejected by lockout before it can add an event.
+    var sequentialLockoutEmail = "http-sequential-lockout-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string sequentialLockoutPassword = "Atendee-Sequential-Lockout-2026!";
+    Guid sequentialLockoutUserId;
+    var sequentialMaxAttempts = 0;
+    sequentialLockoutKeyRing = Path.Combine(Path.GetTempPath(), "atendee-sequential-lockout-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(sequentialLockoutKeyRing);
+    using var sequentialLockoutFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    {
+        web.UseContentRoot(apiContentRoot);
+        web.UseEnvironment("Development");
+        web.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Identity"] = identityConnectionString,
+                ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                ["DataProtection:KeyRingPath"] = sequentialLockoutKeyRing
+            });
+        });
+    });
+    await using (var scope = sequentialLockoutFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var sequentialUser = new OperationalIdentityUser
+        {
+            UserName = sequentialLockoutEmail,
+            Email = sequentialLockoutEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = true
+        };
+        var created = await users.CreateAsync(sequentialUser, sequentialLockoutPassword);
+        Ensure(created.Succeeded, "Synthetic identity for sequential lockout checks is created.");
+        sequentialLockoutUserId = sequentialUser.Id;
+        sequentialMaxAttempts = users.Options.Lockout.MaxFailedAccessAttempts;
+        Ensure(sequentialMaxAttempts == 5, "Sequential lockout uses the configured five-attempt threshold.");
+    }
+
+    using var sequentialLockoutClient = sequentialLockoutFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    var sequentialLockoutToken = await GetAntiforgeryRequestTokenAsync(sequentialLockoutClient);
+    for (var attempt = 1; attempt <= sequentialMaxAttempts; attempt++)
+    {
+        using var response = await PostWithCsrfAsync(
+            sequentialLockoutClient, "/api/v1/auth/login", sequentialLockoutToken, new
+            {
+                email = sequentialLockoutEmail,
+                password = "Wrong-Sequential-Lockout-2026!"
+            });
+        Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
+            "Each sequential incorrect-password attempt, including the threshold attempt, is generically rejected.");
+    }
+    await using (var scope = sequentialLockoutFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var sequentialUser = await users.FindByIdAsync(sequentialLockoutUserId.ToString());
+        Ensure(sequentialUser is not null && await users.IsLockedOutAsync(sequentialUser),
+            "The sequential threshold-causing failure locks the account.");
+    }
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, sequentialLockoutUserId))
+               .Count(type => type == "operational_auth.login_failed") == sequentialMaxAttempts,
+        "Every sequential failed-password attempt up to and including lockout is audited exactly once.");
+
+    // Concurrent wrong-password attempts must serialize on the Identity row.
+    // Seed three failures, then race two more: both requests began before lockout,
+    // so both must be counted and audited; the second reaches the configured limit.
+    var lockoutEmail = "http-concurrent-lockout-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string lockoutPassword = "Atendee-Concurrent-Lockout-2026!";
+    Guid lockoutUserId;
+    lockoutKeyRing = Path.Combine(Path.GetTempPath(), "atendee-lockout-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(lockoutKeyRing);
+    using var lockoutFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    {
+        web.UseContentRoot(apiContentRoot);
+        web.UseEnvironment("Development");
+        web.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Identity"] = identityConnectionString,
+                ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                ["DataProtection:KeyRingPath"] = lockoutKeyRing
+            });
+        });
+    });
+    await using (var scope = lockoutFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var lockoutUser = new OperationalIdentityUser
+        {
+            UserName = lockoutEmail,
+            Email = lockoutEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = true
+        };
+        var created = await users.CreateAsync(lockoutUser, lockoutPassword);
+        Ensure(created.Succeeded, "Synthetic identity for concurrent lockout checks is created.");
+        lockoutUserId = lockoutUser.Id;
+        var maxAttempts = users.Options.Lockout.MaxFailedAccessAttempts;
+        Ensure(maxAttempts == 5, "Operational login retains the configured five-attempt lockout threshold.");
+        lockoutUser.AccessFailedCount = maxAttempts - 2;
+        var seeded = await users.UpdateAsync(lockoutUser);
+        Ensure(seeded.Succeeded, "Concurrent lockout identity starts two failures below the threshold.");
+    }
+
+    using var concurrentLockoutClientA = lockoutFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    using var concurrentLockoutClientB = lockoutFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    var concurrentLockoutTokenA = await GetAntiforgeryRequestTokenAsync(concurrentLockoutClientA);
+    var concurrentLockoutTokenB = await GetAntiforgeryRequestTokenAsync(concurrentLockoutClientB);
+
+    await SetLoginFailureDelayTriggerAsync(migratorConnectionString, lockoutUserId, enabled: true);
+    HttpResponseMessage[] concurrentLockoutResponses;
+    try
+    {
+        concurrentLockoutResponses = await Task.WhenAll(
+            PostWithCsrfAsync(concurrentLockoutClientA, "/api/v1/auth/login", concurrentLockoutTokenA, new
+            {
+                email = lockoutEmail,
+                password = "Wrong-Concurrent-Lockout-2026!"
+            }),
+            PostWithCsrfAsync(concurrentLockoutClientB, "/api/v1/auth/login", concurrentLockoutTokenB, new
+            {
+                email = lockoutEmail,
+                password = "Wrong-Concurrent-Lockout-2026!"
+            }));
+    }
+    finally
+    {
+        await SetLoginFailureDelayTriggerAsync(migratorConnectionString, lockoutUserId, enabled: false);
+    }
+
+    foreach (var response in concurrentLockoutResponses)
+    {
+        using (response)
+            Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
+                "Concurrent incorrect-password attempts are rejected with the generic login response.");
+    }
+
+    await using (var scope = lockoutFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var lockedUser = await users.FindByIdAsync(lockoutUserId.ToString());
+        Ensure(lockedUser is not null && await users.IsLockedOutAsync(lockedUser),
+            "Both concurrent failures are counted; the second attempt reaches the five-failure lockout threshold.");
+    }
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, lockoutUserId))
+               .Count(type => type == "operational_auth.login_failed") == 2,
+        "Both concurrent attempts begun before lockout receive exactly one login-failure audit event.");
+
+    using (var alreadyLockedOutAttempt = await PostWithCsrfAsync(
+        concurrentLockoutClientA, "/api/v1/auth/login", concurrentLockoutTokenA, new
+        {
+            email = lockoutEmail,
+            password = "Wrong-After-Lockout-2026!"
+        }))
+    {
+        Ensure(alreadyLockedOutAttempt.StatusCode == HttpStatusCode.Unauthorized,
+            "A subsequent login attempt against an already-locked account remains generically rejected.");
+    }
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, lockoutUserId))
+               .Count(type => type == "operational_auth.login_failed") == 2,
+        "Attempts begun after lockout do not create unbounded login-failure audit rows.");
+
     // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
     // logins their own per-IP login budget (4 of 5 permits are used here).
     statusKeyRing = Path.Combine(Path.GetTempPath(), "atendee-status-" + Guid.NewGuid().ToString("N"));
@@ -1551,6 +1731,10 @@ finally
     {
         if (statusKeyRing is not null && Directory.Exists(statusKeyRing))
             Directory.Delete(statusKeyRing, recursive: true);
+        if (lockoutKeyRing is not null && Directory.Exists(lockoutKeyRing))
+            Directory.Delete(lockoutKeyRing, recursive: true);
+        if (sequentialLockoutKeyRing is not null && Directory.Exists(sequentialLockoutKeyRing))
+            Directory.Delete(sequentialLockoutKeyRing, recursive: true);
         if (mfaKeyRing is not null && Directory.Exists(mfaKeyRing))
             Directory.Delete(mfaKeyRing, recursive: true);
         if (promotionKeyRing is not null && Directory.Exists(promotionKeyRing))
@@ -2128,6 +2312,65 @@ static async Task SetPendingMfaAuditFailureTriggerAsync(string connectionString,
 
         await using var dropFunction = new NpgsqlCommand(
             "DROP FUNCTION IF EXISTS identity.reject_pending_mfa_audit_for_test()", connection, transaction);
+        await dropFunction.ExecuteNonQueryAsync();
+    }
+
+    await transaction.CommitAsync();
+}
+
+static async Task SetLoginFailureDelayTriggerAsync(
+    string connectionString,
+    Guid targetUserId,
+    bool enabled)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand(
+        "SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    if (enabled)
+    {
+        var createFunctionSql = $"""
+            CREATE OR REPLACE FUNCTION identity.delay_login_failure_for_test()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $function$
+            BEGIN
+                IF NEW."Id" = '{targetUserId:D}'::uuid
+                   AND NEW."AccessFailedCount" IS DISTINCT FROM OLD."AccessFailedCount" THEN
+                    PERFORM pg_sleep(1.0);
+                END IF;
+                RETURN NEW;
+            END;
+            $function$;
+            """;
+        await using (var createFunction = new NpgsqlCommand(createFunctionSql, connection, transaction))
+            await createFunction.ExecuteNonQueryAsync();
+
+        await using (var dropTrigger = new NpgsqlCommand(
+            "DROP TRIGGER IF EXISTS \"TR_TestDelayLoginFailure\" ON identity.\"AspNetUsers\"",
+            connection, transaction))
+            await dropTrigger.ExecuteNonQueryAsync();
+
+        await using var createTrigger = new NpgsqlCommand(
+            """
+            CREATE TRIGGER "TR_TestDelayLoginFailure"
+                BEFORE UPDATE OF "AccessFailedCount" ON identity."AspNetUsers"
+                FOR EACH ROW EXECUTE FUNCTION identity.delay_login_failure_for_test()
+            """, connection, transaction);
+        await createTrigger.ExecuteNonQueryAsync();
+    }
+    else
+    {
+        await using (var dropTrigger = new NpgsqlCommand(
+            "DROP TRIGGER IF EXISTS \"TR_TestDelayLoginFailure\" ON identity.\"AspNetUsers\"",
+            connection, transaction))
+            await dropTrigger.ExecuteNonQueryAsync();
+
+        await using var dropFunction = new NpgsqlCommand(
+            "DROP FUNCTION IF EXISTS identity.delay_login_failure_for_test()", connection, transaction);
         await dropFunction.ExecuteNonQueryAsync();
     }
 
