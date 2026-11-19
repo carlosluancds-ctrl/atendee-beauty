@@ -1379,13 +1379,19 @@ try
     var firstAvailabilityStart = DateTimeOffset.Parse(availabilityWindows[0].GetProperty("earliestStartUtc").GetString()!);
     var firstAvailabilityLatest = DateTimeOffset.Parse(availabilityWindows[0].GetProperty("latestStartUtc").GetString()!);
     var secondAvailabilityStart = DateTimeOffset.Parse(availabilityWindows[1].GetProperty("earliestStartUtc").GetString()!);
+    var secondAvailabilityLatest = DateTimeOffset.Parse(availabilityWindows[1].GetProperty("latestStartUtc").GetString()!);
+    var thirdAvailabilityStart = DateTimeOffset.Parse(availabilityWindows[2].GetProperty("earliestStartUtc").GetString()!);
+    var thirdAvailabilityLatest = DateTimeOffset.Parse(availabilityWindows[2].GetProperty("latestStartUtc").GetString()!);
     var saoPaulo = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
     Ensure(availableAfterTimeOff.StatusCode == HttpStatusCode.OK &&
-           availabilityWindows.GetArrayLength() == 2 &&
-           TimeZoneInfo.ConvertTime(firstAvailabilityStart, saoPaulo).TimeOfDay == new TimeSpan(10, 35, 0) &&
-           TimeZoneInfo.ConvertTime(firstAvailabilityLatest, saoPaulo).TimeOfDay == new TimeSpan(11, 5, 0) &&
-           TimeZoneInfo.ConvertTime(secondAvailabilityStart, saoPaulo).TimeOfDay == new TimeSpan(13, 5, 0),
-        "Authoritative availability subtracts partial time off and applies service duration and before/after buffers.");
+           availabilityWindows.GetArrayLength() == 3 &&
+           TimeZoneInfo.ConvertTime(firstAvailabilityStart, saoPaulo).TimeOfDay == new TimeSpan(9, 5, 0) &&
+           TimeZoneInfo.ConvertTime(firstAvailabilityLatest, saoPaulo).TimeOfDay == new TimeSpan(9, 5, 0) &&
+           TimeZoneInfo.ConvertTime(secondAvailabilityStart, saoPaulo).TimeOfDay == new TimeSpan(10, 35, 0) &&
+           TimeZoneInfo.ConvertTime(secondAvailabilityLatest, saoPaulo).TimeOfDay == new TimeSpan(11, 5, 0) &&
+           TimeZoneInfo.ConvertTime(thirdAvailabilityStart, saoPaulo).TimeOfDay == new TimeSpan(13, 5, 0) &&
+           TimeZoneInfo.ConvertTime(thirdAvailabilityLatest, saoPaulo).TimeOfDay == new TimeSpan(17, 5, 0),
+        "Authoritative availability subtracts partial time off, preserves an exact-fit buffered slot and applies service duration and before/after buffers.");
 
     var unassignedProfessionalAvailability = await mfaClient.GetAsync(
         $"/api/v1/availability?from=2026-12-07&to=2026-12-07&serviceId={Guid.NewGuid():D}&professionalId={assignedAssignedProfessionalProfileId:D}");
