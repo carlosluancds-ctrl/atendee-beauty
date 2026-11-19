@@ -1,33 +1,30 @@
 {
-  "backup_version": "v68-trusted-context-spoofing-approved",
+  "backup_version": "v69-onboarding-audit-actor-and-totp-audit-atomicity-approved",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V68_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V68_2026-11-19.md",
-  "latest_implementation_commit": "2065f4ecab9969795f4dc6be7af3376cc51340c1",
-  "latest_documentation_parent_commit": "2065f4ecab9969795f4dc6be7af3376cc51340c1",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V69_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V69_2026-11-19.md",
+  "latest_implementation_commit": "00c4b55955738b06602b8cbb0519f6f3ef60ebf4",
+  "latest_documentation_parent_commit": "00c4b55955738b06602b8cbb0519f6f3ef60ebf4",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44455491808",
+    "run": "44456485697",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "2065f4ecab9969795f4dc6be7af3376cc51340c1",
+    "validated_head_sha": "00c4b55955738b06602b8cbb0519f6f3ef60ebf4",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
-    "portal_browser_tests": "8 passed",
-    "fullstack_browser_result": "1 passed",
     "key_checks": [
       "frontend audit/tests/build",
+      "portal browser E2E",
       "Release build and domain checks",
       "PostgreSQL 18.7 and EF Core/RLS checks",
       "Identity/TOTP/tenant-context checks",
-      "forged tenant/actor/role/status headers and query parameters ignored",
-      "Receptionist forged Owner onboarding attempt rejected (403)",
-      "V65 service isolation",
-      "V66 professional identity/profile isolation",
-      "V67 cross-tenant service assignment rejection",
-      "V64 antiforgery session-transition checks",
+      "onboarding audit records exact trusted Owner actor",
+      "invalid TOTP and replayed recovery-code attempts each increment counter and write one audit event",
+      "successful TOTP resets failed-attempt counter",
+      "V65-V68 regressions remain passing",
       "disposable credentials cleared and database container removed"
     ]
   },
@@ -61,7 +58,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Continue backend-first with a review of identity, authentication, onboarding and tenant-context flows; verify side effects use server-resolved identity/tenant, mandatory audit and appropriate transactions.",
+  "next_step": "Continue backend-first reviewing authentication/MFA operations that combine state changes and audit events; require atomicity and trusted actor provenance.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -118,6 +115,21 @@
       "Forged X-Tenant-Id, X-Actor-Id, X-Tenant-Role, X-Tenant-Status and equivalent query parameters do not change persisted tenant context",
       "GET /api/v1/tenant returns actual persisted tenant/status/Receptionist role",
       "Receptionist onboarding completion with forged Owner headers and body returns 403"
+    ]
+  },
+  "v69": {
+    "implementation_commits": [
+      "d90d8906d91a68da979be60e02ba5ffeaea5c1e0",
+      "00c4b55955738b06602b8cbb0519f6f3ef60ebf4"
+    ],
+    "approval": "approved",
+    "assertions": [
+      "onboarding status audit ActorIdentityUserId equals authenticated Owner ID",
+      "onboarding status audit remains tenant-targeted without identity target",
+      "migrator status changes without actor remain actor-null",
+      "invalid TOTP rejected and audited once",
+      "replayed recovery code and invalid TOTP each increment failed-attempt count",
+      "successful TOTP resets failed-attempt count"
     ]
   }
 }
