@@ -95,24 +95,40 @@ try
            spoofedForwardedContext.Request.Host == new HostString("api.example.invalid"),
         "Untrusted forwarded IP, protocol and host headers cannot spoof the request origin or rate-limit partition.");
 
-    using var trustedProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
-        .WithWebHostBuilder(web =>
-        {
-            web.UseContentRoot(apiContentRoot);
-            web.UseEnvironment("Development");
-            web.ConfigureAppConfiguration((_, configuration) =>
+    const string trustedProxyEnvironmentKey = "ForwardedHeaders__KnownProxies__0";
+    var previousTrustedProxyEnvironmentValue =
+        Environment.GetEnvironmentVariable(trustedProxyEnvironmentKey);
+    ForwardedHeadersOptions trustedForwardedHeaders;
+    try
+    {
+        // Program.cs reads the proxy allowlist before WebApplicationFactory's
+        // ConfigureAppConfiguration callback runs. Supply this startup setting
+        // through the environment provider so the application sees it early.
+        Environment.SetEnvironmentVariable(trustedProxyEnvironmentKey, "127.0.0.1");
+        using var trustedProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+            .WithWebHostBuilder(web =>
             {
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                web.UseContentRoot(apiContentRoot);
+                web.UseEnvironment("Development");
+                web.ConfigureAppConfiguration((_, configuration) =>
                 {
-                    ["ConnectionStrings:Identity"] = null,
-                    ["ConnectionStrings:Tenant"] = null,
-                    ["DataProtection:KeyRingPath"] = null,
-                    ["ForwardedHeaders:KnownProxies:0"] = "127.0.0.1"
+                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["ConnectionStrings:Identity"] = null,
+                        ["ConnectionStrings:Tenant"] = null,
+                        ["DataProtection:KeyRingPath"] = null
+                    });
                 });
             });
-        });
-    var trustedForwardedHeaders = trustedProxyFactory.Services
-        .GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
+        trustedForwardedHeaders = trustedProxyFactory.Services
+            .GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(
+            trustedProxyEnvironmentKey, previousTrustedProxyEnvironmentValue);
+    }
+
     Ensure(trustedForwardedHeaders.KnownProxies.Contains(IPAddress.Loopback) &&
            trustedForwardedHeaders.ForwardLimit == 1,
         "An explicitly configured exact proxy IP is trusted for one forwarding hop.");
@@ -134,24 +150,27 @@ try
            trustedForwardedContext.Request.Host == new HostString("api.example.invalid"),
         "A known proxy may supply the client IP and HTTPS scheme, but cannot override the host header.");
 
-    using (var invalidProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
-        .WithWebHostBuilder(web =>
-        {
-            web.UseContentRoot(apiContentRoot);
-            web.UseEnvironment("Development");
-            web.ConfigureAppConfiguration((_, configuration) =>
+    var previousInvalidProxyEnvironmentValue =
+        Environment.GetEnvironmentVariable(trustedProxyEnvironmentKey);
+    var invalidProxyRejected = false;
+    try
+    {
+        Environment.SetEnvironmentVariable(trustedProxyEnvironmentKey, "not-an-ip");
+        using var invalidProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+            .WithWebHostBuilder(web =>
             {
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                web.UseContentRoot(apiContentRoot);
+                web.UseEnvironment("Development");
+                web.ConfigureAppConfiguration((_, configuration) =>
                 {
-                    ["ConnectionStrings:Identity"] = null,
-                    ["ConnectionStrings:Tenant"] = null,
-                    ["DataProtection:KeyRingPath"] = null,
-                    ["ForwardedHeaders:KnownProxies:0"] = "not-an-ip"
+                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["ConnectionStrings:Identity"] = null,
+                        ["ConnectionStrings:Tenant"] = null,
+                        ["DataProtection:KeyRingPath"] = null
+                    });
                 });
             });
-        }))
-    {
-        var invalidProxyRejected = false;
         try
         {
             _ = invalidProxyFactory.Services;
@@ -161,10 +180,15 @@ try
         {
             invalidProxyRejected = true;
         }
-
-        Ensure(invalidProxyRejected,
-            "Invalid trusted-proxy configuration fails application startup closed.");
     }
+    finally
+    {
+        Environment.SetEnvironmentVariable(
+            trustedProxyEnvironmentKey, previousInvalidProxyEnvironmentValue);
+    }
+
+    Ensure(invalidProxyRejected,
+        "Invalid trusted-proxy configuration fails application startup closed.");
 
     using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
     {
