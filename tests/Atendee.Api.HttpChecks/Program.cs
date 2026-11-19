@@ -570,6 +570,45 @@ try
     Ensure(receptionistServices.StatusCode == HttpStatusCode.OK,
         "Receptionist can read the tenant service catalogue when tenant status allows ReadData.");
     var receptionistRequestToken = await GetAntiforgeryRequestTokenAsync(client);
+    var receptionistCustomerCreate = await PostWithCsrfAsync(client, "/api/v1/customers", receptionistRequestToken, new
+    {
+        fullName = "  Cliente Recepção  ",
+        phoneNumber = "+55 (11) 98888-7777",
+        emailAddress = (string?)null
+    });
+    Ensure(receptionistCustomerCreate.StatusCode == HttpStatusCode.Created,
+        "Receptionist can create a customer within the active tenant.");
+    var invalidCustomerCreate = await PostWithCsrfAsync(client, "/api/v1/customers", receptionistRequestToken, new
+    {
+        fullName = "Invalid Customer",
+        phoneNumber = (string?)null,
+        emailAddress = (string?)null
+    });
+    Ensure(invalidCustomerCreate.StatusCode == HttpStatusCode.BadRequest,
+        "Customer API rejects records without at least one contact method.");
+    var receptionistCustomer = await receptionistCustomerCreate.Content.ReadFromJsonAsync<JsonElement>();
+    var receptionistCustomerId = receptionistCustomer.GetProperty("id").GetGuid();
+    Ensure(receptionistCustomer.GetProperty("fullName").GetString() == "Cliente Recepção" &&
+           receptionistCustomer.GetProperty("normalizedPhoneNumber").GetString() == "+5511988887777",
+        "Customer API trims names and stores phone numbers in E.164 form.");
+    var receptionistCustomerList = await client.GetAsync("/api/v1/customers");
+    var receptionistCustomerListBody = await receptionistCustomerList.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(receptionistCustomerList.StatusCode == HttpStatusCode.OK &&
+           receptionistCustomerListBody.GetProperty("totalCount").GetInt32() == 1 &&
+           receptionistCustomerListBody.GetProperty("page").GetInt32() == 1 &&
+           receptionistCustomerListBody.GetProperty("pageSize").GetInt32() == 50 &&
+           receptionistCustomerListBody.GetProperty("items").GetArrayLength() == 1 &&
+           receptionistCustomerListBody.GetProperty("items")[0].GetProperty("id").GetGuid() == receptionistCustomerId,
+        "Receptionist can list only the current salon's customers.");
+    var invalidCustomerPage = await client.GetAsync("/api/v1/customers?page=0");
+    var invalidCustomerPageSize = await client.GetAsync("/api/v1/customers?pageSize=101");
+    Ensure(invalidCustomerPage.StatusCode == HttpStatusCode.BadRequest &&
+           invalidCustomerPageSize.StatusCode == HttpStatusCode.BadRequest,
+        "Customer list enforces bounded pagination and rejects invalid page sizes.");
+    var receptionistArchiveCustomer = await PostWithCsrfAsync(
+        client, $"/api/v1/customers/{receptionistCustomerId}/archive", receptionistRequestToken, new { });
+    Ensure(receptionistArchiveCustomer.StatusCode == HttpStatusCode.Forbidden,
+        "Receptionist cannot archive customer records; archive is restricted to Owner and Manager.");
     using (var forgedOwnerOnboarding = new HttpRequestMessage(
         HttpMethod.Post, "/api/v1/tenant/onboarding/complete"))
     {
@@ -998,6 +1037,42 @@ try
         "Tenant service list contains the created service.");
     Ensure(await ServiceIsHiddenFromTenantAsync(tenantConnectionString, tenantId, ownerTenantId, salonServiceId),
         "PostgreSQL RLS hides a service from a different salon even when its UUID is known.");
+
+    var ownerCustomerCreate = await PostWithCsrfAsync(mfaClient, "/api/v1/customers", ownerAuthenticatedToken, new
+    {
+        fullName = "Maria Proprietária",
+        phoneNumber = "+55 (21) 97777-6666",
+        emailAddress = "MARIA@EXAMPLE.COM"
+    });
+    Ensure(ownerCustomerCreate.StatusCode == HttpStatusCode.Created,
+        "Owner can create a tenant-scoped customer with a normalized contact.");
+    var ownerCustomer = await ownerCustomerCreate.Content.ReadFromJsonAsync<JsonElement>();
+    var ownerCustomerId = ownerCustomer.GetProperty("id").GetGuid();
+    Ensure(ownerCustomer.GetProperty("emailAddress").GetString() == "maria@example.com",
+        "Customer API normalizes email addresses before persistence.");
+    using (var updateCustomerRequest = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/customers/{ownerCustomerId}"))
+    {
+        updateCustomerRequest.Headers.Add("X-CSRF-TOKEN", ownerAuthenticatedToken);
+        updateCustomerRequest.Content = JsonContent.Create(new
+        {
+            fullName = "Maria Atualizada",
+            phoneNumber = (string?)null,
+            emailAddress = "maria.updated@example.com"
+        });
+        using var updateCustomerResponse = await mfaClient.SendAsync(updateCustomerRequest);
+        var updatedCustomer = await updateCustomerResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Ensure(updateCustomerResponse.StatusCode == HttpStatusCode.OK &&
+               updatedCustomer.GetProperty("fullName").GetString() == "Maria Atualizada" &&
+               updatedCustomer.GetProperty("emailAddress").GetString() == "maria.updated@example.com",
+            "Owner can update customer contact data through the tenant-scoped API.");
+    }
+    var ownerArchiveCustomer = await PostWithCsrfAsync(
+        mfaClient, $"/api/v1/customers/{ownerCustomerId}/archive", ownerAuthenticatedToken, new { });
+    var archivedCustomer = await ownerArchiveCustomer.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(ownerArchiveCustomer.StatusCode == HttpStatusCode.OK &&
+           archivedCustomer.GetProperty("isArchived").GetBoolean(),
+        "Owner can archive a customer without physically deleting the record.");
+
     var assignedAssignedProfessionalEmail = "http-professional-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string assignedAssignedProfessionalPassword = "Atendee-Professional-HTTP-2026!";
     var assignedAssignedProfessionalUserId = Guid.NewGuid();

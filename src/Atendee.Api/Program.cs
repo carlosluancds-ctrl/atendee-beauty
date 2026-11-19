@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.RateLimiting;
 using Atendee.Api.Authentication;
+using Atendee.Api.Customers;
 using Atendee.Api.Services;
 using Atendee.Api.Tenants;
 using Atendee.Api.Professionals;
@@ -445,6 +446,7 @@ if (identityEnabled)
 {
     app.MapOperationalAuthentication();
     app.MapTenantServices();
+    app.MapTenantCustomers();
     app.MapTenantOnboarding();
     app.MapTenantProfessionals();
 }

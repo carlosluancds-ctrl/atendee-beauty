@@ -79,6 +79,7 @@ public static class DependencyInjection
         services.AddScoped<ITenantTransactionRunner, NpgsqlTenantTransactionRunner>();
         services.AddScoped<ITenantNoteStore, EfTenantNoteStore>();
         services.AddScoped<ITenantServiceStore, EfTenantServiceStore>();
+        services.AddScoped<ITenantCustomerStore, EfTenantCustomerStore>();
         services.AddScoped<ITenantProfessionalStore, EfTenantProfessionalStore>();
         return services;
     }

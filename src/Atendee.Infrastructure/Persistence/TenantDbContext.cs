@@ -28,6 +28,7 @@ public sealed class TenantDbContext : DbContext
     internal DbSet<TenantServiceRow> TenantServices => Set<TenantServiceRow>();
     internal DbSet<TenantProfessionalRow> TenantProfessionals => Set<TenantProfessionalRow>();
     internal DbSet<TenantProfessionalServiceRow> TenantProfessionalServices => Set<TenantProfessionalServiceRow>();
+    internal DbSet<TenantCustomerRow> TenantCustomers => Set<TenantCustomerRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,6 +80,22 @@ public sealed class TenantDbContext : DbContext
         professionalServices.HasIndex(row => new { row.TenantId, row.ServiceId, row.ProfessionalId });
         professionalServices.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
 
+        var customers = modelBuilder.Entity<TenantCustomerRow>();
+        customers.ToTable("customers", "atendee");
+        customers.HasKey(row => new { row.TenantId, row.Id });
+        customers.Property(row => row.TenantId).HasColumnName("tenant_id").IsRequired();
+        customers.Property(row => row.Id).HasColumnName("customer_id").IsRequired();
+        customers.Property(row => row.FullName).HasColumnName("full_name").HasMaxLength(120).IsRequired();
+        customers.Property(row => row.NormalizedPhoneNumber).HasColumnName("normalized_phone").HasMaxLength(16);
+        customers.Property(row => row.EmailAddress).HasColumnName("email_address").HasMaxLength(254);
+        customers.Property(row => row.IsArchived).HasColumnName("is_archived").IsRequired();
+        customers.Property(row => row.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        customers.Property(row => row.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+        customers.HasIndex(row => new { row.TenantId, row.IsArchived, row.FullName, row.Id });
+        customers.HasIndex(row => new { row.TenantId, row.NormalizedPhoneNumber });
+        customers.HasIndex(row => new { row.TenantId, row.EmailAddress });
+        customers.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
+
         // Defense in depth only. PostgreSQL RLS remains the database boundary.
         notes.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
     }
@@ -120,6 +137,13 @@ public sealed class TenantDbContext : DbContext
             if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
                 entry.Entity.TenantId != _boundTenantId.Value)
                 throw new InvalidOperationException("A professional-service assignment does not belong to this DbContext tenant.");
+        }
+
+        foreach (EntityEntry<TenantCustomerRow> entry in ChangeTracker.Entries<TenantCustomerRow>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
+                entry.Entity.TenantId != _boundTenantId.Value)
+                throw new InvalidOperationException("A customer does not belong to this DbContext tenant.");
         }
 
         foreach (EntityEntry<TenantNoteRow> entry in ChangeTracker.Entries<TenantNoteRow>())

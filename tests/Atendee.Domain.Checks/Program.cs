@@ -1,10 +1,59 @@
 using Atendee.Domain.Primitives;
 using Atendee.Domain.Catalog;
+using Atendee.Domain.Customers;
 using Atendee.Domain.Tenants;
 
 var nowUtc = new DateTimeOffset(2026, 11, 17, 12, 0, 0, TimeSpan.Zero);
 var checks = new (string Name, Action Run)[]
 {
+    ("customer name, E.164 phone and email are normalized", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "  Maria Silva  ", "+55 (11) 99999-9999", "MARIA@EXAMPLE.COM", nowUtc);
+        Assert(customer.FullName == "Maria Silva" && customer.NormalizedPhoneNumber == "+5511999999999" &&
+               customer.EmailAddress == "maria@example.com" && !customer.IsArchived);
+    }),
+    ("customer requires at least one contact method", () =>
+        Throws<ArgumentException>(() => Customer.Create(Guid.NewGuid(), "Maria", null, null, nowUtc))),
+    ("customer rejects non-E.164 phone numbers", () =>
+        Throws<ArgumentException>(() => Customer.Create(Guid.NewGuid(), "Maria", "11999999999", null, nowUtc))),
+    ("customer rejects malformed email addresses", () =>
+        Throws<ArgumentException>(() => Customer.Create(Guid.NewGuid(), "Maria", null, "not-an-email", nowUtc))),
+    ("customer rejects control characters in names", () =>
+        Throws<ArgumentException>(() => Customer.Create(Guid.NewGuid(), "Maria\nSilva", null, "maria@example.com", nowUtc))),
+    ("customer update preserves creation time and refreshes normalized contacts", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        var updated = customer.Update("Maria Silva", null, "MARIA@EXAMPLE.COM", nowUtc.AddMinutes(1));
+        Assert(updated.CreatedAtUtc == nowUtc && updated.UpdatedAtUtc == nowUtc.AddMinutes(1) &&
+               updated.NormalizedPhoneNumber is null && updated.EmailAddress == "maria@example.com");
+    }),
+    ("customer cannot remove every contact method", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        Throws<ArgumentException>(() => customer.Update("Maria", null, null, nowUtc.AddMinutes(1)));
+    }),
+    ("customer archive is a timestamped soft state change", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        var archived = customer.Archive(nowUtc.AddMinutes(1));
+        Assert(archived.IsArchived && archived.CreatedAtUtc == nowUtc && archived.UpdatedAtUtc == nowUtc.AddMinutes(1));
+    }),
+    ("repeated customer archive is idempotent", () =>
+    {
+        var archived = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc)
+            .Archive(nowUtc.AddMinutes(1));
+        var repeated = archived.Archive(nowUtc.AddMinutes(2));
+        Assert(repeated.UpdatedAtUtc == archived.UpdatedAtUtc);
+    }),
+    ("archived customer cannot be updated", () =>
+    {
+        var archived = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc)
+            .Archive(nowUtc.AddMinutes(1));
+        Throws<InvalidOperationException>(() =>
+            archived.Update("Maria Silva", "+5511999999999", null, nowUtc.AddMinutes(2)));
+    }),
+    ("customer rejects non-UTC timestamps", () =>
+        Throws<ArgumentException>(() => Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc.ToOffset(TimeSpan.FromHours(-3))))),
     ("service name is trimmed and currency normalized", () => { var service = SalonService.Create(Guid.NewGuid(), "  Corte  ", 45, 7500, "brl", 5, 10, true, nowUtc); Assert(service.Name == "Corte" && service.Currency == "BRL"); }),
     ("service price is an integer minor-unit amount", () => Assert(SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "BRL", 0, 0, true, nowUtc).PriceMinorUnits == 7500)),
     ("invalid ISO currency is rejected", () => Throws<ArgumentException>(() => SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "ZZZ", 0, 0, true, nowUtc))),
