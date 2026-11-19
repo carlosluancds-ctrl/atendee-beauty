@@ -1,21 +1,21 @@
 {
-  "backup_version": "v73-cross-flow-mfa-lockout-serialization-approved",
+  "backup_version": "v74-mfa-setup-ticket-refresh-approved",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V73_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V73_2026-11-19.md",
-  "latest_implementation_commit": "eb38175ef2b3b6a325535740b99f27f9fcbd28e6",
-  "latest_documentation_parent_commit": "eb38175ef2b3b6a325535740b99f27f9fcbd28e6",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V74_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V74_2026-11-19.md",
+  "latest_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+  "latest_documentation_parent_commit": "86565921a64332864fa97d386685f977cd5df69d",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44461641990",
+    "run": "44558003655",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "eb38175ef2b3b6a325535740b99f27f9fcbd28e6",
+    "validated_head_sha": "86565921a64332864fa97d386685f977cd5df69d",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
-    "portal_browser_tests": "8 passed (6.6s)",
+    "portal_browser_tests": "8 passed (6.0s)",
     "domain_checks": "26/26 passed",
     "postgres_rls_checks": "10/10 passed",
     "identity_checks": "49/49 passed",
@@ -26,15 +26,13 @@
       "domain checks 26/26",
       "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
       "Identity/TOTP/tenant-context checks 49/49",
-      "password login locks and reloads identity before counter update",
-      "TOTP and recovery-code challenge failure/success paths lock and reload identity before counter changes",
-      "MFA enrollment failure/success paths lock and reload identity before counter changes",
-      "cross-flow concurrent wrong-password, invalid TOTP and invalid recovery-code attempts all count and audit",
-      "cross-flow concurrent wrong-password and invalid enrollment TOTP attempts both count and audit",
-      "post-lockout challenge/enrollment attempts do not create extra failure audit events",
-      "independent TOTP replay guard remains passing",
-      "V64-V72 regressions remain passing",
-      "HTTP authentication/session security and full-stack browser checks",
+      "MFA enrollment reissues the setup ticket with the rotated security stamp",
+      "MFA setup ticket preserves its original expiry and fails closed when expiry is missing or elapsed",
+      "fresh antiforgery request tokens are used after authentication-state transitions",
+      "invalid authenticator code reaches enrollment validation and is rejected",
+      "pending challenge/setup sessions are rejected after session revocation or account disablement",
+      "V64-V73 regressions remain passing",
+      "HTTP authentication/session security and real Kestrel full-stack browser checks",
       "disposable credentials cleared and PostgreSQL container removed"
     ]
   },
@@ -68,7 +66,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Review account disable/session-revocation racing with in-flight login and MFA completion; prove a disabled or revoked identity cannot receive a usable new application/setup/challenge session after the state change, preserving audit-before-cookie ordering and the independent TOTP replay guard.",
+  "next_step": "Test account disable/session-revocation racing with in-flight password verification, MFA challenge completion and MFA enrollment; prove no usable application/setup/challenge session can be issued after the state change commits.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -200,6 +198,22 @@
       "already-locked MFA challenge and enrollment attempts add no further failure audit events",
       "IdentityResult failures for AccessFailedAsync and ResetAccessFailedCountAsync abort before audit commit",
       "TOTP replay guard remains independent and passing"
+    ]
+  },
+  "v74": {
+    "implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+    "approval": "approved",
+    "ci_run": "44558003655",
+    "assertions": [
+      "MFA setup cookie is reissued with the new Identity security stamp after authenticator-key initialization",
+      "original MFA setup ticket expiry is preserved; missing or elapsed expiry is rejected without extension",
+      "fresh antiforgery tokens are used after setup-ticket refresh, enrollment and login transitions",
+      "invalid authenticator code is rejected during MFA enrollment and successful enrollment still completes",
+      "cross-flow MFA enrollment failure uses the refreshed setup ticket and antiforgery token",
+      "pending MFA challenge cannot complete after session revocation",
+      "pending MFA setup cannot continue after session revocation or account disablement",
+      "session revocation and account disablement remain durably audited",
+      "audit-before-cookie ordering and independent TOTP replay guard remain passing"
     ]
   }
 }

@@ -4,16 +4,13 @@ Read `CLAUDE.md` and the highest-numbered continuity status before editing.
 
 - Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
 - Working branch: `security/csrf-webhook-antiforgery-v23`; never modify `main`.
-- Latest continuity checkpoint: `docs/continuity/CONTINUATION_STATUS_V73_2026-11-19.md` (approved).
-- Latest approved implementation: V73, validated commit `eb38175ef2b3b6a325535740b99f27f9fcbd28e6`.
-- V73 CI run `44461641990` passed completely. Password login, TOTP challenge, recovery-code challenge and MFA enrollment now lock/reload the Identity row before changing/resetting failed-attempt state. Cross-flow HTTP/PostgreSQL regressions prove concurrent failures are all counted/audited and locked accounts do not create additional failure events.
-- The TOTP replay guard remains a separate atomic compare-and-set transaction.
-- V72 sequential/concurrent login lockout tests remain green.
-- V71 pending-MFA audit failure regression remains green: failed mandatory audit leaves no usable temporary two-factor cookie or application session.
-- V70 failed-password counter and `operational_auth.login_failed` audit remain atomic.
-- V69 onboarding actor provenance and failed-TOTP audit atomicity remain green.
-- V65 service isolation, V66 professional identity/profile isolation, V67 professional-service assignment isolation, and V68 trusted-context spoofing protections remain in passing CI.
-- Previous continuity files V23–V72 are preserved. Do not rewrite historical checkpoints.
-- Next: review account disable/session-revocation racing with in-flight login and MFA completion. Prove a disabled/revoked identity cannot receive a usable new application/setup/challenge session after the state change; preserve audit-before-cookie ordering and the independent TOTP replay guard.
+- Latest continuity checkpoint: `docs/continuity/CONTINUATION_STATUS_V74_2026-11-19.md` (approved).
+- Latest approved implementation: V74, validated commit `86565921a64332864fa97d386685f977cd5df69d`.
+- V74 CI run `44558003655` passed completely: frontend audit/tests/build, 8 portal browser tests, Release build, 26 domain checks, 10 PostgreSQL/RLS checks, 49 Identity/TOTP checks, HTTP authentication/antiforgery/cookie/session-revocation/MFA/audit/tenant checks, and 1 real Kestrel + PostgreSQL full-stack browser test. Disposable credentials were cleared and the PostgreSQL container removed.
+- V74 fixes the MFA setup cookie becoming invalid when `ResetAuthenticatorKeyAsync` rotates the Identity security stamp. The setup ticket is reissued with the new stamp while preserving the original expiry; missing/expired expiry fails closed.
+- V74 tests fetch fresh antiforgery tokens after authentication-state transitions, assert setup-ticket refresh, and verify pending MFA sessions are rejected after session revocation/account disablement.
+- Historical checkpoints V23–V73 are preserved. Do not rewrite historical checkpoints.
+- Next: test account disable/session-revocation racing with in-flight password verification, MFA challenge completion and MFA enrollment. Prove a state change committed during those operations cannot produce a usable application/setup/challenge session afterward.
 - Preserve authentication-before-antiforgery ordering, fresh request tokens after login/MFA/logout, first-Owner provisioning, tenant isolation, RLS, transaction runner and backend-first authorization.
+- Preserve audit-before-cookie ordering and the independent TOTP replay guard.
 - Do not deploy, configure SES, activate billing/trial, change production data, or modify `main`. Do not implement cross-tenant administrative disable/revoke or tenant status changes without explicit approval.
