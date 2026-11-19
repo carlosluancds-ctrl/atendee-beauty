@@ -1,33 +1,38 @@
 {
-  "backup_version": "v78-account-security-authorization-surface-reviewed",
+  "backup_version": "v79-trusted-forwarded-proxy-validation",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V78_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V78_2026-11-19.md",
-  "latest_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
-  "latest_documentation_parent_commit": "867496cce35baae69e35c2cd7cdbd2f05de32320",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V79_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V79_2026-11-19.md",
+  "latest_implementation_commit": "8232d4e48ce7e9b4445f05e02813ad83fc8bd633",
+  "latest_documentation_parent_commit": "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44569197822",
+    "run": "44578183985",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "867496cce35baae69e35c2cd7cdbd2f05de32320",
+    "validated_head_sha": "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
     "portal_browser_tests": "8 passed",
     "domain_checks": "26/26 passed",
     "postgres_rls_checks": "10/10 passed",
     "identity_checks": "49/49 passed",
+    "forwarded_proxy_checks": "7 assertions passed",
     "fullstack_browser_result": "1 passed",
     "key_checks": [
       "frontend dependency audit, tests and build",
+      "portal browser E2E 8/8",
       "Release build",
       "domain checks 26/26",
       "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
       "Identity/TOTP/tenant-context checks 49/49",
-      "HTTP authentication, session security and full-stack browser checks",
-      "V64-V77 security regression coverage remains passing",
+      "forwarded-header default deny-all and untrusted-header rejection",
+      "explicit exact proxy allowlist, one-hop forwarding and X-Forwarded-Host rejection",
+      "invalid trusted-proxy configuration fails startup closed",
+      "HTTP authentication, antiforgery, cookies, session security, audit, role-matrix and tenant-status checks",
+      "real Kestrel + disposable PostgreSQL full-stack browser E2E",
       "disposable credentials cleared and PostgreSQL container removed"
     ]
   },
@@ -61,7 +66,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Do not add an A1/A2 administrative HTTP endpoint until explicit owner approval of actor/tenant/role scope, self/last-Owner rules, Platform Admin realm, step-up MFA/four-eyes and tenant-scoped audit requirements. Continue unrelated backend work without crossing this boundary.",
+  "next_step": "Continue unrelated backend work without adding A1/A2 administrative HTTP endpoints until explicit owner approval of actor/tenant/role scope, self/last-Owner rules, Platform Admin realm, step-up MFA/four-eyes and tenant-scoped audit requirements. Configure trusted proxy IPs only through approved runtime environment settings.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -226,7 +231,7 @@
       "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
     ]
   },
-  "latest_validated_head": "867496cce35baae69e35c2cd7cdbd2f05de32320",
+  "latest_validated_head": "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d",
   "v76": {
     "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
     "test_commit": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
@@ -268,6 +273,30 @@
       "no administrative HTTP route exposes account disablement or session revocation",
       "the service records the trusted actor but does not enforce tenant/role authorization and must not be exposed directly",
       "ADMIN_ACTIONS_DESIGN_V1 remains a proposal; explicit owner decisions are required before A1/A2 endpoints"
+    ]
+  },
+  "v79": {
+    "implementation_commit": "8232d4e48ce7e9b4445f05e02813ad83fc8bd633",
+    "test_commits": [
+      "9b72fadb645bd3f58de24f72b25abff0b9b45394",
+      "4a13aa3b72112c4147062a83859ed1f2be605082",
+      "60ecee8e2b1e2e1711181aa08f8e8c0422ae2592",
+      "a7164625f3335602a617388c977f3daa0f09b8c0",
+      "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d"
+    ],
+    "approval": "approved",
+    "ci_run": "44578183985",
+    "validated_head": "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d",
+    "scope": "explicit trusted forwarded-proxy allowlist, deny-all default and HTTP regression coverage",
+    "assertions": [
+      "default configuration trusts no real proxy using unmatchable unspecified-IP sentinels",
+      "untrusted forwarded IP, scheme and host headers cannot spoof request origin or rate-limit partition",
+      "only exact valid unicast IPs from ForwardedHeaders:KnownProxies are accepted",
+      "an explicitly configured exact proxy IP is trusted for one forwarding hop",
+      "X-Forwarded-For and X-Forwarded-Proto are enabled with one-hop limit and required header symmetry",
+      "X-Forwarded-Host is ignored unless explicitly enabled",
+      "invalid trusted-proxy configuration fails application startup closed",
+      "all existing frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
     ]
   }
 }
