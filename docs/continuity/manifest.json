@@ -1,23 +1,23 @@
 {
-  "backup_version": "v83-tenant-customer-management",
+  "backup_version": "v84-tenant-business-hours",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V83_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V83_2026-11-19.md",
-  "latest_implementation_commit": "6ba155281e157d7b17a95646d4b2ccdd927ab49a",
-  "latest_documentation_parent_commit": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V84_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V84_2026-11-19.md",
+  "latest_implementation_commit": "6417a46953e3504a597784edb7215bfeb157a732",
+  "latest_documentation_parent_commit": "5716f69d6f9d1f8032da150797d3572bad876909",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44587416282",
+    "run": "44590386383",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
+    "validated_head_sha": "5716f69d6f9d1f8032da150797d3572bad876909",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
     "portal_browser_tests": "8 passed",
-    "domain_checks": "37/37 passed",
-    "postgres_rls_checks": "19/19 passed",
+    "domain_checks": "46/46 passed",
+    "postgres_rls_checks": "30/30 passed",
     "identity_checks": "49/49 passed",
     "http_checks": "passed",
     "fullstack_browser_result": "1 passed",
@@ -25,19 +25,20 @@
       "frontend dependency audit, tests and build",
       "portal browser E2E 8/8",
       "locked dependency restore",
-      "Release build with 0 warnings",
-      "domain checks 37/37",
-      "PostgreSQL 18.7 / EF Core / RLS persistence checks 19/19",
+      "Release build with 0 warnings and 0 errors",
+      "domain checks 46/46",
+      "PostgreSQL 18.7 / EF Core / RLS persistence checks 30/30",
       "Identity/TOTP/tenant-context checks 49/49",
-      "customer contact normalization and validation",
-      "tenant A/B customer read/list isolation by known UUID",
-      "customer RLS blocks cross-tenant insert",
-      "runtime role cannot directly read customer PII outside transaction runner",
-      "customer creation and archive audit events committed transactionally",
-      "idempotent soft archive and archived-update rejection",
-      "receptionist customer create/list and archive denial",
-      "bounded customer pagination",
-      "owner customer create/update/archive",
+      "business-hours API uses tenant-local wall-clock values and tenant time-zone ID",
+      "empty schedule means closed; ISO weekdays and max four intervals per day",
+      "overlapping, zero-length, overnight, invalid weekday and invalid time input rejected",
+      "tenant-scoped advisory lock serializes complete schedule replacements",
+      "deferred database constraint trigger enforces no overlap and maximum interval count",
+      "business-hours RLS blocks cross-tenant reads and writes",
+      "runtime cannot directly read or physically delete business-hours records",
+      "schedule creation and soft archive write mandatory transactional audit events",
+      "Receptionist read allowed/write denied; Owner write allowed; Professional access denied",
+      "transaction runner preserves original deferred-constraint failure and allows subsequent transaction",
       "HTTP authentication, antiforgery, cookies, session revocation, logout, MFA, audit, role-matrix and tenant-status checks",
       "real Kestrel + disposable PostgreSQL full-stack browser E2E",
       "disposable credentials cleared and PostgreSQL container removed"
@@ -73,7 +74,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Build appointment scheduling in dependency order: business hours and professional availability, timezone-safe availability calculation, then transactional booking with PostgreSQL overlap prevention, idempotency, state transitions and append-only audit. Close shared/distributed authentication rate limiting with multi-instance concurrency tests without assuming an unverified production Redis/managed-service topology. Keep Data Protection certificate rotation blocked until old-key decryption support is implemented.",
+  "next_step": "Implement professional weekly availability and date-specific exceptions/time off; then timezone-safe availability calculation with explicit DST ambiguous/nonexistent local-time handling; then transactional appointment booking with PostgreSQL overlap prevention, idempotency, state transitions and append-only audit. Business hours are configured but do not yet calculate slots. In parallel, close shared/distributed authentication rate limiting with multi-instance concurrency tests without assuming an unverified production Redis/managed-service topology. Keep Data Protection certificate rotation blocked until old-key decryption support is implemented.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -238,7 +239,7 @@
       "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
     ]
   },
-  "latest_validated_head": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
+  "latest_validated_head": "5716f69d6f9d1f8032da150797d3572bad876909",
   "v76": {
     "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
     "test_commit": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
@@ -450,6 +451,66 @@
       "free-form customer notes",
       "WhatsApp/email outreach",
       "production deployment"
+    ]
+  },
+  "v84": {
+    "implementation_commit": "6417a46953e3504a597784edb7215bfeb157a732",
+    "persistence_namespace_fix_commit": "99c8b3a",
+    "transaction_runner_fix_commit": "5716f69d6f9d1f8032da150797d3572bad876909",
+    "approval": "approved",
+    "ci_run": "44590386383",
+    "validated_head": "5716f69d6f9d1f8032da150797d3572bad876909",
+    "scope": "tenant-scoped recurring weekly salon business-hours configuration with local wall-clock times, RLS, audit, advisory-lock replacement and deferred database overlap constraint",
+    "api": [
+      "GET /api/v1/business-hours",
+      "PUT /api/v1/business-hours"
+    ],
+    "configuration": {
+      "time_zone": "Uses tenant's persisted time-zone ID; API values are local wall-clock HH:mm, not UTC",
+      "iso_weekdays": "Monday=1 through Sunday=7",
+      "max_intervals_per_day": 4,
+      "max_intervals_per_week": 28,
+      "empty_schedule": "closed all week",
+      "overnight_intervals": "rejected; split across local days",
+      "split_shifts": "supported",
+      "roles": {
+        "read": [
+          "Owner",
+          "Manager",
+          "Receptionist"
+        ],
+        "write": [
+          "Owner",
+          "Manager"
+        ],
+        "professional_access": false
+      }
+    },
+    "integrity": [
+      "domain rejects invalid day, invalid/zero-length/overnight intervals, overlaps and more than four intervals per day",
+      "database deferred constraint trigger independently rejects overlaps and interval count violations",
+      "transaction-scoped advisory lock serializes full schedule replacement per tenant",
+      "unchanged intervals retain identity; removed intervals are soft-archived",
+      "runtime has no DELETE/TRUNCATE grant",
+      "business-hours mutations require trusted actor context and transactional audit",
+      "tenant transaction runner preserves original deferred constraint exception when Npgsql marks transaction complete"
+    ],
+    "assertions": [
+      "Domain checks 46/46",
+      "PostgreSQL/RLS persistence checks 30/30",
+      "Identity/TOTP checks 49/49",
+      "Portal browser E2E 8 passed",
+      "HTTP authentication, antiforgery, business-hours and customer role/status checks pass",
+      "Full-stack browser E2E 1 passed",
+      "Release build 0 warnings, 0 errors"
+    ],
+    "deferred": [
+      "professional weekly availability and date-specific exceptions/time off",
+      "availability slot calculation",
+      "DST ambiguous/nonexistent local-time handling",
+      "appointment booking, overlap prevention, idempotency and state transitions",
+      "customer consent, contact verification, retention and privacy-request workflows",
+      "production deployment and external provider activation"
     ]
   }
 }
