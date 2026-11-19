@@ -145,9 +145,8 @@ try
         forwardedHeadersLoggerFactory,
         Options.Create(trustedForwardedHeaders));
     await trustedForwardedMiddleware.Invoke(trustedForwardedContext);
-    Console.WriteLine(
-        $"Forwarded proxy result: RemoteIpAddress={trustedForwardedContext.Connection.RemoteIpAddress}, Scheme={trustedForwardedContext.Request.Scheme}, Host={trustedForwardedContext.Request.Host}");
-    Ensure(trustedForwardedContext.Connection.RemoteIpAddress == IPAddress.Parse("203.0.113.42"),
+    Ensure(IPAddress.Parse("203.0.113.42").Equals(
+               trustedForwardedContext.Connection.RemoteIpAddress),
         "A known proxy may supply the client IP.");
     Ensure(trustedForwardedContext.Request.Scheme == "https",
         "A known proxy may supply the HTTPS scheme.");
