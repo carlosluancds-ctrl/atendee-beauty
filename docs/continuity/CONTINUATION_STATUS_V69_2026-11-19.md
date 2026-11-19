@@ -32,7 +32,8 @@ O caminho de TOTP inválido agora agrupa `AccessFailedAsync` e `operational_mfa.
 
 ## Commits de implementação
 
-- `d90d8906d91a68da979be60e02ba5ffeaea5c1e0` — propaga ator confiável para o trigger de auditoria do onboarding e exige a identidade do Owner no evento.
+- `773fb0f7694643b8c6c95897ff574b99db280539` — define `app.actor_id` transaction-local no endpoint de onboarding usando o ator resolvido pelo middleware.
+- `d90d8906d91a68da979be60e02ba5ffeaea5c1e0` — adiciona a regressão HTTP que exige o ID exato do Owner no evento de auditoria.
 - `00c4b55955738b06602b8cbb0519f6f3ef60ebf4` — torna atômicos contador de falha TOTP e evento de auditoria, com regressões para TOTP inválido e reset após sucesso.
 
 ## Evidência CI
