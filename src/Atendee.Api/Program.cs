@@ -45,9 +45,20 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 
-    foreach (var trustedProxyAddress in trustedProxyAddresses)
+    if (trustedProxyAddresses.Count == 0)
     {
-        options.KnownProxies.Add(trustedProxyAddress);
+        // An empty known-proxy collection disables the middleware's address
+        // check in ASP.NET Core. Keep the check enabled with unmatchable
+        // unspecified addresses so the default policy trusts no real proxy.
+        options.KnownProxies.Add(IPAddress.Any);
+        options.KnownProxies.Add(IPAddress.IPv6Any);
+    }
+    else
+    {
+        foreach (var trustedProxyAddress in trustedProxyAddresses)
+        {
+            options.KnownProxies.Add(trustedProxyAddress);
+        }
     }
 });
 

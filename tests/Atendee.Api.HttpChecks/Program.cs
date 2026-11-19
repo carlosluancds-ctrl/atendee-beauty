@@ -71,9 +71,11 @@ try
                (ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto) &&
            defaultForwardedHeaders.ForwardLimit == 1 &&
            defaultForwardedHeaders.RequireHeaderSymmetry &&
-           defaultForwardedHeaders.KnownProxies.Count == 0 &&
+           defaultForwardedHeaders.KnownProxies.Count == 2 &&
+           defaultForwardedHeaders.KnownProxies.Contains(IPAddress.Any) &&
+           defaultForwardedHeaders.KnownProxies.Contains(IPAddress.IPv6Any) &&
            defaultForwardedHeaders.KnownIPNetworks.Count == 0,
-        "Forwarded headers trust no proxy by default and accept only one symmetric X-Forwarded-For/X-Forwarded-Proto hop.");
+        "Forwarded headers use an explicit deny-all proxy sentinel by default and accept only one symmetric X-Forwarded-For/X-Forwarded-Proto hop.");
 
     using var forwardedHeadersLoggerFactory = LoggerFactory.Create(_ => { });
     var spoofedForwardedContext = new DefaultHttpContext();
