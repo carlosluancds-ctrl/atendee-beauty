@@ -80,6 +80,7 @@ public static class DependencyInjection
         services.AddScoped<ITenantNoteStore, EfTenantNoteStore>();
         services.AddScoped<ITenantServiceStore, EfTenantServiceStore>();
         services.AddScoped<ITenantCustomerStore, EfTenantCustomerStore>();
+        services.AddScoped<ITenantBusinessHoursStore, EfTenantBusinessHoursStore>();
         services.AddScoped<ITenantProfessionalStore, EfTenantProfessionalStore>();
         return services;
     }

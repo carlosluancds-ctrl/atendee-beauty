@@ -29,6 +29,7 @@ public sealed class TenantDbContext : DbContext
     internal DbSet<TenantProfessionalRow> TenantProfessionals => Set<TenantProfessionalRow>();
     internal DbSet<TenantProfessionalServiceRow> TenantProfessionalServices => Set<TenantProfessionalServiceRow>();
     internal DbSet<TenantCustomerRow> TenantCustomers => Set<TenantCustomerRow>();
+    internal DbSet<TenantBusinessHoursRow> TenantBusinessHours => Set<TenantBusinessHoursRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -96,6 +97,20 @@ public sealed class TenantDbContext : DbContext
         customers.HasIndex(row => new { row.TenantId, row.EmailAddress });
         customers.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
 
+        var businessHours = modelBuilder.Entity<TenantBusinessHoursRow>();
+        businessHours.ToTable("business_hours", "atendee");
+        businessHours.HasKey(row => new { row.TenantId, row.Id });
+        businessHours.Property(row => row.TenantId).HasColumnName("tenant_id").IsRequired();
+        businessHours.Property(row => row.Id).HasColumnName("business_hours_id").IsRequired();
+        businessHours.Property(row => row.IsoDayOfWeek).HasColumnName("iso_day_of_week").IsRequired();
+        businessHours.Property(row => row.StartTime).HasColumnName("start_time").IsRequired();
+        businessHours.Property(row => row.EndTime).HasColumnName("end_time").IsRequired();
+        businessHours.Property(row => row.IsActive).HasColumnName("is_active").IsRequired();
+        businessHours.Property(row => row.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        businessHours.Property(row => row.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+        businessHours.HasIndex(row => new { row.TenantId, row.IsActive, row.IsoDayOfWeek, row.StartTime });
+        businessHours.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
+
         // Defense in depth only. PostgreSQL RLS remains the database boundary.
         notes.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
     }
@@ -144,6 +159,13 @@ public sealed class TenantDbContext : DbContext
             if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
                 entry.Entity.TenantId != _boundTenantId.Value)
                 throw new InvalidOperationException("A customer does not belong to this DbContext tenant.");
+        }
+
+        foreach (EntityEntry<TenantBusinessHoursRow> entry in ChangeTracker.Entries<TenantBusinessHoursRow>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
+                entry.Entity.TenantId != _boundTenantId.Value)
+                throw new InvalidOperationException("Business hours do not belong to this DbContext tenant.");
         }
 
         foreach (EntityEntry<TenantNoteRow> entry in ChangeTracker.Entries<TenantNoteRow>())

@@ -1,6 +1,7 @@
 using Atendee.Domain.Primitives;
 using Atendee.Domain.Catalog;
 using Atendee.Domain.Customers;
+using Atendee.Domain.Scheduling;
 using Atendee.Domain.Tenants;
 
 var nowUtc = new DateTimeOffset(2026, 11, 17, 12, 0, 0, TimeSpan.Zero);
@@ -54,6 +55,61 @@ var checks = new (string Name, Action Run)[]
     }),
     ("customer rejects non-UTC timestamps", () =>
         Throws<ArgumentException>(() => Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc.ToOffset(TimeSpan.FromHours(-3))))),
+    ("business-hours schedule sorts intervals by ISO weekday and local start time", () =>
+    {
+        var schedule = BusinessHoursSchedule.Create(new[]
+        {
+            new BusinessHoursInterval(2, new TimeOnly(10, 0), new TimeOnly(16, 0)),
+            new BusinessHoursInterval(1, new TimeOnly(13, 0), new TimeOnly(17, 0)),
+            new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(12, 0))
+        });
+        Assert(schedule.Intervals.Count == 3 &&
+               schedule.Intervals[0].StartTime == new TimeOnly(9, 0) &&
+               schedule.Intervals[1].StartTime == new TimeOnly(13, 0) &&
+               schedule.Intervals[2].IsoDayOfWeek == 2);
+    }),
+    ("business-hours schedule permits an empty all-closed week", () =>
+        Assert(BusinessHoursSchedule.Create(Array.Empty<BusinessHoursInterval>()).Intervals.Count == 0)),
+    ("business-hours schedule rejects invalid ISO weekday", () =>
+        Throws<ArgumentOutOfRangeException>(() => BusinessHoursSchedule.Create(new[]
+        {
+            new BusinessHoursInterval(0, new TimeOnly(9, 0), new TimeOnly(12, 0))
+        }))),
+    ("business-hours schedule rejects zero-length intervals", () =>
+        Throws<ArgumentException>(() => BusinessHoursSchedule.Create(new[]
+        {
+            new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(9, 0))
+        }))),
+    ("business-hours schedule rejects overnight intervals", () =>
+        Throws<ArgumentException>(() => BusinessHoursSchedule.Create(new[]
+        {
+            new BusinessHoursInterval(1, new TimeOnly(22, 0), new TimeOnly(2, 0))
+        }))),
+    ("business-hours schedule rejects overlapping intervals", () =>
+        Throws<ArgumentException>(() => BusinessHoursSchedule.Create(new[]
+        {
+            new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(12, 0)),
+            new BusinessHoursInterval(1, new TimeOnly(11, 0), new TimeOnly(14, 0))
+        }))),
+    ("business-hours schedule allows adjacent intervals", () =>
+        Assert(BusinessHoursSchedule.Create(new[]
+        {
+            new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(12, 0)),
+            new BusinessHoursInterval(1, new TimeOnly(12, 0), new TimeOnly(17, 0))
+        }).Intervals.Count == 2)),
+    ("business-hours schedule limits each day to four intervals", () =>
+        Throws<ArgumentException>(() => BusinessHoursSchedule.Create(new[]
+        {
+            new BusinessHoursInterval(1, new TimeOnly(8, 0), new TimeOnly(9, 0)),
+            new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(10, 0)),
+            new BusinessHoursInterval(1, new TimeOnly(10, 0), new TimeOnly(11, 0)),
+            new BusinessHoursInterval(1, new TimeOnly(11, 0), new TimeOnly(12, 0)),
+            new BusinessHoursInterval(1, new TimeOnly(12, 0), new TimeOnly(13, 0))
+        }))),
+    ("business-hours schedule caps a week at 28 intervals", () =>
+        Throws<ArgumentException>(() => BusinessHoursSchedule.Create(
+            Enumerable.Range(0, 29).Select(_ => new BusinessHoursInterval(
+                1, new TimeOnly(9, 0), new TimeOnly(10, 0)))))),
     ("service name is trimmed and currency normalized", () => { var service = SalonService.Create(Guid.NewGuid(), "  Corte  ", 45, 7500, "brl", 5, 10, true, nowUtc); Assert(service.Name == "Corte" && service.Currency == "BRL"); }),
     ("service price is an integer minor-unit amount", () => Assert(SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "BRL", 0, 0, true, nowUtc).PriceMinorUnits == 7500)),
     ("invalid ISO currency is rejected", () => Throws<ArgumentException>(() => SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "ZZZ", 0, 0, true, nowUtc))),

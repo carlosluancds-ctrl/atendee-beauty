@@ -2,6 +2,7 @@ using System.Data.Common;
 using Atendee.Application.Abstractions;
 using Atendee.Application.Models;
 using Atendee.Domain.Primitives;
+using Atendee.Domain.Scheduling;
 using Atendee.Infrastructure;
 using Atendee.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +31,8 @@ var noteA = Guid.NewGuid();
 var attemptedCrossTenantNote = Guid.NewGuid();
 var customerAId = Guid.NewGuid();
 var attemptedCrossTenantCustomer = Guid.NewGuid();
+var attemptedCrossTenantBusinessHours = Guid.NewGuid();
+var businessHoursId = Guid.Empty;
 var checks = 0;
 
 var services = new ServiceCollection();
@@ -46,6 +49,7 @@ await using (var scopeA = provider.CreateAsyncScope())
     var runner = scopeA.ServiceProvider.GetRequiredService<ITenantTransactionRunner>();
     var store = scopeA.ServiceProvider.GetRequiredService<ITenantNoteStore>();
     var customerStore = scopeA.ServiceProvider.GetRequiredService<ITenantCustomerStore>();
+    var businessHoursStore = scopeA.ServiceProvider.GetRequiredService<ITenantBusinessHoursStore>();
     var db = scopeA.ServiceProvider.GetRequiredService<TenantDbContext>();
 
     _ = await db.Database.SqlQueryRaw<string>(
@@ -66,6 +70,34 @@ await using (var scopeA = provider.CreateAsyncScope())
     var customerAuditCount = await runner.ExecuteAsync(ct => db.Database.SqlQuery<int>(
         $"SELECT count(*)::int AS \"Value\" FROM atendee.tenant_audit_events WHERE resource_id = {customerAId} AND event_type = 'customer.created'").SingleAsync(ct));
     Check(customerAuditCount == 1, "customer creation writes its audit event in the same tenant transaction");
+
+    var weeklySchedule = BusinessHoursSchedule.Create(new[]
+    {
+        new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(12, 0)),
+        new BusinessHoursInterval(1, new TimeOnly(13, 0), new TimeOnly(17, 0)),
+        new BusinessHoursInterval(2, new TimeOnly(10, 0), new TimeOnly(16, 0))
+    });
+    var savedBusinessHours = await runner.ExecuteAsync(ct => businessHoursStore.ReplaceAsync(weeklySchedule, ct));
+    businessHoursId = savedBusinessHours[0].Id;
+    Check(savedBusinessHours.Count == 3 && savedBusinessHours[0].IsoDayOfWeek == 1 &&
+          savedBusinessHours[1].StartTime == new TimeOnly(13, 0),
+        "business-hours store persists ordered local-time intervals for the tenant");
+    var businessHoursCreatedAuditCount = await runner.ExecuteAsync(ct => db.Database.SqlQuery<int>(
+        $"SELECT count(*)::int AS \"Value\" FROM atendee.tenant_audit_events WHERE tenant_id = {tenantA.Value} AND event_type = 'business_hours.created'").SingleAsync(ct));
+    Check(businessHoursCreatedAuditCount == 3,
+        "each new business-hours interval writes a transactional audit event");
+
+    await ExpectDbFailureAsync(async () =>
+    {
+        await runner.ExecuteAsync(async ct =>
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO atendee.business_hours (tenant_id, business_hours_id, iso_day_of_week, start_time, end_time, is_active, created_at_utc, updated_at_utc) VALUES ({tenantA.Value}, {Guid.NewGuid()}, {1}, {new TimeOnly(10, 0)}, {new TimeOnly(11, 0)}, {true}, {DateTimeOffset.UtcNow}, {DateTimeOffset.UtcNow})",
+                ct);
+        });
+    });
+    Check(true, "database trigger rejects overlapping business-hours intervals even when bypassing domain validation");
+
     var visible = await runner.ExecuteAsync(ct => store.GetByIdAsync(noteA, ct));
     Check(visible is not null && visible.Body == "synthetic note from A", "tenant A can read its own note");
     backendPidA = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<int>("SELECT pg_backend_pid() AS \"Value\"").SingleAsync(ct));
@@ -78,6 +110,7 @@ await using (var scopeB = provider.CreateAsyncScope())
     var runner = scopeB.ServiceProvider.GetRequiredService<ITenantTransactionRunner>();
     var store = scopeB.ServiceProvider.GetRequiredService<ITenantNoteStore>();
     var customerStore = scopeB.ServiceProvider.GetRequiredService<ITenantCustomerStore>();
+    var businessHoursStore = scopeB.ServiceProvider.GetRequiredService<ITenantBusinessHoursStore>();
     var db = scopeB.ServiceProvider.GetRequiredService<TenantDbContext>();
 
     backendPidB = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<int>("SELECT pg_backend_pid() AS \"Value\"").SingleAsync(ct));
@@ -89,6 +122,9 @@ await using (var scopeB = provider.CreateAsyncScope())
     var tenantBCustomers = await runner.ExecuteAsync(ct => customerStore.ListAsync(1, 50, ct));
     Check(hiddenCustomer is null && tenantBCustomers.TotalCount == 0 && tenantBCustomers.Items.Count == 0,
         "tenant B cannot read or list tenant A customers even when the customer UUID is known");
+    var tenantBBusinessHours = await runner.ExecuteAsync(ct => businessHoursStore.ListAsync(ct));
+    Check(tenantBBusinessHours.Count == 0,
+        "tenant B cannot read tenant A business-hours intervals");
     var tenantBNotes = await runner.ExecuteAsync(ct => store.ListAsync(ct));
     Check(tenantBNotes.Count == 0, "tenant B list does not expose tenant A note");
 
@@ -116,6 +152,17 @@ await using (var scopeB = provider.CreateAsyncScope())
 
     await ExpectDbFailureAsync(async () =>
     {
+        await runner.ExecuteAsync(async ct =>
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO atendee.business_hours (tenant_id, business_hours_id, iso_day_of_week, start_time, end_time, is_active, created_at_utc, updated_at_utc) VALUES ({tenantA.Value}, {attemptedCrossTenantBusinessHours}, {1}, {new TimeOnly(8, 0)}, {new TimeOnly(9, 0)}, {true}, {DateTimeOffset.UtcNow}, {DateTimeOffset.UtcNow})",
+                ct);
+        });
+    });
+    Check(true, "business-hours RLS WITH CHECK blocks a cross-tenant insert");
+
+    await ExpectDbFailureAsync(async () =>
+    {
         await db.Database.ExecuteSqlRawAsync("SELECT note_id FROM atendee.tenant_notes");
     });
     Check(true, "app login has no direct table access outside transaction runner");
@@ -124,6 +171,17 @@ await using (var scopeB = provider.CreateAsyncScope())
         await db.Database.ExecuteSqlRawAsync("SELECT customer_id FROM atendee.customers");
     });
     Check(true, "runtime login cannot bypass the tenant transaction runner to read customer PII");
+    await ExpectDbFailureAsync(async () =>
+    {
+        await db.Database.ExecuteSqlRawAsync("SELECT business_hours_id FROM atendee.business_hours");
+    });
+    Check(true, "runtime login cannot directly read business-hours configuration outside the tenant transaction runner");
+    await ExpectDbFailureAsync(async () =>
+    {
+        await runner.ExecuteAsync(ct => db.Database.ExecuteSqlRawAsync(
+            "DELETE FROM atendee.business_hours", ct));
+    });
+    Check(true, "runtime login cannot physically delete business-hours audit history");
 
     await ExpectFailureAsync(async () =>
     {
@@ -138,6 +196,7 @@ await using (var scopeA2 = provider.CreateAsyncScope())
     var runner = scopeA2.ServiceProvider.GetRequiredService<ITenantTransactionRunner>();
     var store = scopeA2.ServiceProvider.GetRequiredService<ITenantNoteStore>();
     var customerStore = scopeA2.ServiceProvider.GetRequiredService<ITenantCustomerStore>();
+    var businessHoursStore = scopeA2.ServiceProvider.GetRequiredService<ITenantBusinessHoursStore>();
     var db = scopeA2.ServiceProvider.GetRequiredService<TenantDbContext>();
     var backendPidA2 = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<int>("SELECT pg_backend_pid() AS \"Value\"").SingleAsync(ct));
     Check(backendPidA2 == backendPidB, "same physical connection is safely reused after rollback");
@@ -155,6 +214,24 @@ await using (var scopeA2 = provider.CreateAsyncScope())
     var repeatedArchive = await runner.ExecuteAsync(ct => customerStore.ArchiveAsync(customerAId, ct));
     Check(repeatedArchive?.UpdatedAtUtc == archivedCustomer!.UpdatedAtUtc,
         "repeated customer archival is idempotent and does not rewrite the audit timestamp");
+
+    var existingBusinessHours = await runner.ExecuteAsync(ct => businessHoursStore.ListAsync(ct));
+    Check(existingBusinessHours.Count == 3,
+        "tenant A can read its own complete weekly business-hours schedule after tenant B and rollback tests");
+    var reducedSchedule = BusinessHoursSchedule.Create(new[]
+    {
+        new BusinessHoursInterval(1, new TimeOnly(9, 0), new TimeOnly(12, 0))
+    });
+    var reducedBusinessHours = await runner.ExecuteAsync(ct => businessHoursStore.ReplaceAsync(reducedSchedule, ct));
+    Check(reducedBusinessHours.Count == 1 && reducedBusinessHours[0].Id == businessHoursId,
+        "business-hours replacement preserves unchanged interval identity and deactivates removed intervals");
+    var businessHoursArchivedAuditCount = await runner.ExecuteAsync(ct => db.Database.SqlQuery<int>(
+        $"SELECT count(*)::int AS \"Value\" FROM atendee.tenant_audit_events WHERE tenant_id = {tenantA.Value} AND event_type = 'business_hours.archived'").SingleAsync(ct));
+    Check(businessHoursArchivedAuditCount == 2,
+        "removed business-hours intervals are soft-archived and audited");
+    var repeatedBusinessHours = await runner.ExecuteAsync(ct => businessHoursStore.ReplaceAsync(reducedSchedule, ct));
+    Check(repeatedBusinessHours.Single().Id == businessHoursId,
+        "replacing an unchanged business-hours schedule is idempotent");
 }
 
 Console.WriteLine($"RESULT: {checks}/{checks} persistence integration checks passed.");

@@ -609,6 +609,24 @@ try
         client, $"/api/v1/customers/{receptionistCustomerId}/archive", receptionistRequestToken, new { });
     Ensure(receptionistArchiveCustomer.StatusCode == HttpStatusCode.Forbidden,
         "Receptionist cannot archive customer records; archive is restricted to Owner and Manager.");
+
+    var receptionistBusinessHours = await client.GetAsync("/api/v1/business-hours");
+    var receptionistBusinessHoursBody = await receptionistBusinessHours.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(receptionistBusinessHours.StatusCode == HttpStatusCode.OK &&
+           receptionistBusinessHoursBody.GetProperty("timeZoneId").GetString() == "America/Sao_Paulo" &&
+           receptionistBusinessHoursBody.GetProperty("intervals").GetArrayLength() == 0,
+        "Receptionist can read the tenant's initially closed weekly schedule and configured time zone.");
+    using (var receptionistBusinessHoursPut = new HttpRequestMessage(HttpMethod.Put, "/api/v1/business-hours"))
+    {
+        receptionistBusinessHoursPut.Headers.Add("X-CSRF-TOKEN", receptionistRequestToken);
+        receptionistBusinessHoursPut.Content = JsonContent.Create(new
+        {
+            intervals = new[] { new { isoDayOfWeek = 1, startTime = "09:00", endTime = "17:00" } }
+        });
+        using var receptionistBusinessHoursResponse = await client.SendAsync(receptionistBusinessHoursPut);
+        Ensure(receptionistBusinessHoursResponse.StatusCode == HttpStatusCode.Forbidden,
+            "Receptionist can read but cannot change salon business hours.");
+    }
     using (var forgedOwnerOnboarding = new HttpRequestMessage(
         HttpMethod.Post, "/api/v1/tenant/onboarding/complete"))
     {
@@ -1073,6 +1091,63 @@ try
            archivedCustomer.GetProperty("isArchived").GetBoolean(),
         "Owner can archive a customer without physically deleting the record.");
 
+    using (var ownerBusinessHoursPut = new HttpRequestMessage(HttpMethod.Put, "/api/v1/business-hours"))
+    {
+        ownerBusinessHoursPut.Headers.Add("X-CSRF-TOKEN", ownerAuthenticatedToken);
+        ownerBusinessHoursPut.Content = JsonContent.Create(new
+        {
+            intervals = new[]
+            {
+                new { isoDayOfWeek = 1, startTime = "09:00", endTime = "12:00" },
+                new { isoDayOfWeek = 1, startTime = "13:00", endTime = "18:00" }
+            }
+        });
+        using var ownerBusinessHoursResponse = await mfaClient.SendAsync(ownerBusinessHoursPut);
+        var ownerBusinessHoursBody = await ownerBusinessHoursResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Ensure(ownerBusinessHoursResponse.StatusCode == HttpStatusCode.OK &&
+               ownerBusinessHoursBody.GetProperty("timeZoneId").GetString() == "America/Sao_Paulo" &&
+               ownerBusinessHoursBody.GetProperty("intervals").GetArrayLength() == 2 &&
+               ownerBusinessHoursBody.GetProperty("intervals")[0].GetProperty("startTime").GetString() == "09:00" &&
+               ownerBusinessHoursBody.GetProperty("intervals")[1].GetProperty("startTime").GetString() == "13:00",
+            "Owner can configure split weekly opening intervals in the tenant's local time zone.");
+    }
+    var ownerBusinessHoursGet = await mfaClient.GetAsync("/api/v1/business-hours");
+    var ownerBusinessHoursGetBody = await ownerBusinessHoursGet.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(ownerBusinessHoursGet.StatusCode == HttpStatusCode.OK &&
+           ownerBusinessHoursGetBody.GetProperty("intervals").GetArrayLength() == 2,
+        "Business-hours configuration persists and is returned to authorized tenant users.");
+
+    using (var overlappingBusinessHoursPut = new HttpRequestMessage(HttpMethod.Put, "/api/v1/business-hours"))
+    {
+        overlappingBusinessHoursPut.Headers.Add("X-CSRF-TOKEN", ownerAuthenticatedToken);
+        overlappingBusinessHoursPut.Content = JsonContent.Create(new
+        {
+            intervals = new[]
+            {
+                new { isoDayOfWeek = 1, startTime = "09:00", endTime = "12:00" },
+                new { isoDayOfWeek = 1, startTime = "11:00", endTime = "14:00" }
+            }
+        });
+        using var overlappingBusinessHoursResponse = await mfaClient.SendAsync(overlappingBusinessHoursPut);
+        Ensure(overlappingBusinessHoursResponse.StatusCode == HttpStatusCode.BadRequest,
+            "Business-hours API rejects overlapping intervals before persistence.");
+    }
+    using (var invalidBusinessHoursPut = new HttpRequestMessage(HttpMethod.Put, "/api/v1/business-hours"))
+    {
+        invalidBusinessHoursPut.Headers.Add("X-CSRF-TOKEN", ownerAuthenticatedToken);
+        invalidBusinessHoursPut.Content = JsonContent.Create(new
+        {
+            intervals = new[] { new { isoDayOfWeek = 8, startTime = "25:00", endTime = "26:00" } }
+        });
+        using var invalidBusinessHoursResponse = await mfaClient.SendAsync(invalidBusinessHoursPut);
+        Ensure(invalidBusinessHoursResponse.StatusCode == HttpStatusCode.BadRequest,
+            "Business-hours API rejects invalid ISO weekdays and non-local-time input.");
+    }
+    var businessHoursAfterInvalidUpdates = await mfaClient.GetAsync("/api/v1/business-hours");
+    var businessHoursAfterInvalidUpdatesBody = await businessHoursAfterInvalidUpdates.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(businessHoursAfterInvalidUpdatesBody.GetProperty("intervals").GetArrayLength() == 2,
+        "Rejected business-hours updates leave the last valid schedule unchanged.");
+
     var assignedAssignedProfessionalEmail = "http-professional-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string assignedAssignedProfessionalPassword = "Atendee-Professional-HTTP-2026!";
     var assignedAssignedProfessionalUserId = Guid.NewGuid();
@@ -1186,8 +1261,10 @@ try
         "Professional assigned-service details contain only the assigned salon service.");
     Ensure((await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals")).StatusCode == HttpStatusCode.Forbidden &&
            (await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals/eligible-members")).StatusCode == HttpStatusCode.Forbidden &&
-           (await assignedAssignedProfessionalClient.GetAsync("/api/v1/services")).StatusCode == HttpStatusCode.Forbidden,
-        "Professional cannot list other profiles, discover eligible members or access the unscoped service catalogue.");
+           (await assignedAssignedProfessionalClient.GetAsync("/api/v1/services")).StatusCode == HttpStatusCode.Forbidden &&
+           (await assignedAssignedProfessionalClient.GetAsync("/api/v1/customers")).StatusCode == HttpStatusCode.Forbidden &&
+           (await assignedAssignedProfessionalClient.GetAsync("/api/v1/business-hours")).StatusCode == HttpStatusCode.Forbidden,
+        "Professional cannot list other profiles, discover eligible members, access the unscoped service catalogue, customer directory or salon business-hours configuration.");
 
     var professionalAudit = await ReadProfessionalAuditAsync(
         migratorConnectionString, ownerTenantId, assignedAssignedProfessionalProfileId);
