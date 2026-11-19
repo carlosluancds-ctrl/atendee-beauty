@@ -1,18 +1,18 @@
 {
-  "backup_version": "v69-onboarding-audit-actor-and-totp-audit-atomicity-approved",
+  "backup_version": "v70-password-failure-audit-atomicity-approved",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V69_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V69_2026-11-19.md",
-  "latest_implementation_commit": "00c4b55955738b06602b8cbb0519f6f3ef60ebf4",
-  "latest_documentation_parent_commit": "00c4b55955738b06602b8cbb0519f6f3ef60ebf4",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V70_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V70_2026-11-19.md",
+  "latest_implementation_commit": "49b8e0bb235905f7d7d3663419fe9c2eb337214c",
+  "latest_documentation_parent_commit": "49b8e0bb235905f7d7d3663419fe9c2eb337214c",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44456485697",
+    "run": "44457062380",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "00c4b55955738b06602b8cbb0519f6f3ef60ebf4",
+    "validated_head_sha": "49b8e0bb235905f7d7d3663419fe9c2eb337214c",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
     "key_checks": [
@@ -21,10 +21,10 @@
       "Release build and domain checks",
       "PostgreSQL 18.7 and EF Core/RLS checks",
       "Identity/TOTP/tenant-context checks",
-      "onboarding audit records exact trusted Owner actor",
-      "invalid TOTP and replayed recovery-code attempts each increment counter and write one audit event",
-      "successful TOTP resets failed-attempt counter",
-      "V65-V68 regressions remain passing",
+      "failed-password AccessFailedCount and login_failed audit committed atomically",
+      "wrong password increments counter; successful password resets it",
+      "V69 onboarding actor and TOTP audit atomicity",
+      "V65-V68 tenant isolation and trusted-context regressions",
       "disposable credentials cleared and database container removed"
     ]
   },
@@ -58,7 +58,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Continue backend-first reviewing authentication/MFA operations that combine state changes and audit events; require atomicity and trusted actor provenance.",
+  "next_step": "Continue backend-first auditing identity/account-security operations that combine persistence with mandatory audit events; make failure paths atomic without weakening lockout or authentication rules.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -131,6 +131,19 @@
       "invalid TOTP rejected and audited once",
       "replayed recovery code and invalid TOTP each increment failed-attempt count",
       "successful TOTP resets failed-attempt count"
+    ]
+  },
+  "v70": {
+    "implementation_commits": [
+      "495abc10160d4210850b9cd5217b96b72e8b96de",
+      "49b8e0bb235905f7d7d3663419fe9c2eb337214c"
+    ],
+    "approval": "approved",
+    "assertions": [
+      "wrong password returns 401 and writes exactly one operational_auth.login_failed event",
+      "wrong password increments AccessFailedCount to 1",
+      "valid password resets AccessFailedCount to 0 before MFA setup",
+      "password check and mandatory failure audit share one identity DbContext transaction"
     ]
   }
 }
