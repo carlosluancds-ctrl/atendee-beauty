@@ -69,6 +69,19 @@ async function postWithToken(page, path, token, body = null) {
   }, { path, token, body });
 }
 
+async function putWithToken(page, path, token, body) {
+  return page.evaluate(async ({ path, token, body }) => {
+    const response = await fetch(path, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json", "X-CSRF-TOKEN": token },
+      body: JSON.stringify(body)
+    });
+    const payload = await response.json().catch(() => null);
+    return { status: response.status, error: payload?.error ?? null };
+  }, { path, token, body });
+}
+
 test("real API browser flow: Owner, Manager MFA enrollment, Professional and Receptionist", async ({ page, context }) => {
   test.setTimeout(120_000);
   const env = process.env;
@@ -88,6 +101,9 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   const professionalId = required("ATENDEE_E2E_PROFESSIONAL_ID");
   const receptionistEmail = required("ATENDEE_E2E_RECEPTIONIST_EMAIL");
   const receptionistPassword = required("ATENDEE_E2E_RECEPTIONIST_PASSWORD");
+  const secondOwnerEmail = required("ATENDEE_E2E_SECOND_OWNER_EMAIL");
+  const secondOwnerPassword = required("ATENDEE_E2E_SECOND_OWNER_PASSWORD");
+  const secondOwnerSecret = required("ATENDEE_E2E_SECOND_OWNER_TOTP_SECRET");
 
   const mutations = [];
   const eligibleRequests = [];
@@ -157,6 +173,9 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
       "; antiforgery cookie present: " + Boolean(headers.cookie?.includes("__Host-Atendee.AntiForgery")));
   }
   await expect(page.getByRole("heading", { name: "Corte E2E" })).toBeVisible();
+  const ownerServicePayload = await serviceCreateResponse.json();
+  const ownerServiceId = ownerServicePayload.id;
+  expect(ownerServiceId).toBeTruthy();
 
   const ownerAuthenticatedRequestToken = await getAntiforgeryToken(page);
   await logout(page);
@@ -164,6 +183,85 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
     page, "/api/v1/auth/logout", ownerAuthenticatedRequestToken);
   expect(staleAuthenticatedLogout).toEqual({ status: 400, error: "antiforgery_validation_failed" });
 
+  // A second independently provisioned salon must not read or mutate Salon A resources.
+  // Keep both Owner sessions alive in separate browser contexts to exercise both directions
+  // without consuming extra login-rate-limit permits.
+  const secondOwnerContext = await context.browser().newContext({ ignoreHTTPSErrors: true });
+  try {
+    const secondOwnerPage = await secondOwnerContext.newPage();
+    secondOwnerPage.on("request", request => {
+      const url = new URL(request.url());
+      if (url.pathname.startsWith("/api/v1/") && !["GET", "HEAD", "OPTIONS"].includes(request.method()))
+        mutations.push({ path: url.pathname, headers: request.headers() });
+    });
+
+    await fillLogin(secondOwnerPage, secondOwnerEmail, secondOwnerPassword);
+    await secondOwnerPage.getByRole("button", { name: "Entrar" }).click();
+    await expect(secondOwnerPage.getByRole("heading", { name: "Confirme sua identidade" })).toBeVisible();
+    await secondOwnerPage.getByLabel("Código de autenticação").fill(totp(secondOwnerSecret));
+    await secondOwnerPage.getByRole("button", { name: "Confirmar código" }).click();
+    await expect(secondOwnerPage).toHaveURL(/\\/services$/);
+
+    const secondOwnerToken = await getAntiforgeryToken(secondOwnerPage);
+    const secondOwnerCreate = await postWithToken(secondOwnerPage, "/api/v1/services", secondOwnerToken, {
+      name: "Serviço Salão B",
+      durationMinutes: 30,
+      priceMinorUnits: 6000,
+      currency: "BRL",
+      bufferBeforeMinutes: 0,
+      bufferAfterMinutes: 0,
+      isActive: true
+    });
+    expect(secondOwnerCreate.status).toBe(201);
+    const secondOwnerList = await secondOwnerPage.evaluate(async () => {
+      const response = await fetch("/api/v1/services", { credentials: "same-origin" });
+      return { status: response.status, services: await response.json() };
+    });
+    expect(secondOwnerList.status).toBe(200);
+    expect(secondOwnerList.services).toHaveLength(1);
+    const secondOwnerServiceId = secondOwnerList.services[0].id;
+    expect(secondOwnerServiceId).toBeTruthy();
+    expect(secondOwnerServiceId).not.toBe(ownerServiceId);
+
+    const salonBReadSalonA = await secondOwnerPage.evaluate(async id =>
+      (await fetch("/api/v1/services/" + id, { credentials: "same-origin" })).status, ownerServiceId);
+    expect(salonBReadSalonA).toBe(404);
+    const salonBUpdateSalonA = await putWithToken(secondOwnerPage,
+      "/api/v1/services/" + ownerServiceId, secondOwnerToken, {
+        name: "Tentativa cross-tenant B para A",
+        durationMinutes: 30,
+        priceMinorUnits: 6000,
+        currency: "BRL",
+        bufferBeforeMinutes: 0,
+        bufferAfterMinutes: 0,
+        isActive: true
+      });
+    expect(salonBUpdateSalonA).toEqual({ status: 404, error: null });
+
+    const salonAList = await page.evaluate(async () => {
+      const response = await fetch("/api/v1/services", { credentials: "same-origin" });
+      return { status: response.status, services: await response.json() };
+    });
+    expect(salonAList.status).toBe(200);
+    expect(salonAList.services).toHaveLength(1);
+    expect(salonAList.services[0].id).toBe(ownerServiceId);
+    const salonAReadSalonB = await page.evaluate(async id =>
+      (await fetch("/api/v1/services/" + id, { credentials: "same-origin" })).status, secondOwnerServiceId);
+    expect(salonAReadSalonB).toBe(404);
+    const salonAUpdateSalonB = await putWithToken(page,
+      "/api/v1/services/" + secondOwnerServiceId, ownerAuthenticatedRequestToken, {
+        name: "Tentativa cross-tenant A para B",
+        durationMinutes: 30,
+        priceMinorUnits: 6000,
+        currency: "BRL",
+        bufferBeforeMinutes: 0,
+        bufferAfterMinutes: 0,
+        isActive: true
+      });
+    expect(salonAUpdateSalonB).toEqual({ status: 404, error: null });
+  } finally {
+    await secondOwnerContext.close();
+  }
 
   // Manager must enroll MFA before the API issues a full application session.
   await fillLogin(page, managerEmail, managerPassword);
