@@ -173,8 +173,13 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
       "; antiforgery cookie present: " + Boolean(headers.cookie?.includes("__Host-Atendee.AntiForgery")));
   }
   await expect(page.getByRole("heading", { name: "Corte E2E" })).toBeVisible();
-  const ownerServicePayload = await serviceCreateResponse.json();
-  const ownerServiceId = ownerServicePayload.id;
+  const ownerServiceList = await page.evaluate(async () => {
+    const response = await fetch("/api/v1/services", { credentials: "same-origin" });
+    return { status: response.status, services: await response.json() };
+  });
+  expect(ownerServiceList.status).toBe(200);
+  expect(ownerServiceList.services).toHaveLength(1);
+  const ownerServiceId = ownerServiceList.services[0].id;
   expect(ownerServiceId).toBeTruthy();
 
   const ownerAuthenticatedRequestToken = await getAntiforgeryToken(page);
