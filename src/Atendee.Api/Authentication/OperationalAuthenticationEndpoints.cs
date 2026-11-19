@@ -131,9 +131,10 @@ public static class OperationalAuthenticationEndpoints
         ISecurityAuditWriter auditWriter)
     {
         httpContext.Response.Headers.CacheControl = "no-store";
-        await httpContext.SignOutAsync(MfaChallengeScheme);
-        await httpContext.SignOutAsync(MfaSetupScheme);
-        await httpContext.SignOutAsync(IdentityConstants.TwoFactorUserIdScheme);
+        if (httpContext.Request.Cookies.ContainsKey("__Host-Atendee.MfaChallenge"))
+            await httpContext.SignOutAsync(MfaChallengeScheme);
+        if (httpContext.Request.Cookies.ContainsKey("__Host-Atendee.MfaSetup"))
+            await httpContext.SignOutAsync(MfaSetupScheme);
 
         if (string.IsNullOrWhiteSpace(request.Email) ||
             string.IsNullOrWhiteSpace(request.Password) ||
