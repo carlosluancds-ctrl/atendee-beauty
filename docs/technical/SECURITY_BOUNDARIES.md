@@ -20,3 +20,12 @@
 - The SQL files under `db/poc` are disposable lab scripts, not production migrations.
 
 The health endpoint is a scaffold convenience, not a production readiness check. A green persistence or identity CI job does not prove complete application security or authorize deployment.
+
+## Tenant customer records (V83)
+
+- `atendee.customers` is tenant-scoped with a composite `(tenant_id, customer_id)` primary key, PostgreSQL RLS enabled and forced, and a runtime policy bound only to the transaction-scoped `app.tenant_id`.
+- The runtime role can SELECT/INSERT/UPDATE only through the approved tenant transaction path; it has no DELETE or TRUNCATE grant. Customer mutations require trusted `app.actor_id` and append a tenant audit event in the same transaction.
+- API read/write is limited to Owner, Manager and Receptionist subject to persisted tenant capabilities/status. Archive is limited to Owner and Manager. Professional does not receive general customer-directory access.
+- Customer list is bounded and paginated (default 50, maximum 100). Contact fields are minimized to display name and optional normalized phone/email; at least one contact is required. Phone values are normalized to E.164 syntax but are not claimed to be verified or deliverable.
+- Shared phone numbers are allowed; no unique contact constraint or automatic merge was added. A duplicate-resolution policy remains open.
+- A phone/email on a customer record is not marketing consent. No WhatsApp/email campaign, free-form notes, consent inference, physical deletion or retention policy was added. Consent, contact verification, export/erasure and retention require separately reviewed workflows.
