@@ -1,326 +1,354 @@
 {
-    "backup_version":  "v80-trusted-proxy-unicast-address-validation",
-    "updated_at":  "2026-11-19",
-    "repository":  "https://github.com/carlosluancds-ctrl/atendee-beauty",
-    "branch":  "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V80_2026-11-19.md",
-    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V80_2026-11-19.md",
-    "latest_implementation_commit":  "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
-    "latest_documentation_parent_commit":  "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
-    "latest_ci":  {
-                      "workflow":  "PostgreSQL 18 persistence integration",
-                      "run":  "44579219902",
-                      "attempt":  1,
-                      "status":  "success",
-                      "validated_head_sha":  "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
-                      "job":  "Build and verify tenant isolation",
-                      "job_status":  "success",
-                      "portal_browser_tests":  "8 passed",
-                      "domain_checks":  "26/26 passed",
-                      "postgres_rls_checks":  "10/10 passed",
-                      "identity_checks":  "49/49 passed",
-                      "forwarded_proxy_invalid_address_checks":  "9 passed",
-                      "fullstack_browser_result":  "1 passed",
-                      "key_checks":  [
-                                         "frontend dependency audit, tests and build",
-                                         "portal browser E2E 8/8",
-                                         "Release build",
-                                         "domain checks 26/26",
-                                         "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
-                                         "Identity/TOTP/tenant-context checks 49/49",
-                                         "trusted forwarded-header default deny-all and exact allowlist checks",
-                                         "IPv4-mapped IPv6 canonicalization and rejection of unspecified, multicast, reserved and broadcast proxy addresses",
-                                         "HTTP authentication, antiforgery, cookies, session security, audit, role-matrix and tenant-status checks",
-                                         "real Kestrel + disposable PostgreSQL full-stack browser E2E",
-                                         "disposable credentials cleared and PostgreSQL container removed"
-                                     ]
-                  },
-    "v63_fullstack_baseline":  {
-                                   "implementation_commit":  "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
-                                   "workflow_run":  "44319685006",
-                                   "workflow_status":  "success",
-                                   "mocked_browser_tests":  8,
-                                   "real_fullstack_browser_tests":  1,
-                                   "database":  "disposable PostgreSQL 18.7",
-                                   "roles":  [
-                                                 "Owner",
-                                                 "Manager",
-                                                 "Professional",
-                                                 "Receptionist"
-                                             ]
-                               },
-    "v64_work_in_progress":  {
-                                 "commits":  [
-                                                 "b27b4030bb8f8a44a6184d1fc8acaac3f8b6c8f9",
-                                                 "aa38361ed16017a9642145400a94d9b3a4088286"
-                                             ],
-                                 "test_file":  "web/atendee-portal/tests/e2e/fullstack.spec.mjs",
-                                 "assertions":  [
-                                                    "anonymous request token is rejected after Owner authentication",
-                                                    "authenticated request token is rejected after logout"
-                                                ],
-                                 "expected_result":  "HTTP 400 antiforgery_validation_failed",
-                                 "approval":  "validated_by_v65_full_ci",
-                                 "validation_run":  "44451964941",
-                                 "validation_head":  "0a06ab045691a336c6114bf173f1383e3aafb4ac",
-                                 "note":  "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
-                             },
-    "next_step":  "Continue unrelated backend work without adding A1/A2 administrative HTTP endpoints until explicit owner approval of actor/tenant/role scope, self/last-Owner rules, Platform Admin realm, step-up MFA/four-eyes and tenant-scoped audit requirements. Keep the trusted-proxy allowlist deny-all unless exact proxy IPs are supplied through approved runtime settings.",
-    "safeguards":  {
-                       "main_untouched":  true,
-                       "production_deploy_authorized":  false,
-                       "ses_configuration_authorized":  false,
-                       "billing_trial_activation_authorized":  false
-                   },
-    "v65":  {
-                "implementation_head":  "0a06ab045691a336c6114bf173f1383e3aafb4ac",
-                "approval":  "approved",
-                "cross_tenant_service_assertions":  [
-                                                        "Salon B list contains only B service",
-                                                        "Salon B read A service returns 404",
-                                                        "Salon B update A service returns 404",
-                                                        "Salon A list contains only A service",
-                                                        "Salon A read B service returns 404",
-                                                        "Salon A update B service returns 404"
-                                                    ],
-                "antiforgery_assertions":  [
-                                               "anonymous token rejected after Owner login (400 antiforgery_validation_failed)",
-                                               "authenticated token rejected after logout (400 antiforgery_validation_failed)"
-                                           ]
-            },
-    "v66":  {
-                "implementation_commits":  [
-                                               "c1333a70572d8cdcacea3dc6c475bfdb273cf6dd",
-                                               "90c6b6c20a3b881395d07d335dda32eabaff009a"
-                                           ],
-                "approval":  "approved",
-                "assertions":  [
-                                   "Salon A eligible-member list exposes only A professional identity",
-                                   "Salon B eligible-member list exposes only B professional identity",
-                                   "Salon B can create only B professional profile",
-                                   "Salon B cannot create profile for A identity (400 professional_membership_invalid)",
-                                   "Salon A cannot create profile for B identity (400 professional_membership_invalid)",
-                                   "Salon A profile list does not expose B profile",
-                                   "Salon A cannot update B profile by known ID (404)"
-                               ]
-            },
-    "v67":  {
-                "implementation_commit":  "962649067d02f4d65e347025c16b5cd069927565",
-                "approval":  "approved",
-                "assertions":  [
-                                   "Salon B cannot assign Salon A service to B professional profile (400 professional_services_validation_failed)",
-                                   "Salon B professional profile remains unchanged after rejection",
-                                   "Salon A cannot assign Salon B service to A professional profile (400 professional_services_validation_failed)",
-                                   "Salon A professional profile remains unchanged after rejection",
-                                   "legitimate Salon A service assignment still succeeds"
-                               ]
-            },
-    "v68":  {
-                "implementation_commit":  "2065f4ecab9969795f4dc6be7af3376cc51340c1",
-                "approval":  "approved",
-                "assertions":  [
-                                   "Forged X-Tenant-Id, X-Actor-Id, X-Tenant-Role, X-Tenant-Status and equivalent query parameters do not change persisted tenant context",
-                                   "GET /api/v1/tenant returns actual persisted tenant/status/Receptionist role",
-                                   "Receptionist onboarding completion with forged Owner headers and body returns 403"
-                               ]
-            },
-    "v69":  {
-                "implementation_commits":  [
-                                               "773fb0f7694643b8c6c95897ff574b99db280539",
-                                               "d90d8906d91a68da979be60e02ba5ffeaea5c1e0",
-                                               "00c4b55955738b06602b8cbb0519f6f3ef60ebf4"
-                                           ],
-                "approval":  "approved",
-                "assertions":  [
-                                   "onboarding status audit ActorIdentityUserId equals authenticated Owner ID",
-                                   "onboarding status audit remains tenant-targeted without identity target",
-                                   "migrator status changes without actor remain actor-null",
-                                   "invalid TOTP rejected and audited once",
-                                   "replayed recovery code and invalid TOTP each increment failed-attempt count",
-                                   "successful TOTP resets failed-attempt count"
-                               ]
-            },
-    "v70":  {
-                "implementation_commits":  [
-                                               "495abc10160d4210850b9cd5217b96b72e8b96de",
-                                               "49b8e0bb235905f7d7d3663419fe9c2eb337214c"
-                                           ],
-                "approval":  "approved",
-                "assertions":  [
-                                   "wrong password returns 401 and writes exactly one operational_auth.login_failed event",
-                                   "wrong password increments AccessFailedCount to 1",
-                                   "valid password resets AccessFailedCount to 0 before MFA setup",
-                                   "password check and mandatory failure audit share one identity DbContext transaction"
-                               ]
-            },
-    "v71":  {
-                "implementation_commits":  [
-                                               "e34dd36632cb51a05cc7b75d2db55d196fb51826",
-                                               "63ecaa52f8cab3699990bd767d84233717fa755e"
-                                           ],
-                "approval":  "approved",
-                "ci_run":  "44458718974",
-                "assertions":  [
-                                   "mandatory pending-MFA audit failure aborts login with HTTP 500",
-                                   "rejected pending-MFA audit event is not persisted",
-                                   "temporary two-factor cookie cannot complete MFA after failed audit",
-                                   "failed pending-MFA audit cannot be upgraded to an authenticated application session"
-                               ]
-            },
-    "v72":  {
-                "implementation_commits":  [
-                                               "bd9543e43b5ce773471a48c008b728ca90a6a809",
-                                               "9dd9bfe6ac90fdcfd60401ba0e3eaf7c11ab4af3"
-                                           ],
-                "approval":  "approved",
-                "ci_run":  "44460367169",
-                "assertions":  [
-                                   "five sequential wrong-password attempts are each audited exactly once",
-                                   "the fifth sequential failed attempt locks the account",
-                                   "two simultaneous wrong-password attempts are both counted and audited",
-                                   "the second concurrent attempt reaches the configured five-failure lockout threshold",
-                                   "subsequent already-locked login is generically rejected without an additional login_failed event"
-                               ]
-            },
-    "v73":  {
-                "implementation_commits":  [
-                                               "eb38175ef2b3b6a325535740b99f27f9fcbd28e6"
-                                           ],
-                "approval":  "approved",
-                "ci_run":  "44461641990",
-                "assertions":  [
-                                   "password login and failed TOTP challenge concurrently update the shared counter without lost increments",
-                                   "password login and failed recovery-code challenge concurrently update the shared counter without lost increments",
-                                   "cross-flow three-way failure reaches lockout and writes one login_failed plus two challenge_failed events",
-                                   "password login and failed MFA enrollment concurrently update the shared counter without lost increments",
-                                   "cross-flow enrollment failure reaches lockout and writes one login_failed plus one enrollment_failed event",
-                                   "already-locked MFA challenge and enrollment attempts add no further failure audit events",
-                                   "IdentityResult failures for AccessFailedAsync and ResetAccessFailedCountAsync abort before audit commit",
-                                   "TOTP replay guard remains independent and passing"
-                               ]
-            },
-    "v74":  {
-                "implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "approval":  "approved",
-                "ci_run":  "44558003655",
-                "assertions":  [
-                                   "MFA setup cookie is reissued with the new Identity security stamp after authenticator-key initialization",
-                                   "original MFA setup ticket expiry is preserved; missing or elapsed expiry is rejected without extension",
-                                   "fresh antiforgery tokens are used after setup-ticket refresh, enrollment and login transitions",
-                                   "invalid authenticator code is rejected during MFA enrollment and successful enrollment still completes",
-                                   "cross-flow MFA enrollment failure uses the refreshed setup ticket and antiforgery token",
-                                   "pending MFA challenge cannot complete after session revocation",
-                                   "pending MFA setup cannot continue after session revocation or account disablement",
-                                   "session revocation and account disablement remain durably audited",
-                                   "audit-before-cookie ordering and independent TOTP replay guard remain passing"
-                               ]
-            },
-    "v75":  {
-                "production_implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "test_commit":  "8744d1730882dff3ca7c3fe848c8f282934de8fc",
-                "approval":  "approved",
-                "ci_run":  "44565239959",
-                "scope":  "test-only deterministic concurrent authentication/session-revocation and account-disablement coverage",
-                "assertions":  [
-                                   "password verification followed by session revocation before pending-MFA challenge-cookie issuance leaves an unusable challenge ticket",
-                                   "MFA challenge completion racing with session revocation leaves an unusable application cookie",
-                                   "MFA enrollment completion racing with account disablement leaves an unusable application cookie",
-                                   "direct non-MFA login racing with account disablement leaves an unusable application cookie",
-                                   "initial MFA setup-ticket issuance racing with account disablement cannot continue enrollment or establish an application session",
-                                   "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
-                               ]
-            },
-    "latest_validated_head":  "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
-    "v76":  {
-                "production_implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "test_commit":  "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
-                "approval":  "approved",
-                "ci_run":  "44566734046",
-                "scope":  "test-only transactional rollback coverage for account disablement and session revocation",
-                "assertions":  [
-                                   "Identity LockoutEnd update failure aborts DisableAsync and rolls back lockout/security stamp without audit",
-                                   "Identity SecurityStamp update failure aborts RevokeSessionsAsync without audit",
-                                   "mandatory disabled audit failure rolls back lockout/security stamp and leaves no audit row",
-                                   "mandatory sessions-revoked audit failure rolls back security stamp and leaves no audit row"
-                               ]
-            },
-    "v77":  {
-                "production_implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "test_commits":  [
-                                     "67e4f49504638776ef736c2770d0b4a9ed4c9bf8",
-                                     "c3d8ad0fc9f43a76ba82309e72d5a51a51342211"
-                                 ],
-                "approval":  "approved",
-                "ci_run":  "44568548323",
-                "scope":  "test-only explicit IdentityResult failure handling in account disablement and session revocation",
-                "assertions":  [
-                                   "DisableAsync aborts on UserManager store IdentityResult.Failed before security-stamp update and audit",
-                                   "RevokeSessionsAsync aborts on UserManager store IdentityResult.Failed before audit",
-                                   "persisted LockoutEnd and SecurityStamp remain unchanged after failed IdentityResult responses",
-                                   "no misleading account-disabled or sessions-revoked audit event persists"
-                               ]
-            },
-    "v78":  {
-                "production_implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "documentation_commit":  "867496cce35baae69e35c2cd7cdbd2f05de32320",
-                "approval":  "approved",
-                "ci_run":  "44569197822",
-                "scope":  "read-only review of account-security service exposure and administrative authorization boundary",
-                "findings":  [
-                                 "IOperationalAccountSecurityService is registered in Infrastructure DI but has no src/Atendee.Api endpoint call sites",
-                                 "DisableAsync and RevokeSessionsAsync are invoked only from integration tests in the current repository",
-                                 "no administrative HTTP route exposes account disablement or session revocation",
-                                 "the service records the trusted actor but does not enforce tenant/role authorization and must not be exposed directly",
-                                 "ADMIN_ACTIONS_DESIGN_V1 remains a proposal; explicit owner decisions are required before A1/A2 endpoints"
-                             ]
-            },
-    "v79":  {
-                "implementation_commit":  "8232d4e48ce7e9b4445f05e02813ad83fc8bd633",
-                "test_commits":  [
-                                     "9b72fadb645bd3f58de24f72b25abff0b9b45394",
-                                     "4a13aa3b72112c4147062a83859ed1f2be605082",
-                                     "60ecee8e2b1e2e1711181aa08f8e8c0422ae2592",
-                                     "a7164625f3335602a617388c977f3daa0f09b8c0",
-                                     "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d"
-                                 ],
-                "approval":  "approved",
-                "ci_run":  "44578183985",
-                "validated_head":  "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d",
-                "scope":  "explicit trusted forwarded-proxy allowlist, deny-all default and HTTP regression coverage",
-                "assertions":  [
-                                   "default configuration trusts no real proxy using unmatchable unspecified-IP sentinels",
-                                   "untrusted forwarded IP, scheme and host headers cannot spoof request origin or rate-limit partition",
-                                   "only exact valid unicast IPs from ForwardedHeaders:KnownProxies are accepted",
-                                   "an explicitly configured exact proxy IP is trusted for one forwarding hop",
-                                   "X-Forwarded-For and X-Forwarded-Proto are enabled with one-hop limit and required header symmetry",
-                                   "X-Forwarded-Host is ignored unless explicitly enabled",
-                                   "invalid trusted-proxy configuration fails application startup closed",
-                                   "all existing frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
-                               ]
-            },
-    "v80":  {
-                "implementation_commit":  "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
-                "approval":  "approved",
-                "ci_run":  "44579219902",
-                "validated_head":  "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
-                "scope":  "canonical IPv4-mapped IPv6 proxy addresses and reject non-unicast IPv4/IPv6 trusted-proxy values",
-                "rejected_addresses":  [
-                                           "not-an-ip",
-                                           "0.0.0.0",
-                                           "224.0.0.1",
-                                           "240.0.0.1",
-                                           "255.255.255.255",
-                                           "::",
-                                           "ff02::1",
-                                           "::ffff:0.0.0.0",
-                                           "::ffff:224.0.0.1"
-                                       ],
-                "assertions":  [
-                                   "IPv4-mapped IPv6 proxy addresses are canonicalized to IPv4 before validation and storage",
-                                   "unspecified IPv4/IPv6, IPv4 broadcast, IPv4 multicast/reserved and IPv6 multicast proxy addresses fail application startup closed",
-                                   "all nine invalid proxy-address regression cases pass in HTTP integration checks",
-                                   "V79 deny-all default, exact trusted-proxy allowlist, one-hop forwarding, header symmetry and X-Forwarded-Host rejection remain passing",
-                                   "all frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
-                               ]
-            }
+  "backup_version": "v81-canonical-trusted-proxy-address-tests",
+  "updated_at": "2026-11-19",
+  "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
+  "branch": "security/csrf-webhook-antiforgery-v23",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V81_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V81_2026-11-19.md",
+  "latest_implementation_commit": "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
+  "latest_documentation_parent_commit": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+  "latest_ci": {
+    "workflow": "PostgreSQL 18 persistence integration",
+    "run": "44580208061",
+    "attempt": 1,
+    "status": "success",
+    "validated_head_sha": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+    "job": "Build and verify tenant isolation",
+    "job_status": "success",
+    "portal_browser_tests": "8 passed",
+    "domain_checks": "26/26 passed",
+    "postgres_rls_checks": "10/10 passed",
+    "identity_checks": "49/49 passed",
+    "forwarded_proxy_positive_address_forms": "3 passed",
+    "forwarded_proxy_invalid_address_checks": "9 passed",
+    "fullstack_browser_result": "1 passed",
+    "key_checks": [
+      "frontend dependency audit, tests and build",
+      "portal browser E2E 8/8",
+      "Release build",
+      "domain checks 26/26",
+      "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
+      "Identity/TOTP/tenant-context checks 49/49",
+      "IPv6, IPv4 and IPv4-mapped IPv6 trusted-proxy positive cases",
+      "nine invalid trusted-proxy address startup rejection cases",
+      "HTTP authentication, antiforgery, cookies, session security, audit, role-matrix and tenant-status checks",
+      "real Kestrel + disposable PostgreSQL full-stack browser E2E",
+      "disposable credentials cleared and PostgreSQL container removed"
+    ]
+  },
+  "v63_fullstack_baseline": {
+    "implementation_commit": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
+    "workflow_run": "44319685006",
+    "workflow_status": "success",
+    "mocked_browser_tests": 8,
+    "real_fullstack_browser_tests": 1,
+    "database": "disposable PostgreSQL 18.7",
+    "roles": [
+      "Owner",
+      "Manager",
+      "Professional",
+      "Receptionist"
+    ]
+  },
+  "v64_work_in_progress": {
+    "commits": [
+      "b27b4030bb8f8a44a6184d1fc8acaac3f8b6c8f9",
+      "aa38361ed16017a9642145400a94d9b3a4088286"
+    ],
+    "test_file": "web/atendee-portal/tests/e2e/fullstack.spec.mjs",
+    "assertions": [
+      "anonymous request token is rejected after Owner authentication",
+      "authenticated request token is rejected after logout"
+    ],
+    "expected_result": "HTTP 400 antiforgery_validation_failed",
+    "approval": "validated_by_v65_full_ci",
+    "validation_run": "44451964941",
+    "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
+    "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
+  },
+  "next_step": "Continue unrelated backend work without adding A1/A2 administrative HTTP endpoints until explicit owner approval of actor/tenant/role scope, self/last-Owner rules, Platform Admin realm, step-up MFA/four-eyes and tenant-scoped audit requirements. Keep the trusted-proxy allowlist deny-all unless exact proxy IPs are supplied through approved runtime settings.",
+  "safeguards": {
+    "main_untouched": true,
+    "production_deploy_authorized": false,
+    "ses_configuration_authorized": false,
+    "billing_trial_activation_authorized": false
+  },
+  "v65": {
+    "implementation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
+    "approval": "approved",
+    "cross_tenant_service_assertions": [
+      "Salon B list contains only B service",
+      "Salon B read A service returns 404",
+      "Salon B update A service returns 404",
+      "Salon A list contains only A service",
+      "Salon A read B service returns 404",
+      "Salon A update B service returns 404"
+    ],
+    "antiforgery_assertions": [
+      "anonymous token rejected after Owner login (400 antiforgery_validation_failed)",
+      "authenticated token rejected after logout (400 antiforgery_validation_failed)"
+    ]
+  },
+  "v66": {
+    "implementation_commits": [
+      "c1333a70572d8cdcacea3dc6c475bfdb273cf6dd",
+      "90c6b6c20a3b881395d07d335dda32eabaff009a"
+    ],
+    "approval": "approved",
+    "assertions": [
+      "Salon A eligible-member list exposes only A professional identity",
+      "Salon B eligible-member list exposes only B professional identity",
+      "Salon B can create only B professional profile",
+      "Salon B cannot create profile for A identity (400 professional_membership_invalid)",
+      "Salon A cannot create profile for B identity (400 professional_membership_invalid)",
+      "Salon A profile list does not expose B profile",
+      "Salon A cannot update B profile by known ID (404)"
+    ]
+  },
+  "v67": {
+    "implementation_commit": "962649067d02f4d65e347025c16b5cd069927565",
+    "approval": "approved",
+    "assertions": [
+      "Salon B cannot assign Salon A service to B professional profile (400 professional_services_validation_failed)",
+      "Salon B professional profile remains unchanged after rejection",
+      "Salon A cannot assign Salon B service to A professional profile (400 professional_services_validation_failed)",
+      "Salon A professional profile remains unchanged after rejection",
+      "legitimate Salon A service assignment still succeeds"
+    ]
+  },
+  "v68": {
+    "implementation_commit": "2065f4ecab9969795f4dc6be7af3376cc51340c1",
+    "approval": "approved",
+    "assertions": [
+      "Forged X-Tenant-Id, X-Actor-Id, X-Tenant-Role, X-Tenant-Status and equivalent query parameters do not change persisted tenant context",
+      "GET /api/v1/tenant returns actual persisted tenant/status/Receptionist role",
+      "Receptionist onboarding completion with forged Owner headers and body returns 403"
+    ]
+  },
+  "v69": {
+    "implementation_commits": [
+      "773fb0f7694643b8c6c95897ff574b99db280539",
+      "d90d8906d91a68da979be60e02ba5ffeaea5c1e0",
+      "00c4b55955738b06602b8cbb0519f6f3ef60ebf4"
+    ],
+    "approval": "approved",
+    "assertions": [
+      "onboarding status audit ActorIdentityUserId equals authenticated Owner ID",
+      "onboarding status audit remains tenant-targeted without identity target",
+      "migrator status changes without actor remain actor-null",
+      "invalid TOTP rejected and audited once",
+      "replayed recovery code and invalid TOTP each increment failed-attempt count",
+      "successful TOTP resets failed-attempt count"
+    ]
+  },
+  "v70": {
+    "implementation_commits": [
+      "495abc10160d4210850b9cd5217b96b72e8b96de",
+      "49b8e0bb235905f7d7d3663419fe9c2eb337214c"
+    ],
+    "approval": "approved",
+    "assertions": [
+      "wrong password returns 401 and writes exactly one operational_auth.login_failed event",
+      "wrong password increments AccessFailedCount to 1",
+      "valid password resets AccessFailedCount to 0 before MFA setup",
+      "password check and mandatory failure audit share one identity DbContext transaction"
+    ]
+  },
+  "v71": {
+    "implementation_commits": [
+      "e34dd36632cb51a05cc7b75d2db55d196fb51826",
+      "63ecaa52f8cab3699990bd767d84233717fa755e"
+    ],
+    "approval": "approved",
+    "ci_run": "44458718974",
+    "assertions": [
+      "mandatory pending-MFA audit failure aborts login with HTTP 500",
+      "rejected pending-MFA audit event is not persisted",
+      "temporary two-factor cookie cannot complete MFA after failed audit",
+      "failed pending-MFA audit cannot be upgraded to an authenticated application session"
+    ]
+  },
+  "v72": {
+    "implementation_commits": [
+      "bd9543e43b5ce773471a48c008b728ca90a6a809",
+      "9dd9bfe6ac90fdcfd60401ba0e3eaf7c11ab4af3"
+    ],
+    "approval": "approved",
+    "ci_run": "44460367169",
+    "assertions": [
+      "five sequential wrong-password attempts are each audited exactly once",
+      "the fifth sequential failed attempt locks the account",
+      "two simultaneous wrong-password attempts are both counted and audited",
+      "the second concurrent attempt reaches the configured five-failure lockout threshold",
+      "subsequent already-locked login is generically rejected without an additional login_failed event"
+    ]
+  },
+  "v73": {
+    "implementation_commits": [
+      "eb38175ef2b3b6a325535740b99f27f9fcbd28e6"
+    ],
+    "approval": "approved",
+    "ci_run": "44461641990",
+    "assertions": [
+      "password login and failed TOTP challenge concurrently update the shared counter without lost increments",
+      "password login and failed recovery-code challenge concurrently update the shared counter without lost increments",
+      "cross-flow three-way failure reaches lockout and writes one login_failed plus two challenge_failed events",
+      "password login and failed MFA enrollment concurrently update the shared counter without lost increments",
+      "cross-flow enrollment failure reaches lockout and writes one login_failed plus one enrollment_failed event",
+      "already-locked MFA challenge and enrollment attempts add no further failure audit events",
+      "IdentityResult failures for AccessFailedAsync and ResetAccessFailedCountAsync abort before audit commit",
+      "TOTP replay guard remains independent and passing"
+    ]
+  },
+  "v74": {
+    "implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+    "approval": "approved",
+    "ci_run": "44558003655",
+    "assertions": [
+      "MFA setup cookie is reissued with the new Identity security stamp after authenticator-key initialization",
+      "original MFA setup ticket expiry is preserved; missing or elapsed expiry is rejected without extension",
+      "fresh antiforgery tokens are used after setup-ticket refresh, enrollment and login transitions",
+      "invalid authenticator code is rejected during MFA enrollment and successful enrollment still completes",
+      "cross-flow MFA enrollment failure uses the refreshed setup ticket and antiforgery token",
+      "pending MFA challenge cannot complete after session revocation",
+      "pending MFA setup cannot continue after session revocation or account disablement",
+      "session revocation and account disablement remain durably audited",
+      "audit-before-cookie ordering and independent TOTP replay guard remain passing"
+    ]
+  },
+  "v75": {
+    "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+    "test_commit": "8744d1730882dff3ca7c3fe848c8f282934de8fc",
+    "approval": "approved",
+    "ci_run": "44565239959",
+    "scope": "test-only deterministic concurrent authentication/session-revocation and account-disablement coverage",
+    "assertions": [
+      "password verification followed by session revocation before pending-MFA challenge-cookie issuance leaves an unusable challenge ticket",
+      "MFA challenge completion racing with session revocation leaves an unusable application cookie",
+      "MFA enrollment completion racing with account disablement leaves an unusable application cookie",
+      "direct non-MFA login racing with account disablement leaves an unusable application cookie",
+      "initial MFA setup-ticket issuance racing with account disablement cannot continue enrollment or establish an application session",
+      "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
+    ]
+  },
+  "latest_validated_head": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+  "v76": {
+    "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+    "test_commit": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
+    "approval": "approved",
+    "ci_run": "44566734046",
+    "scope": "test-only transactional rollback coverage for account disablement and session revocation",
+    "assertions": [
+      "Identity LockoutEnd update failure aborts DisableAsync and rolls back lockout/security stamp without audit",
+      "Identity SecurityStamp update failure aborts RevokeSessionsAsync without audit",
+      "mandatory disabled audit failure rolls back lockout/security stamp and leaves no audit row",
+      "mandatory sessions-revoked audit failure rolls back security stamp and leaves no audit row"
+    ]
+  },
+  "v77": {
+    "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+    "test_commits": [
+      "67e4f49504638776ef736c2770d0b4a9ed4c9bf8",
+      "c3d8ad0fc9f43a76ba82309e72d5a51a51342211"
+    ],
+    "approval": "approved",
+    "ci_run": "44568548323",
+    "scope": "test-only explicit IdentityResult failure handling in account disablement and session revocation",
+    "assertions": [
+      "DisableAsync aborts on UserManager store IdentityResult.Failed before security-stamp update and audit",
+      "RevokeSessionsAsync aborts on UserManager store IdentityResult.Failed before audit",
+      "persisted LockoutEnd and SecurityStamp remain unchanged after failed IdentityResult responses",
+      "no misleading account-disabled or sessions-revoked audit event persists"
+    ]
+  },
+  "v78": {
+    "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+    "documentation_commit": "867496cce35baae69e35c2cd7cdbd2f05de32320",
+    "approval": "approved",
+    "ci_run": "44569197822",
+    "scope": "read-only review of account-security service exposure and administrative authorization boundary",
+    "findings": [
+      "IOperationalAccountSecurityService is registered in Infrastructure DI but has no src/Atendee.Api endpoint call sites",
+      "DisableAsync and RevokeSessionsAsync are invoked only from integration tests in the current repository",
+      "no administrative HTTP route exposes account disablement or session revocation",
+      "the service records the trusted actor but does not enforce tenant/role authorization and must not be exposed directly",
+      "ADMIN_ACTIONS_DESIGN_V1 remains a proposal; explicit owner decisions are required before A1/A2 endpoints"
+    ]
+  },
+  "v79": {
+    "implementation_commit": "8232d4e48ce7e9b4445f05e02813ad83fc8bd633",
+    "test_commits": [
+      "9b72fadb645bd3f58de24f72b25abff0b9b45394",
+      "4a13aa3b72112c4147062a83859ed1f2be605082",
+      "60ecee8e2b1e2e1711181aa08f8e8c0422ae2592",
+      "a7164625f3335602a617388c977f3daa0f09b8c0",
+      "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d"
+    ],
+    "approval": "approved",
+    "ci_run": "44578183985",
+    "validated_head": "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d",
+    "scope": "explicit trusted forwarded-proxy allowlist, deny-all default and HTTP regression coverage",
+    "assertions": [
+      "default configuration trusts no real proxy using unmatchable unspecified-IP sentinels",
+      "untrusted forwarded IP, scheme and host headers cannot spoof request origin or rate-limit partition",
+      "only exact valid unicast IPs from ForwardedHeaders:KnownProxies are accepted",
+      "an explicitly configured exact proxy IP is trusted for one forwarding hop",
+      "X-Forwarded-For and X-Forwarded-Proto are enabled with one-hop limit and required header symmetry",
+      "X-Forwarded-Host is ignored unless explicitly enabled",
+      "invalid trusted-proxy configuration fails application startup closed",
+      "all existing frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
+    ]
+  },
+  "v80": {
+    "implementation_commit": "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
+    "approval": "approved",
+    "ci_run": "44579219902",
+    "validated_head": "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
+    "scope": "canonical IPv4-mapped IPv6 proxy addresses and reject non-unicast IPv4/IPv6 trusted-proxy values",
+    "rejected_addresses": [
+      "not-an-ip",
+      "0.0.0.0",
+      "224.0.0.1",
+      "240.0.0.1",
+      "255.255.255.255",
+      "::",
+      "ff02::1",
+      "::ffff:0.0.0.0",
+      "::ffff:224.0.0.1"
+    ],
+    "assertions": [
+      "IPv4-mapped IPv6 proxy addresses are canonicalized to IPv4 before validation and storage",
+      "unspecified IPv4/IPv6, IPv4 broadcast, IPv4 multicast/reserved and IPv6 multicast proxy addresses fail application startup closed",
+      "all nine invalid proxy-address regression cases pass in HTTP integration checks",
+      "V79 deny-all default, exact trusted-proxy allowlist, one-hop forwarding, header symmetry and X-Forwarded-Host rejection remain passing",
+      "all frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
+    ]
+  },
+  "v81": {
+    "test_commit": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+    "approval": "approved",
+    "ci_run": "44580208061",
+    "validated_head": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+    "scope": "positive regression coverage for native IPv6, IPv4 and IPv4-mapped IPv6 trusted-proxy addresses",
+    "accepted_address_cases": [
+      {
+        "configured": "::1",
+        "canonical": "::1"
+      },
+      {
+        "configured": "127.0.0.1",
+        "canonical": "127.0.0.1"
+      },
+      {
+        "configured": "::ffff:127.0.0.1",
+        "canonical": "127.0.0.1"
+      }
+    ],
+    "assertions": [
+      "all three explicit proxy address forms are accepted and canonicalized to the expected KnownProxies entry",
+      "the middleware accepts the canonicalized mapped IPv4 proxy for one forwarding hop",
+      "V80 invalid-address startup rejection cases remain passing",
+      "all frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
+    ]
+  }
 }
