@@ -6,7 +6,7 @@
   "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V65_2026-11-19.md",
   "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V65_2026-11-19.md",
   "latest_implementation_commit": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
-  "latest_documentation_parent_commit": "4bf33dbeb4e9ba21d9352480a90757542ea82811",
+  "latest_documentation_parent_commit": "37afb31d73325aeb47b8b49fbc9844e17fa8e9b1",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
     "run": "44451964941",
