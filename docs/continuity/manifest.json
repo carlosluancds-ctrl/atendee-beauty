@@ -1,35 +1,39 @@
 {
-  "backup_version": "v72-concurrent-login-lockout-serialization-approved",
+  "backup_version": "v73-cross-flow-mfa-lockout-serialization-approved",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V72_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V72_2026-11-19.md",
-  "latest_implementation_commit": "9dd9bfe6ac90fdcfd60401ba0e3eaf7c11ab4af3",
-  "latest_documentation_parent_commit": "9dd9bfe6ac90fdcfd60401ba0e3eaf7c11ab4af3",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V73_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V73_2026-11-19.md",
+  "latest_implementation_commit": "eb38175ef2b3b6a325535740b99f27f9fcbd28e6",
+  "latest_documentation_parent_commit": "eb38175ef2b3b6a325535740b99f27f9fcbd28e6",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44460367169",
+    "run": "44461641990",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "9dd9bfe6ac90fdcfd60401ba0e3eaf7c11ab4af3",
+    "validated_head_sha": "eb38175ef2b3b6a325535740b99f27f9fcbd28e6",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
-    "portal_browser_tests": "8 passed (7.3s)",
+    "portal_browser_tests": "8 passed (6.6s)",
     "domain_checks": "26/26 passed",
     "postgres_rls_checks": "10/10 passed",
     "identity_checks": "49/49 passed",
-    "fullstack_browser_result": "1 passed (6.6s)",
+    "fullstack_browser_result": "1 passed (5.0s)",
     "key_checks": [
       "frontend dependency audit, tests and build",
       "Release build",
       "domain checks 26/26",
       "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
       "Identity/TOTP/tenant-context checks 49/49",
-      "five sequential failed-password attempts all audited, threshold attempt locks account",
-      "two concurrent failed-password attempts both counted and audited, second reaches five-attempt lockout",
-      "post-lockout failed login rejected without another login_failed audit event",
-      "V64-V71 regressions remain passing",
+      "password login locks and reloads identity before counter update",
+      "TOTP and recovery-code challenge failure/success paths lock and reload identity before counter changes",
+      "MFA enrollment failure/success paths lock and reload identity before counter changes",
+      "cross-flow concurrent wrong-password, invalid TOTP and invalid recovery-code attempts all count and audit",
+      "cross-flow concurrent wrong-password and invalid enrollment TOTP attempts both count and audit",
+      "post-lockout challenge/enrollment attempts do not create extra failure audit events",
+      "independent TOTP replay guard remains passing",
+      "V64-V72 regressions remain passing",
       "HTTP authentication/session security and full-stack browser checks",
       "disposable credentials cleared and PostgreSQL container removed"
     ]
@@ -64,7 +68,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Review cross-flow concurrency on the same Identity user AccessFailedCount/ConcurrencyStamp across wrong-password login, failed TOTP/recovery-code challenges and MFA-enrollment failures; prove no legitimate counter increment or mandatory audit event is lost, preserving the TOTP replay guard and transaction boundaries.",
+  "next_step": "Review account disable/session-revocation racing with in-flight login and MFA completion; prove a disabled or revoked identity cannot receive a usable new application/setup/challenge session after the state change, preserving audit-before-cookie ordering and the independent TOTP replay guard.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -179,6 +183,23 @@
       "two simultaneous wrong-password attempts are both counted and audited",
       "the second concurrent attempt reaches the configured five-failure lockout threshold",
       "subsequent already-locked login is generically rejected without an additional login_failed event"
+    ]
+  },
+  "v73": {
+    "implementation_commits": [
+      "eb38175ef2b3b6a325535740b99f27f9fcbd28e6"
+    ],
+    "approval": "approved",
+    "ci_run": "44461641990",
+    "assertions": [
+      "password login and failed TOTP challenge concurrently update the shared counter without lost increments",
+      "password login and failed recovery-code challenge concurrently update the shared counter without lost increments",
+      "cross-flow three-way failure reaches lockout and writes one login_failed plus two challenge_failed events",
+      "password login and failed MFA enrollment concurrently update the shared counter without lost increments",
+      "cross-flow enrollment failure reaches lockout and writes one login_failed plus one enrollment_failed event",
+      "already-locked MFA challenge and enrollment attempts add no further failure audit events",
+      "IdentityResult failures for AccessFailedAsync and ResetAccessFailedCountAsync abort before audit commit",
+      "TOTP replay guard remains independent and passing"
     ]
   }
 }
