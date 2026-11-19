@@ -71,7 +71,7 @@ try
            defaultForwardedHeaders.ForwardLimit == 1 &&
            defaultForwardedHeaders.RequireHeaderSymmetry &&
            defaultForwardedHeaders.KnownProxies.Count == 0 &&
-           defaultForwardedHeaders.KnownNetworks.Count == 0,
+           defaultForwardedHeaders.KnownIPNetworks.Count == 0,
         "Forwarded headers trust no proxy by default and accept only one symmetric X-Forwarded-For/X-Forwarded-Proto hop.");
 
     using var forwardedHeadersLoggerFactory = LoggerFactory.Create(_ => { });
