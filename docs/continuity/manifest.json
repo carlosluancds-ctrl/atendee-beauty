@@ -1,37 +1,38 @@
 {
-  "backup_version": "v74-mfa-setup-ticket-refresh-approved",
+  "backup_version": "v75-auth-session-revocation-race-tests-approved",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V74_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V74_2026-11-19.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V75_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V75_2026-11-19.md",
   "latest_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
-  "latest_documentation_parent_commit": "86565921a64332864fa97d386685f977cd5df69d",
+  "latest_documentation_parent_commit": "8744d1730882dff3ca7c3fe848c8f282934de8fc",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44558003655",
+    "run": "44565239959",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "86565921a64332864fa97d386685f977cd5df69d",
+    "validated_head_sha": "8744d1730882dff3ca7c3fe848c8f282934de8fc",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
-    "portal_browser_tests": "8 passed (6.0s)",
+    "portal_browser_tests": "8 passed (6.5s)",
     "domain_checks": "26/26 passed",
     "postgres_rls_checks": "10/10 passed",
     "identity_checks": "49/49 passed",
-    "fullstack_browser_result": "1 passed (5.0s)",
+    "fullstack_browser_result": "1 passed (6.2s)",
     "key_checks": [
       "frontend dependency audit, tests and build",
       "Release build",
       "domain checks 26/26",
       "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
       "Identity/TOTP/tenant-context checks 49/49",
-      "MFA enrollment reissues the setup ticket with the rotated security stamp",
-      "MFA setup ticket preserves its original expiry and fails closed when expiry is missing or elapsed",
-      "fresh antiforgery request tokens are used after authentication-state transitions",
-      "invalid authenticator code reaches enrollment validation and is rejected",
-      "pending challenge/setup sessions are rejected after session revocation or account disablement",
-      "V64-V73 regressions remain passing",
+      "password verification then session revocation before pending-MFA challenge-cookie issuance; stale challenge rejected",
+      "MFA challenge transaction holds identity row lock; concurrent session revocation commits afterward and resulting application cookie is unusable",
+      "MFA enrollment transaction holds identity row lock; concurrent account disable commits afterward and resulting application cookie is unusable",
+      "direct non-MFA login then account disable before application-cookie issuance; resulting cookie is unusable",
+      "initial MFA setup-ticket issuance then account disable; setup ticket cannot initialize enrollment or establish a session",
+      "pg_locks-based deterministic lock-wait observation under restricted CI roles",
+      "V64-V74 regressions remain passing",
       "HTTP authentication/session security and real Kestrel full-stack browser checks",
       "disposable credentials cleared and PostgreSQL container removed"
     ]
@@ -66,7 +67,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Test account disable/session-revocation racing with in-flight password verification, MFA challenge completion and MFA enrollment; prove no usable application/setup/challenge session can be issued after the state change commits.",
+  "next_step": "Test mandatory audit-write and Identity update failures in DisableAsync and RevokeSessionsAsync; prove stamp/lockout changes roll back and no misleading audit event persists.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -215,5 +216,21 @@
       "session revocation and account disablement remain durably audited",
       "audit-before-cookie ordering and independent TOTP replay guard remain passing"
     ]
-  }
+  },
+  "v75": {
+    "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+    "test_commit": "8744d1730882dff3ca7c3fe848c8f282934de8fc",
+    "approval": "approved",
+    "ci_run": "44565239959",
+    "scope": "test-only deterministic concurrent authentication/session-revocation and account-disablement coverage",
+    "assertions": [
+      "password verification followed by session revocation before pending-MFA challenge-cookie issuance leaves an unusable challenge ticket",
+      "MFA challenge completion racing with session revocation leaves an unusable application cookie",
+      "MFA enrollment completion racing with account disablement leaves an unusable application cookie",
+      "direct non-MFA login racing with account disablement leaves an unusable application cookie",
+      "initial MFA setup-ticket issuance racing with account disablement cannot continue enrollment or establish an application session",
+      "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
+    ]
+  },
+  "latest_validated_head": "8744d1730882dff3ca7c3fe848c8f282934de8fc"
 }
