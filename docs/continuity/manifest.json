@@ -51,7 +51,10 @@
       "authenticated request token is rejected after logout"
     ],
     "expected_result": "HTTP 400 antiforgery_validation_failed",
-    "approval": "pending_full_ci"
+    "approval": "validated_by_v65_full_ci",
+    "validation_run": "44451964941",
+    "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
+    "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
   "next_step": "Continue backend-first with a focused review and negative tests for remaining cross-tenant read/mutation surfaces; preserve approved tenant-status and authorization policies.",
   "safeguards": {
