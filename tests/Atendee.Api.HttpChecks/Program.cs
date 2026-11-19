@@ -2002,12 +2002,20 @@ try
     var raceEnrollmentEmail = "http-race-enrollment-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     var raceDirectLoginEmail = "http-race-direct-login-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     var raceSetupEmail = "http-race-setup-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var disableUpdateFailureEmail = "http-disable-update-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var revokeUpdateFailureEmail = "http-revoke-update-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var disableAuditFailureEmail = "http-disable-audit-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var revokeAuditFailureEmail = "http-revoke-audit-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string racePassword = "Atendee-InFlight-Race-2026!";
     Guid raceLoginUserId;
     Guid raceChallengeUserId;
     Guid raceEnrollmentUserId;
     Guid raceDirectLoginUserId;
     Guid raceSetupUserId;
+    Guid disableUpdateFailureUserId;
+    Guid revokeUpdateFailureUserId;
+    Guid disableAuditFailureUserId;
+    Guid revokeAuditFailureUserId;
     using var raceFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
@@ -2087,6 +2095,29 @@ try
         var setupCreated = await users.CreateAsync(setupUser, racePassword);
         Ensure(setupCreated.Succeeded, "In-flight MFA setup identity is created.");
         raceSetupUserId = setupUser.Id;
+
+        async Task<Guid> CreateAccountSecurityFailureIdentityAsync(string email, string label)
+        {
+            var user = new OperationalIdentityUser
+            {
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true,
+                LockoutEnabled = true
+            };
+            var created = await users.CreateAsync(user, racePassword);
+            Ensure(created.Succeeded, label + " identity is created.");
+            return user.Id;
+        }
+
+        disableUpdateFailureUserId = await CreateAccountSecurityFailureIdentityAsync(
+            disableUpdateFailureEmail, "Disable-update-failure");
+        revokeUpdateFailureUserId = await CreateAccountSecurityFailureIdentityAsync(
+            revokeUpdateFailureEmail, "Revoke-update-failure");
+        disableAuditFailureUserId = await CreateAccountSecurityFailureIdentityAsync(
+            disableAuditFailureEmail, "Disable-audit-failure");
+        revokeAuditFailureUserId = await CreateAccountSecurityFailureIdentityAsync(
+            revokeAuditFailureEmail, "Revoke-audit-failure");
     }
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceLoginUserId, roleId: 2);
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceChallengeUserId, roleId: 2);
@@ -2341,6 +2372,155 @@ try
             "An initial MFA setup ticket emitted after account disablement cannot initialize enrollment.");
     Ensure((await raceSetupClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "The disabled setup identity cannot establish an application session.");
+
+    // Security actions are transactional across the Identity mutation and
+    // mandatory audit event. Force failures at both boundaries and prove the
+    // previous lockout/security-stamp state survives without a partial audit row.
+    string disableUpdateOriginalStamp;
+    string revokeUpdateOriginalStamp;
+    string disableAuditOriginalStamp;
+    string revokeAuditOriginalStamp;
+    await using (var scope = raceFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var disableUpdateUser = await users.FindByIdAsync(disableUpdateFailureUserId.ToString());
+        var revokeUpdateUser = await users.FindByIdAsync(revokeUpdateFailureUserId.ToString());
+        var disableAuditUser = await users.FindByIdAsync(disableAuditFailureUserId.ToString());
+        var revokeAuditUser = await users.FindByIdAsync(revokeAuditFailureUserId.ToString());
+        Ensure(disableUpdateUser is not null && revokeUpdateUser is not null &&
+               disableAuditUser is not null && revokeAuditUser is not null,
+            "All account-security failure identities remain available.");
+        disableUpdateOriginalStamp = disableUpdateUser!.SecurityStamp!;
+        revokeUpdateOriginalStamp = revokeUpdateUser!.SecurityStamp!;
+        disableAuditOriginalStamp = disableAuditUser!.SecurityStamp!;
+        revokeAuditOriginalStamp = revokeAuditUser!.SecurityStamp!;
+    }
+
+    await SetIdentityMutationFailureTriggerAsync(
+        migratorConnectionString, disableUpdateFailureUserId, "lockout", enabled: true);
+    var disableUpdateFailed = false;
+    try
+    {
+        await using var scope = raceFactory.Services.CreateAsyncScope();
+        var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+        await security.DisableAsync(disableUpdateFailureUserId);
+    }
+    catch (Exception exception) when (exception is DbUpdateException or PostgresException)
+    {
+        disableUpdateFailed = true;
+    }
+    finally
+    {
+        await SetIdentityMutationFailureTriggerAsync(
+            migratorConnectionString, disableUpdateFailureUserId, "lockout", enabled: false);
+    }
+    Ensure(disableUpdateFailed,
+        "An Identity lockout-state update failure aborts account disablement.");
+    await using (var scope = raceFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var user = await users.FindByIdAsync(disableUpdateFailureUserId.ToString());
+        Ensure(user is not null && user.LockoutEnd is null &&
+               user.SecurityStamp == disableUpdateOriginalStamp,
+            "A failed account-disable Identity update rolls back lockout and security-stamp mutations.");
+    }
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, disableUpdateFailureUserId))
+               .Count(type => type == "operational_account.disabled") == 0,
+        "A failed account-disable Identity update writes no audit event.");
+
+    await SetIdentityMutationFailureTriggerAsync(
+        migratorConnectionString, revokeUpdateFailureUserId, "stamp", enabled: true);
+    var revokeUpdateFailed = false;
+    try
+    {
+        await using var scope = raceFactory.Services.CreateAsyncScope();
+        var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+        await security.RevokeSessionsAsync(revokeUpdateFailureUserId);
+    }
+    catch (Exception exception) when (exception is DbUpdateException or PostgresException)
+    {
+        revokeUpdateFailed = true;
+    }
+    finally
+    {
+        await SetIdentityMutationFailureTriggerAsync(
+            migratorConnectionString, revokeUpdateFailureUserId, "stamp", enabled: false);
+    }
+    Ensure(revokeUpdateFailed,
+        "An Identity security-stamp update failure aborts session revocation.");
+    await using (var scope = raceFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var user = await users.FindByIdAsync(revokeUpdateFailureUserId.ToString());
+        Ensure(user is not null && user.SecurityStamp == revokeUpdateOriginalStamp,
+            "A failed session-revocation Identity update preserves the original security stamp.");
+    }
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, revokeUpdateFailureUserId))
+               .Count(type => type == "operational_account.sessions_revoked") == 0,
+        "A failed session-revocation Identity update writes no audit event.");
+
+    await SetSecurityAuditFailureTriggerAsync(migratorConnectionString, disableAuditFailureUserId,
+        "operational_account.disabled", enabled: true);
+    var disableAuditFailed = false;
+    try
+    {
+        await using var scope = raceFactory.Services.CreateAsyncScope();
+        var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+        await security.DisableAsync(disableAuditFailureUserId);
+    }
+    catch (Exception exception) when (exception is DbUpdateException or PostgresException)
+    {
+        disableAuditFailed = true;
+    }
+    finally
+    {
+        await SetSecurityAuditFailureTriggerAsync(migratorConnectionString, disableAuditFailureUserId,
+            "operational_account.disabled", enabled: false);
+    }
+    Ensure(disableAuditFailed,
+        "A mandatory account-disable audit failure aborts the security action.");
+    await using (var scope = raceFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var user = await users.FindByIdAsync(disableAuditFailureUserId.ToString());
+        Ensure(user is not null && user.LockoutEnd is null &&
+               user.SecurityStamp == disableAuditOriginalStamp,
+            "An account-disable audit failure rolls back lockout and security-stamp mutations.");
+    }
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, disableAuditFailureUserId))
+               .Count(type => type == "operational_account.disabled") == 0,
+        "A rejected account-disable audit event is not persisted.");
+
+    await SetSecurityAuditFailureTriggerAsync(migratorConnectionString, revokeAuditFailureUserId,
+        "operational_account.sessions_revoked", enabled: true);
+    var revokeAuditFailed = false;
+    try
+    {
+        await using var scope = raceFactory.Services.CreateAsyncScope();
+        var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+        await security.RevokeSessionsAsync(revokeAuditFailureUserId);
+    }
+    catch (Exception exception) when (exception is DbUpdateException or PostgresException)
+    {
+        revokeAuditFailed = true;
+    }
+    finally
+    {
+        await SetSecurityAuditFailureTriggerAsync(migratorConnectionString, revokeAuditFailureUserId,
+            "operational_account.sessions_revoked", enabled: false);
+    }
+    Ensure(revokeAuditFailed,
+        "A mandatory session-revocation audit failure aborts the security action.");
+    await using (var scope = raceFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var user = await users.FindByIdAsync(revokeAuditFailureUserId.ToString());
+        Ensure(user is not null && user.SecurityStamp == revokeAuditOriginalStamp,
+            "A session-revocation audit failure rolls back the security-stamp mutation.");
+    }
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, revokeAuditFailureUserId))
+               .Count(type => type == "operational_account.sessions_revoked") == 0,
+        "A rejected session-revocation audit event is not persisted.");
 
     // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
     // logins their own per-IP login budget (4 of 5 permits are used here).
@@ -3070,6 +3250,129 @@ static async Task SetPendingMfaAuditFailureTriggerAsync(string connectionString,
 
         await using var dropFunction = new NpgsqlCommand(
             "DROP FUNCTION IF EXISTS identity.reject_pending_mfa_audit_for_test()", connection, transaction);
+        await dropFunction.ExecuteNonQueryAsync();
+    }
+
+    await transaction.CommitAsync();
+}
+
+static async Task SetIdentityMutationFailureTriggerAsync(
+    string connectionString,
+    Guid targetUserId,
+    string mutation,
+    bool enabled)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand(
+        "SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    if (enabled)
+    {
+        var createFunctionSql = $"""
+            CREATE OR REPLACE FUNCTION identity.reject_account_security_mutation_for_test()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $function$
+            BEGIN
+                IF NEW."Id" = '{targetUserId:D}'::uuid AND (
+                    ('{mutation}' = 'lockout' AND NEW."LockoutEnd" IS DISTINCT FROM OLD."LockoutEnd")
+                    OR
+                    ('{mutation}' = 'stamp' AND NEW."SecurityStamp" IS DISTINCT FROM OLD."SecurityStamp")
+                ) THEN
+                    RAISE EXCEPTION 'Forced Identity mutation failure for account security HTTP integration test.';
+                END IF;
+                RETURN NEW;
+            END;
+            $function$;
+            """;
+        await using (var createFunction = new NpgsqlCommand(createFunctionSql, connection, transaction))
+            await createFunction.ExecuteNonQueryAsync();
+
+        await using (var dropTrigger = new NpgsqlCommand(
+            "DROP TRIGGER IF EXISTS \"TR_TestRejectAccountSecurityMutation\" ON identity.\"AspNetUsers\"",
+            connection, transaction))
+            await dropTrigger.ExecuteNonQueryAsync();
+
+        await using var createTrigger = new NpgsqlCommand(
+            """
+            CREATE TRIGGER "TR_TestRejectAccountSecurityMutation"
+                BEFORE UPDATE ON identity."AspNetUsers"
+                FOR EACH ROW EXECUTE FUNCTION identity.reject_account_security_mutation_for_test()
+            """, connection, transaction);
+        await createTrigger.ExecuteNonQueryAsync();
+    }
+    else
+    {
+        await using (var dropTrigger = new NpgsqlCommand(
+            "DROP TRIGGER IF EXISTS \"TR_TestRejectAccountSecurityMutation\" ON identity.\"AspNetUsers\"",
+            connection, transaction))
+            await dropTrigger.ExecuteNonQueryAsync();
+
+        await using var dropFunction = new NpgsqlCommand(
+            "DROP FUNCTION IF EXISTS identity.reject_account_security_mutation_for_test()", connection, transaction);
+        await dropFunction.ExecuteNonQueryAsync();
+    }
+
+    await transaction.CommitAsync();
+}
+
+static async Task SetSecurityAuditFailureTriggerAsync(
+    string connectionString,
+    Guid targetUserId,
+    string eventType,
+    bool enabled)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand(
+        "SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    if (enabled)
+    {
+        var createFunctionSql = $"""
+            CREATE OR REPLACE FUNCTION identity.reject_account_security_audit_for_test()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $function$
+            BEGIN
+                IF NEW."TargetIdentityUserId" = '{targetUserId:D}'::uuid
+                   AND NEW."EventType" = '{eventType}' THEN
+                    RAISE EXCEPTION 'Forced account-security audit failure for HTTP integration test.';
+                END IF;
+                RETURN NEW;
+            END;
+            $function$;
+            """;
+        await using (var createFunction = new NpgsqlCommand(createFunctionSql, connection, transaction))
+            await createFunction.ExecuteNonQueryAsync();
+
+        await using (var dropTrigger = new NpgsqlCommand(
+            "DROP TRIGGER IF EXISTS \"TR_TestRejectAccountSecurityAudit\" ON identity.\"SecurityAuditEvents\"",
+            connection, transaction))
+            await dropTrigger.ExecuteNonQueryAsync();
+
+        await using var createTrigger = new NpgsqlCommand(
+            """
+            CREATE TRIGGER "TR_TestRejectAccountSecurityAudit"
+                BEFORE INSERT ON identity."SecurityAuditEvents"
+                FOR EACH ROW EXECUTE FUNCTION identity.reject_account_security_audit_for_test()
+            """, connection, transaction);
+        await createTrigger.ExecuteNonQueryAsync();
+    }
+    else
+    {
+        await using (var dropTrigger = new NpgsqlCommand(
+            "DROP TRIGGER IF EXISTS \"TR_TestRejectAccountSecurityAudit\" ON identity.\"SecurityAuditEvents\"",
+            connection, transaction))
+            await dropTrigger.ExecuteNonQueryAsync();
+
+        await using var dropFunction = new NpgsqlCommand(
+            "DROP FUNCTION IF EXISTS identity.reject_account_security_audit_for_test()", connection, transaction);
         await dropFunction.ExecuteNonQueryAsync();
     }
 
