@@ -661,8 +661,9 @@ try
         "An email-confirmed, MFA-authenticated active Owner moves the salon from PendingVerification to SetupRequired.");
 
     var onboardingAudit = await ReadTenantStatusAuditAsync(migratorConnectionString, ownerTenantId);
-    Ensure(onboardingAudit.Length == 1 && onboardingAudit[0].From == 0 && onboardingAudit[0].To == 1,
-        "The onboarding transition is audited once by the PostgreSQL tenant-status trigger.");
+    Ensure(onboardingAudit.Length == 1 && onboardingAudit[0].From == 0 && onboardingAudit[0].To == 1 &&
+           onboardingAudit[0].ActorId == ownerUserId && !onboardingAudit[0].HasIdentityTarget,
+        "The onboarding status audit records the authenticated Owner as its trusted actor and targets only the tenant.");
 
     var repeatedOnboarding = await PostWithCsrfAsync(
         mfaClient, "/api/v1/tenant/onboarding/complete", ownerAuthenticatedToken, new { });
@@ -1369,7 +1370,7 @@ try
     var suspendedTenantAudit = await ReadTenantStatusAuditAsync(migratorConnectionString, suspendedMember.TenantId);
     Ensure(suspendedTenantAudit.Length == 1 &&
            suspendedTenantAudit[0].From == 5 && suspendedTenantAudit[0].To == 7 &&
-           !suspendedTenantAudit[0].HasActor && !suspendedTenantAudit[0].HasIdentityTarget,
+           suspendedTenantAudit[0].ActorId is null && !suspendedTenantAudit[0].HasIdentityTarget,
         "A tenant status change is audited by the database trigger exactly once, with from/to status and no actor or identity target.");
     Ensure((await suspendedClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Forbidden,
         "Closing a tenant (status Closed) ends an already-issued session on its next request.");
@@ -1836,7 +1837,7 @@ static async Task<string[]> ReadServiceAuditAsync(
     return events.ToArray();
 }
 
-static async Task<(short From, short To, bool HasActor, bool HasIdentityTarget)[]> ReadTenantStatusAuditAsync(
+static async Task<(short From, short To, Guid? ActorId, bool HasIdentityTarget)[]> ReadTenantStatusAuditAsync(
     string connectionString,
     Guid tenantId)
 {
@@ -1847,13 +1848,13 @@ static async Task<(short From, short To, bool HasActor, bool HasIdentityTarget)[
         await role.ExecuteNonQueryAsync();
 
     await using var command = new NpgsqlCommand(
-        @"SELECT ""FromTenantStatus"", ""ToTenantStatus"", ""ActorIdentityUserId"" IS NOT NULL, ""TargetIdentityUserId"" IS NOT NULL FROM identity.""SecurityAuditEvents"" WHERE ""TargetTenantId"" = @tenant AND ""EventType"" = 'tenant_status.changed' ORDER BY ""OccurredAtUtc"", ""Id"" ", connection, transaction);
+        @"SELECT ""FromTenantStatus"", ""ToTenantStatus"", ""ActorIdentityUserId"", ""TargetIdentityUserId"" IS NOT NULL FROM identity.""SecurityAuditEvents"" WHERE ""TargetTenantId"" = @tenant AND ""EventType"" = 'tenant_status.changed' ORDER BY ""OccurredAtUtc"", ""Id"" ", connection, transaction);
     command.Parameters.AddWithValue("tenant", tenantId);
-    var values = new List<(short From, short To, bool HasActor, bool HasIdentityTarget)>();
+    var values = new List<(short From, short To, Guid? ActorId, bool HasIdentityTarget)>();
     await using (var reader = await command.ExecuteReaderAsync())
     {
         while (await reader.ReadAsync())
-            values.Add((reader.GetInt16(0), reader.GetInt16(1), reader.GetBoolean(2), reader.GetBoolean(3)));
+            values.Add((reader.GetInt16(0), reader.GetInt16(1), reader.IsDBNull(2) ? null : reader.GetGuid(2), reader.GetBoolean(3)));
     }
 
     await transaction.CommitAsync();
