@@ -63,8 +63,8 @@ await using (var scopeA = provider.CreateAsyncScope())
     customerAId = customer.Id;
     Check(customer.NormalizedPhoneNumber == "+5511999999999" && customer.EmailAddress == "maria@example.com",
         "customer store persists normalized tenant-owned contact details");
-    var customerAuditCount = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<int>(
-        "SELECT count(*)::int AS \"Value\" FROM atendee.tenant_audit_events WHERE resource_id = '" + customerAId + "'::uuid AND event_type = 'customer.created'").SingleAsync(ct));
+    var customerAuditCount = await runner.ExecuteAsync(ct => db.Database.SqlQuery<int>(
+        $"SELECT count(*)::int AS \"Value\" FROM atendee.tenant_audit_events WHERE resource_id = {customerAId} AND event_type = 'customer.created'").SingleAsync(ct));
     Check(customerAuditCount == 1, "customer creation writes its audit event in the same tenant transaction");
     var visible = await runner.ExecuteAsync(ct => store.GetByIdAsync(noteA, ct));
     Check(visible is not null && visible.Body == "synthetic note from A", "tenant A can read its own note");
@@ -149,8 +149,8 @@ await using (var scopeA2 = provider.CreateAsyncScope())
         "tenant A retains its customer after tenant B and rollback tests");
     var archivedCustomer = await runner.ExecuteAsync(ct => customerStore.ArchiveAsync(customerAId, ct));
     Check(archivedCustomer is { IsArchived: true }, "customer archive is persisted as a soft state change");
-    var archivedAuditCount = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<int>(
-        "SELECT count(*)::int AS \"Value\" FROM atendee.tenant_audit_events WHERE resource_id = '" + customerAId + "'::uuid AND event_type = 'customer.archived'").SingleAsync(ct));
+    var archivedAuditCount = await runner.ExecuteAsync(ct => db.Database.SqlQuery<int>(
+        $"SELECT count(*)::int AS \"Value\" FROM atendee.tenant_audit_events WHERE resource_id = {customerAId} AND event_type = 'customer.archived'").SingleAsync(ct));
     Check(archivedAuditCount == 1, "customer archival writes one mandatory audit event");
     var repeatedArchive = await runner.ExecuteAsync(ct => customerStore.ArchiveAsync(customerAId, ct));
     Check(repeatedArchive?.UpdatedAtUtc == archivedCustomer!.UpdatedAtUtc,
