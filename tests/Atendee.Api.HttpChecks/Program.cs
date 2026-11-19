@@ -1357,10 +1357,10 @@ try
         Ensure(authenticatorKey.Succeeded, "Audit-failure identity receives an authenticator key.");
         var enabled = await users.SetTwoFactorEnabledAsync(auditFailureUser, true);
         Ensure(enabled.Succeeded, "Audit-failure identity is MFA-enabled before login.");
-        var recoveryCodes = await users.GenerateNewTwoFactorRecoveryCodesAsync(auditFailureUser, 10);
-        Ensure(recoveryCodes is not null && recoveryCodes.Any(),
+        var auditFailureRecoveryCodes = await users.GenerateNewTwoFactorRecoveryCodesAsync(auditFailureUser, 10);
+        Ensure(auditFailureRecoveryCodes is not null && auditFailureRecoveryCodes.Any(),
             "Audit-failure identity receives a one-time recovery code for the cookie-leak probe.");
-        auditFailureRecoveryCode = recoveryCodes!.First();
+        auditFailureRecoveryCode = auditFailureRecoveryCodes!.First();
     }
     await SeedMembershipAsync(migratorConnectionString, auditFailureTenantId, auditFailureUserId, roleId: 2);
 
