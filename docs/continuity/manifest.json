@@ -1,30 +1,31 @@
 {
-  "backup_version": "v66-professional-isolation-approved",
+  "backup_version": "v67-professional-service-assignment-isolation-approved",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V66_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V66_2026-11-19.md",
-  "latest_implementation_commit": "90c6b6c20a3b881395d07d335dda32eabaff009a",
-  "latest_documentation_parent_commit": "90c6b6c20a3b881395d07d335dda32eabaff009a",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V67_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V67_2026-11-19.md",
+  "latest_implementation_commit": "962649067d02f4d65e347025c16b5cd069927565",
+  "latest_documentation_parent_commit": "962649067d02f4d65e347025c16b5cd069927565",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44454083316",
+    "run": "44454896396",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "90c6b6c20a3b881395d07d335dda32eabaff009a",
+    "validated_head_sha": "962649067d02f4d65e347025c16b5cd069927565",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
-    "fullstack_browser_result": "1 passed (5.9s)",
+    "portal_browser_tests": "8 passed (5.2s)",
+    "fullstack_browser_result": "1 passed (6.3s)",
     "key_checks": [
       "frontend audit/tests/build",
-      "portal browser E2E",
       "Release build and domain checks",
-      "PostgreSQL 18.7 provisioning and EF Core/RLS checks",
+      "PostgreSQL 18.7 and EF Core/RLS checks",
       "Identity/TOTP/tenant-context checks",
-      "cross-tenant professional membership discovery and creation checks",
-      "cross-tenant professional profile update returns 404",
-      "V65 cross-tenant service checks",
+      "cross-tenant service assignment rejected in both directions (400 professional_services_validation_failed)",
+      "rejected assignments leave profiles unchanged",
+      "V65 cross-tenant service read/update checks",
+      "V66 cross-tenant professional identity/profile checks",
       "V64 antiforgery session-transition checks",
       "disposable credentials cleared and database container removed"
     ]
@@ -59,7 +60,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Continue backend-first by reviewing professional-service association and all existing endpoint resource/identity lookups for tenant scoping; add negative cross-tenant mutation tests.",
+  "next_step": "Continue backend-first with a systematic review of existing endpoints and stores for any resource, identity or association lookup lacking trusted tenant scope; add negative tests where needed.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -96,6 +97,17 @@
       "Salon A cannot create profile for B identity (400 professional_membership_invalid)",
       "Salon A profile list does not expose B profile",
       "Salon A cannot update B profile by known ID (404)"
+    ]
+  },
+  "v67": {
+    "implementation_commit": "962649067d02f4d65e347025c16b5cd069927565",
+    "approval": "approved",
+    "assertions": [
+      "Salon B cannot assign Salon A service to B professional profile (400 professional_services_validation_failed)",
+      "Salon B professional profile remains unchanged after rejection",
+      "Salon A cannot assign Salon B service to A professional profile (400 professional_services_validation_failed)",
+      "Salon A professional profile remains unchanged after rejection",
+      "legitimate Salon A service assignment still succeeds"
     ]
   }
 }
