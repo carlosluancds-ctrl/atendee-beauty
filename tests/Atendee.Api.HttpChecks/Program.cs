@@ -3047,10 +3047,9 @@ static async Task WaitForSecurityAuditDelayAsync(string connectionString)
         """
         SELECT EXISTS (
             SELECT 1
-              FROM pg_stat_activity
-             WHERE wait_event_type = 'Lock'
-               AND wait_event = 'advisory'
-               AND query ILIKE '%SecurityAuditEvents%'
+              FROM pg_locks
+             WHERE locktype = 'advisory'
+               AND NOT granted
         )
         """,
         "The HTTP request did not reach the test-only security-audit advisory lock.");
@@ -3062,10 +3061,9 @@ static async Task WaitForIdentityRowLockAsync(string connectionString)
         """
         SELECT EXISTS (
             SELECT 1
-              FROM pg_stat_activity
-             WHERE wait_event_type = 'Lock'
-               AND query ILIKE '%AspNetUsers%'
-               AND query ILIKE '%FOR UPDATE%'
+              FROM pg_locks
+             WHERE locktype = 'transactionid'
+               AND NOT granted
         )
         """,
         "The concurrent account-security operation did not wait for the in-flight identity row lock.");
