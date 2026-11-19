@@ -1332,6 +1332,81 @@ try
     Ensure((await managerClient.GetAsync("/api/v1/services")).StatusCode == HttpStatusCode.OK,
         "Manager can read the current salon's service catalogue for assignments.");
 
+    // Force the mandatory pending-MFA audit write to fail after PasswordSignInAsync
+    // has produced the temporary two-factor cookie. The failed request must not
+    // leave a usable challenge session behind.
+    var auditFailureEmail = "http-pending-audit-failure-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string auditFailurePassword = "Atendee-Audit-Failure-HTTP-2026!";
+    var auditFailureTenantId = Guid.NewGuid();
+    Guid auditFailureUserId;
+    string auditFailureRecoveryCode;
+    await using (var scope = roleMatrixFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var auditFailureUser = new OperationalIdentityUser
+        {
+            UserName = auditFailureEmail,
+            Email = auditFailureEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(auditFailureUser, auditFailurePassword);
+        Ensure(created.Succeeded, "Synthetic MFA identity for audit-failure checks is created.");
+        auditFailureUserId = auditFailureUser.Id;
+
+        var authenticatorKey = await users.ResetAuthenticatorKeyAsync(auditFailureUser);
+        Ensure(authenticatorKey.Succeeded, "Audit-failure identity receives an authenticator key.");
+        var enabled = await users.SetTwoFactorEnabledAsync(auditFailureUser, true);
+        Ensure(enabled.Succeeded, "Audit-failure identity is MFA-enabled before login.");
+        var recoveryCodes = await users.GenerateNewTwoFactorRecoveryCodesAsync(auditFailureUser, 10);
+        Ensure(recoveryCodes is not null && recoveryCodes.Any(),
+            "Audit-failure identity receives a one-time recovery code for the cookie-leak probe.");
+        auditFailureRecoveryCode = recoveryCodes!.First();
+    }
+    await SeedMembershipAsync(migratorConnectionString, auditFailureTenantId, auditFailureUserId, roleId: 2);
+
+    using var auditFailureClient = roleMatrixFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    var auditFailureToken = await GetAntiforgeryRequestTokenAsync(auditFailureClient);
+    await SetPendingMfaAuditFailureTriggerAsync(migratorConnectionString, enabled: true);
+    HttpResponseMessage auditFailureLogin;
+    try
+    {
+        auditFailureLogin = await PostWithCsrfAsync(auditFailureClient, "/api/v1/auth/login",
+            auditFailureToken, new
+            {
+                email = auditFailureEmail,
+                password = auditFailurePassword
+            });
+    }
+    finally
+    {
+        await SetPendingMfaAuditFailureTriggerAsync(migratorConnectionString, enabled: false);
+    }
+
+    using (auditFailureLogin)
+    {
+        Ensure(auditFailureLogin.StatusCode == HttpStatusCode.InternalServerError,
+            "A failing mandatory pending-MFA audit aborts the login request.");
+    }
+    var auditFailureEvents = await ReadSecurityAuditTypesAsync(migratorConnectionString, auditFailureUserId);
+    Ensure(!auditFailureEvents.Contains("operational_auth.password_verified_mfa_pending"),
+        "A rejected pending-MFA audit event is not persisted.");
+
+    var auditFailureChallengeToken = await GetAntiforgeryRequestTokenAsync(auditFailureClient);
+    var leakedChallenge = await PostWithCsrfAsync(auditFailureClient, "/api/v1/auth/mfa/challenge",
+        auditFailureChallengeToken, new
+        {
+            code = auditFailureRecoveryCode,
+            useRecoveryCode = true
+        });
+    Ensure(leakedChallenge.StatusCode == HttpStatusCode.Unauthorized,
+        "A failed pending-MFA audit does not leave a usable temporary two-factor cookie.");
+    Ensure((await auditFailureClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
+        "A failed pending-MFA audit cannot be upgraded to an application session.");
 
     // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
     // logins their own per-IP login budget (4 of 5 permits are used here).
@@ -2002,6 +2077,61 @@ static async Task<bool> AuthLoginCannotExecuteAuditTargetResolverAsync(string co
     {
         return true;
     }
+}
+
+static async Task SetPendingMfaAuditFailureTriggerAsync(string connectionString, bool enabled)
+{
+    await using var connection = new NpgsqlConnection(connectionString);
+    await connection.OpenAsync();
+    await using var transaction = await connection.BeginTransactionAsync();
+    await using (var role = new NpgsqlCommand(
+        "SET LOCAL ROLE atendee_identity_owner", connection, transaction))
+        await role.ExecuteNonQueryAsync();
+
+    if (enabled)
+    {
+        await using (var createFunction = new NpgsqlCommand(
+            """
+            CREATE OR REPLACE FUNCTION identity.reject_pending_mfa_audit_for_test()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $function$
+            BEGIN
+                IF NEW."EventType" = 'operational_auth.password_verified_mfa_pending' THEN
+                    RAISE EXCEPTION 'Forced pending-MFA audit failure for HTTP integration test.';
+                END IF;
+                RETURN NEW;
+            END;
+            $function$;
+            """, connection, transaction))
+            await createFunction.ExecuteNonQueryAsync();
+
+        await using (var dropTrigger = new NpgsqlCommand(
+            "DROP TRIGGER IF EXISTS \"TR_TestRejectPendingMfaAudit\" ON identity.\"SecurityAuditEvents\"",
+            connection, transaction))
+            await dropTrigger.ExecuteNonQueryAsync();
+
+        await using var createTrigger = new NpgsqlCommand(
+            """
+            CREATE TRIGGER "TR_TestRejectPendingMfaAudit"
+                BEFORE INSERT ON identity."SecurityAuditEvents"
+                FOR EACH ROW EXECUTE FUNCTION identity.reject_pending_mfa_audit_for_test()
+            """, connection, transaction);
+        await createTrigger.ExecuteNonQueryAsync();
+    }
+    else
+    {
+        await using (var dropTrigger = new NpgsqlCommand(
+            "DROP TRIGGER IF EXISTS \"TR_TestRejectPendingMfaAudit\" ON identity.\"SecurityAuditEvents\"",
+            connection, transaction))
+            await dropTrigger.ExecuteNonQueryAsync();
+
+        await using var dropFunction = new NpgsqlCommand(
+            "DROP FUNCTION IF EXISTS identity.reject_pending_mfa_audit_for_test()", connection, transaction);
+        await dropFunction.ExecuteNonQueryAsync();
+    }
+
+    await transaction.CommitAsync();
 }
 
 static async Task<int> CountAuditEventsWithActorAsync(
