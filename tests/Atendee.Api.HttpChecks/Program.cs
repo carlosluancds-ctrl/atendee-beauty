@@ -1342,10 +1342,35 @@ try
             "Receptionist can read professional availability but cannot change team schedules.");
     }
 
-    var crossTenantProfessionalAvailability = await client.GetAsync(
-        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability");
-    Ensure(crossTenantProfessionalAvailability.StatusCode == HttpStatusCode.NotFound,
-        "A different salon cannot discover professional availability by a known profile UUID.");
+    await using (var crossTenantAvailabilityConnection = new NpgsqlConnection(tenantConnectionString))
+    {
+        await crossTenantAvailabilityConnection.OpenAsync();
+        await using var crossTenantAvailabilityTransaction =
+            await crossTenantAvailabilityConnection.BeginTransactionAsync();
+        await using (var setRuntimeRole = new NpgsqlCommand(
+            "SET LOCAL ROLE atendee_runtime",
+            crossTenantAvailabilityConnection,
+            crossTenantAvailabilityTransaction))
+            await setRuntimeRole.ExecuteNonQueryAsync();
+        await using (var setOtherSalonContext = new NpgsqlCommand(
+            "SELECT set_config('app.tenant_id', @tenant_id, true)",
+            crossTenantAvailabilityConnection,
+            crossTenantAvailabilityTransaction))
+        {
+            setOtherSalonContext.Parameters.AddWithValue("tenant_id", tenantId.ToString("D"));
+            await setOtherSalonContext.ExecuteScalarAsync();
+        }
+        await using var crossTenantAvailabilityCount = new NpgsqlCommand(
+            "SELECT count(*) FROM atendee.professional_availability WHERE professional_id = @professional_id",
+            crossTenantAvailabilityConnection,
+            crossTenantAvailabilityTransaction);
+        crossTenantAvailabilityCount.Parameters.AddWithValue(
+            "professional_id", assignedAssignedProfessionalProfileId);
+        var hiddenAvailabilityCount = Convert.ToInt64(await crossTenantAvailabilityCount.ExecuteScalarAsync());
+        Ensure(hiddenAvailabilityCount == 0,
+            "PostgreSQL RLS hides professional availability from another salon even when the profile UUID is known.");
+        await crossTenantAvailabilityTransaction.RollbackAsync();
+    }
 
     await using (var directAvailabilityConnection = new NpgsqlConnection(tenantConnectionString))
     {
