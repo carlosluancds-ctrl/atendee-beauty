@@ -1295,8 +1295,8 @@ try
         Ensure(created.Succeeded, "Synthetic availability receptionist identity is created.");
         availabilityReceptionistUserId = receptionistUser.Id;
     }
-    await SeedMembershipAsync(
-        migratorConnectionString, ownerTenantId, availabilityReceptionistUserId, roleId: 3, statusId: 3);
+    await SeedAdditionalMembershipAsync(
+        migratorConnectionString, ownerTenantId, availabilityReceptionistUserId, roleId: 3);
     using (var availabilityReceptionistClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
