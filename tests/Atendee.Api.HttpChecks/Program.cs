@@ -153,45 +153,61 @@ try
     Ensure(trustedForwardedContext.Request.Host == new HostString("api.example.invalid"),
         "X-Forwarded-Host is ignored unless explicitly enabled.");
 
-    var previousInvalidProxyEnvironmentValue =
-        Environment.GetEnvironmentVariable(trustedProxyEnvironmentKey);
-    var invalidProxyRejected = false;
-    try
+    var invalidProxyAddresses = new[]
     {
-        Environment.SetEnvironmentVariable(trustedProxyEnvironmentKey, "not-an-ip");
-        using var invalidProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
-            .WithWebHostBuilder(web =>
-            {
-                web.UseContentRoot(apiContentRoot);
-                web.UseEnvironment("Development");
-                web.ConfigureAppConfiguration((_, configuration) =>
-                {
-                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                    {
-                        ["ConnectionStrings:Identity"] = null,
-                        ["ConnectionStrings:Tenant"] = null,
-                        ["DataProtection:KeyRingPath"] = null
-                    });
-                });
-            });
+        "not-an-ip",
+        "0.0.0.0",
+        "224.0.0.1",
+        "240.0.0.1",
+        "255.255.255.255",
+        "::",
+        "ff02::1",
+        "::ffff:0.0.0.0",
+        "::ffff:224.0.0.1"
+    };
+    foreach (var invalidProxyAddress in invalidProxyAddresses)
+    {
+        var previousInvalidProxyEnvironmentValue =
+            Environment.GetEnvironmentVariable(trustedProxyEnvironmentKey);
+        var invalidProxyRejected = false;
         try
         {
-            _ = invalidProxyFactory.Services;
+            Environment.SetEnvironmentVariable(
+                trustedProxyEnvironmentKey, invalidProxyAddress);
+            using var invalidProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+                .WithWebHostBuilder(web =>
+                {
+                    web.UseContentRoot(apiContentRoot);
+                    web.UseEnvironment("Development");
+                    web.ConfigureAppConfiguration((_, configuration) =>
+                    {
+                        configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                        {
+                            ["ConnectionStrings:Identity"] = null,
+                            ["ConnectionStrings:Tenant"] = null,
+                            ["DataProtection:KeyRingPath"] = null
+                        });
+                    });
+                });
+            try
+            {
+                _ = invalidProxyFactory.Services;
+            }
+            catch (Exception exception) when (
+                exception.ToString().Contains("ForwardedHeaders:KnownProxies", StringComparison.Ordinal))
+            {
+                invalidProxyRejected = true;
+            }
         }
-        catch (Exception exception) when (
-            exception.ToString().Contains("ForwardedHeaders:KnownProxies", StringComparison.Ordinal))
+        finally
         {
-            invalidProxyRejected = true;
+            Environment.SetEnvironmentVariable(
+                trustedProxyEnvironmentKey, previousInvalidProxyEnvironmentValue);
         }
-    }
-    finally
-    {
-        Environment.SetEnvironmentVariable(
-            trustedProxyEnvironmentKey, previousInvalidProxyEnvironmentValue);
-    }
 
-    Ensure(invalidProxyRejected,
-        "Invalid trusted-proxy configuration fails application startup closed.");
+        Ensure(invalidProxyRejected,
+            $"Invalid trusted-proxy address '{invalidProxyAddress}' fails application startup closed.");
+    }
 
     using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
     {

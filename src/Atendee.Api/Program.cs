@@ -24,17 +24,30 @@ var configuredTrustedProxyAddresses =
 var trustedProxyAddresses = new List<IPAddress>(configuredTrustedProxyAddresses.Length);
 foreach (var configuredAddress in configuredTrustedProxyAddresses)
 {
-    if (!IPAddress.TryParse(configuredAddress, out var address) ||
-        address.Equals(IPAddress.Any) ||
-        address.Equals(IPAddress.IPv6Any) ||
-        address.Equals(IPAddress.Broadcast) ||
-        address.IsIPv6Multicast)
+    if (!IPAddress.TryParse(configuredAddress, out var address))
     {
         throw new InvalidOperationException(
             "ForwardedHeaders:KnownProxies must contain only exact, valid unicast IP addresses.");
     }
 
-    trustedProxyAddresses.Add(address);
+    // Normalize IPv4-mapped IPv6 values before validation and storage so
+    // unspecified, multicast and reserved IPv4 ranges cannot bypass checks.
+    var canonicalAddress = address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
+    var isReservedOrMulticastIpv4 =
+        canonicalAddress.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+        canonicalAddress.GetAddressBytes()[0] >= 224;
+
+    if (canonicalAddress.Equals(IPAddress.Any) ||
+        canonicalAddress.Equals(IPAddress.IPv6Any) ||
+        canonicalAddress.Equals(IPAddress.Broadcast) ||
+        canonicalAddress.IsIPv6Multicast ||
+        isReservedOrMulticastIpv4)
+    {
+        throw new InvalidOperationException(
+            "ForwardedHeaders:KnownProxies must contain only exact, valid unicast IP addresses.");
+    }
+
+    trustedProxyAddresses.Add(canonicalAddress);
 }
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
