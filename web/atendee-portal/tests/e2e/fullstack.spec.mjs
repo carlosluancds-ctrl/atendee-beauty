@@ -177,12 +177,6 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   const ownerServiceId = ownerServicePayload.id;
   expect(ownerServiceId).toBeTruthy();
 
-  const ownerAuthenticatedRequestToken = await getAntiforgeryToken(page);
-  await logout(page);
-  const staleAuthenticatedLogout = await postWithToken(
-    page, "/api/v1/auth/logout", ownerAuthenticatedRequestToken);
-  expect(staleAuthenticatedLogout).toEqual({ status: 400, error: "antiforgery_validation_failed" });
-
   // A second independently provisioned salon must not read or mutate Salon A resources.
   // Keep both Owner sessions alive in separate browser contexts to exercise both directions
   // without consuming extra login-rate-limit permits.
@@ -200,7 +194,7 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
     await expect(secondOwnerPage.getByRole("heading", { name: "Confirme sua identidade" })).toBeVisible();
     await secondOwnerPage.getByLabel("Código de autenticação").fill(totp(secondOwnerSecret));
     await secondOwnerPage.getByRole("button", { name: "Confirmar código" }).click();
-    await expect(secondOwnerPage).toHaveURL(/\\/services$/);
+    await expect(secondOwnerPage).toHaveURL(/\/services$/);
 
     const secondOwnerToken = await getAntiforgeryToken(secondOwnerPage);
     const secondOwnerCreate = await postWithToken(secondOwnerPage, "/api/v1/services", secondOwnerToken, {
@@ -262,6 +256,12 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   } finally {
     await secondOwnerContext.close();
   }
+
+  const ownerAuthenticatedRequestToken = await getAntiforgeryToken(page);
+  await logout(page);
+  const staleAuthenticatedLogout = await postWithToken(
+    page, "/api/v1/auth/logout", ownerAuthenticatedRequestToken);
+  expect(staleAuthenticatedLogout).toEqual({ status: 400, error: "antiforgery_validation_failed" });
 
   // Manager must enroll MFA before the API issues a full application session.
   await fillLogin(page, managerEmail, managerPassword);
