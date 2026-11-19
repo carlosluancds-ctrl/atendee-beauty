@@ -1,25 +1,30 @@
 {
-  "backup_version": "v64-antiforgery-session-regression-in-progress",
-  "updated_at": "2026-11-18",
+  "backup_version": "v65-tenant-isolation-approved",
+  "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V64_2026-11-18.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V63_2026-11-18.md",
-  "latest_implementation_commit": "aa38361ed16017a9642145400a94d9b3a4088286",
-  "latest_documentation_parent_commit": "aa38361ed16017a9642145400a94d9b3a4088286",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V65_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V65_2026-11-19.md",
+  "latest_implementation_commit": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
+  "latest_documentation_parent_commit": "4bf33dbeb4e9ba21d9352480a90757542ea82811",
   "latest_ci": {
-    "v63_implementation_run": "44319685006",
-    "v63_implementation_status": "success",
-    "v63_documentation_run": "44320319677",
-    "v63_documentation_status": "success",
-    "v64_initial_run": "44321104904",
-    "v64_initial_status": "failure_before_job_steps_no_logs",
-    "v64_regex_fix_run": "44321314420",
-    "v64_regex_fix_status": "failure_before_job_steps_no_logs",
-    "v64_regex_fix_retry_attempt": 2,
-    "v64_retry_status": "failure_before_job_steps_no_logs",
-    "v64_status": "in_progress_not_approved",
-    "v64_diagnostic": "GitHub Actions job returned steps=null and no job logs; job-log endpoint returned 404. No test/compiler diagnostic available."
+    "workflow": "PostgreSQL 18 persistence integration",
+    "run": "44451964941",
+    "attempt": 1,
+    "status": "success",
+    "validated_head_sha": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
+    "job": "Build and verify tenant isolation",
+    "job_status": "success",
+    "key_checks": [
+      "frontend audit/tests/build",
+      "portal browser E2E (8 passed)",
+      "Release build and domain checks",
+      "PostgreSQL 18.7 provisioning and EF Core/RLS checks",
+      "Identity/TOTP/tenant-context checks",
+      "HTTP auth/session security/full-stack browser E2E (1 passed)",
+      "cross-tenant service list/read/update isolation in both directions",
+      "disposable credentials cleared and database container removed"
+    ]
   },
   "v63_fullstack_baseline": {
     "implementation_commit": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
@@ -28,7 +33,12 @@
     "mocked_browser_tests": 8,
     "real_fullstack_browser_tests": 1,
     "database": "disposable PostgreSQL 18.7",
-    "roles": ["Owner", "Manager", "Professional", "Receptionist"]
+    "roles": [
+      "Owner",
+      "Manager",
+      "Professional",
+      "Receptionist"
+    ]
   },
   "v64_work_in_progress": {
     "commits": [
@@ -43,11 +53,27 @@
     "expected_result": "HTTP 400 antiforgery_validation_failed",
     "approval": "pending_full_ci"
   },
-  "next_step": "Restore diagnosable CI execution and validate V64 stale-token browser assertions; then implement two-tenant negative browser cases",
+  "next_step": "Continue backend-first with a focused review and negative tests for remaining cross-tenant read/mutation surfaces; preserve approved tenant-status and authorization policies.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
     "ses_configuration_authorized": false,
     "billing_trial_activation_authorized": false
+  },
+  "v65": {
+    "implementation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
+    "approval": "approved",
+    "cross_tenant_service_assertions": [
+      "Salon B list contains only B service",
+      "Salon B read A service returns 404",
+      "Salon B update A service returns 404",
+      "Salon A list contains only A service",
+      "Salon A read B service returns 404",
+      "Salon A update B service returns 404"
+    ],
+    "antiforgery_assertions": [
+      "anonymous token rejected after Owner login (400 antiforgery_validation_failed)",
+      "authenticated token rejected after logout (400 antiforgery_validation_failed)"
+    ]
   }
 }
