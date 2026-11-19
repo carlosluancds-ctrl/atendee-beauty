@@ -1,22 +1,22 @@
 {
-    "backup_version":  "v86-professional-time-off",
+    "backup_version":  "v87-service-availability",
     "updated_at":  "2026-11-19",
     "repository":  "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch":  "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V86_2026-11-19.md",
-    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V86_2026-11-19.md",
-    "latest_implementation_commit":  "3f6d64b4b6a725ef502767476e50c69c7fd56a2f",
-    "latest_documentation_parent_commit":  "0be194941318e38ee7cbaa2e0fc465eba287c8bd",
+    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V87_2026-11-19.md",
+    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V87_2026-11-19.md",
+    "latest_implementation_commit":  "2833e52aeddb063bfb85e16ead1c8f89fbb257ab",
+    "latest_documentation_parent_commit":  "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee",
     "latest_ci":  {
                       "workflow":  "PostgreSQL 18 persistence integration",
-                      "run":  "44633827726",
+                      "run":  "44638633076",
                       "attempt":  1,
                       "status":  "success",
-                      "validated_head_sha":  "0be194941318e38ee7cbaa2e0fc465eba287c8bd",
+                      "validated_head_sha":  "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee",
                       "job":  "Build and verify tenant isolation",
                       "job_status":  "success",
                       "portal_browser_tests":  "8 passed",
-                      "domain_checks":  "63/63 passed",
+                      "domain_checks":  "69/69 passed",
                       "postgres_rls_checks":  "32/32 passed",
                       "identity_checks":  "49/49 passed",
                       "http_checks":  "passed",
@@ -25,19 +25,17 @@
                                          "frontend dependency audit, tests and build",
                                          "portal browser E2E 8/8",
                                          "locked dependency restore",
-                                         "Release build succeeded",
-                                         "domain checks 63/63",
+                                         "Release build succeeded with zero warnings and errors",
+                                         "domain checks 69/69",
                                          "PostgreSQL 18.7 / EF Core / RLS persistence checks 32/32",
                                          "Identity/TOTP/tenant-context checks 49/49",
-                                         "date-specific full-day and partial-day professional time off uses tenant-local dates and wall-clock values",
-                                         "full-day entries are exclusive; partial-day intervals are non-overlapping; maximum four active entries per date",
-                                         "time-off listing requires an inclusive date range bounded to 366 days",
-                                         "Owner/Manager create and archive; Owner/Manager/Receptionist read team entries; Professional reads own entries and cannot mutate",
-                                         "tenant-scoped advisory lock serializes application and direct SQL writes",
-                                         "deferred PostgreSQL constraint trigger enforces full-day exclusivity, no overlaps and daily interval cap",
-                                         "RLS blocks cross-tenant reads; runtime without tenant context cannot read records",
-                                         "runtime cannot DELETE or TRUNCATE time-off records",
-                                         "creation and archive write mandatory transactional audit events",
+                                         "authoritative UTC service-start windows intersect tenant business hours and recurring professional availability",
+                                         "active service assignment, duration, before/after buffers and date-specific time-off exclusions",
+                                         "tenant-local calendar date and time zone; DST gap and ambiguous-time behavior covered",
+                                         "one-minute precision with earliest/latest inclusive service-start boundaries",
+                                         "exact-fit service duration and buffers remain bookable",
+                                         "Owner/Manager/Receptionist team read; Professional own-profile read only",
+                                         "invalid ranges, inactive/unknown service and arbitrary professional ID rejected",
                                          "HTTP authentication, antiforgery, cookies, session revocation, logout, MFA, audit, role-matrix and tenant-status checks",
                                          "real Kestrel + disposable PostgreSQL full-stack browser E2E 1/1",
                                          "disposable credentials cleared and PostgreSQL container removed"
@@ -73,7 +71,7 @@
                                  "validation_head":  "0a06ab045691a336c6114bf173f1383e3aafb4ac",
                                  "note":  "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
                              },
-    "next_step":  "Implement authoritative availability calculation combining V84 tenant business hours, V85 recurring professional availability, V86 date-specific time-off exclusions, active professional/service assignment, service duration and before/after buffers. Use the tenant time zone and explicitly handle DST ambiguous/nonexistent local times. Add deterministic tests for split shifts, date boundaries, time-off blocks and buffers. Only then implement transactional appointment booking with PostgreSQL overlap prevention, idempotency keys, immutable service/price/duration snapshots, legal state transitions, cancellation/rescheduling rules and append-only audit. In parallel, close shared/distributed authentication rate limiting with multi-instance concurrency tests without assuming an unverified production Redis/managed-service topology. Keep Data Protection certificate rotation blocked until old-key decryption support and a coordinated plan exist.",
+    "next_step":  "V88: implement transactional appointment creation and reads. Add tenant-scoped appointments with immutable service, price, duration, buffer, customer and professional snapshots; idempotency keys with request-hash conflict detection; exact UTC minute starts validated against authoritative availability; PostgreSQL advisory-lock plus deferred constraint-trigger overlap prevention; append-only appointment events and transactional outbox. Then implement audited legal state transitions, check-in, in-service, completion, no-show, cancellation and atomic rescheduling. Availability must subtract active appointments. Preserve role/status checks, RLS and no physical deletion. Later implement internal conversations/handoff and a durable worker/outbox consumer. Keep external email, WhatsApp, AI-provider, billing/payment, Platform Admin and legal retention decisions blocked until their required product, credential, cost or approval decisions are made.",
     "safeguards":  {
                        "main_untouched":  true,
                        "production_deploy_authorized":  false,
@@ -624,6 +622,62 @@
                                  "combine business hours, recurring availability, time off and service buffers into authoritative slots",
                                  "DST ambiguous/nonexistent local-time handling",
                                  "transactional appointment booking, overlap prevention, idempotency and state transitions"
+                             ]
+            }
+,
+    "v87":  {
+                "implementation_commit":  "2833e52aeddb063bfb85e16ead1c8f89fbb257ab",
+                "test_correction_commit":  "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee",
+                "approval":  "approved",
+                "ci_run":  "44638633076",
+                "validated_head":  "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee",
+                "scope":  "authoritative tenant-aware service-start availability windows",
+                "api":  [
+                            "GET /api/v1/availability?from=YYYY-MM-DD&to=YYYY-MM-DD&serviceId={id}&professionalId={optional}"
+                        ],
+                "configuration":  {
+                                       "date_range":  "Required inclusive local-date range, maximum 31 days",
+                                       "time_zone":  "Persisted tenant time-zone ID; response start boundaries are UTC instants",
+                                       "precision":  "Minute-aligned starts; earliest and latest boundaries are inclusive",
+                                       "working_time":  "Intersection of tenant business hours and recurring professional availability",
+                                       "exclusions":  "Date-specific full-day and partial-day time off",
+                                       "service":  "Active service assigned to active professional; duration and before/after buffers included",
+                                       "dst":  "UTC timeline traversal skips nonexistent local minutes and represents both ambiguous occurrences without guessing an offset",
+                                       "roles":  {
+                                                     "team_read":  [
+                                                                        "Owner",
+                                                                        "Manager",
+                                                                        "Receptionist"
+                                                                    ],
+                                                     "professional_read":  "Own profile only",
+                                                     "write":  false
+                                                 }
+                                   },
+                "integrity":  [
+                                  "Reads execute inside trusted tenant transaction and CPU-bound calculation occurs after commit",
+                                  "RLS and tenant-scoped stores remain the data boundary",
+                                  "Unknown/inactive service, invalid date range and unauthorized professional lookup are rejected",
+                                  "No appointment conflict exclusion yet; appointment booking is the next increment"
+                              ],
+                "assertions":  [
+                                   "Domain checks 69/69",
+                                   "Release build zero warnings and zero errors",
+                                   "PostgreSQL/RLS persistence checks 32/32",
+                                   "Identity/TOTP checks 49/49",
+                                   "Portal browser E2E 8 passed",
+                                   "HTTP availability integration and authorization checks passed",
+                                   "Full-stack browser E2E 1 passed"
+                               ],
+                "ci":   {
+                            "run":  "44638633076",
+                            "status":  "success",
+                            "head":  "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee"
+                        },
+                "deferred":  [
+                                 "subtract active appointments from availability",
+                                 "transactional booking and database overlap prevention",
+                                 "idempotency, immutable snapshots and appointment lifecycle",
+                                 "rescheduling and cancellation policy"
                              ]
             }
 }
