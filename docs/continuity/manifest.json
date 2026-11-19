@@ -1,31 +1,35 @@
 {
-  "backup_version": "v70-password-failure-audit-atomicity-approved",
+  "backup_version": "v71-pending-mfa-audit-failure-cookie-isolation-approved",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V70_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V70_2026-11-19.md",
-  "latest_implementation_commit": "49b8e0bb235905f7d7d3663419fe9c2eb337214c",
-  "latest_documentation_parent_commit": "49b8e0bb235905f7d7d3663419fe9c2eb337214c",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V71_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V71_2026-11-19.md",
+  "latest_implementation_commit": "63ecaa52f8cab3699990bd767d84233717fa755e",
+  "latest_documentation_parent_commit": "63ecaa52f8cab3699990bd767d84233717fa755e",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44457062380",
+    "run": "44458718974",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "49b8e0bb235905f7d7d3663419fe9c2eb337214c",
+    "validated_head_sha": "63ecaa52f8cab3699990bd767d84233717fa755e",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
+    "portal_browser_tests": "8 passed (6.7s)",
+    "domain_checks": "26/26 passed",
+    "postgres_rls_checks": "10/10 passed",
+    "identity_checks": "49/49 passed",
+    "fullstack_browser_result": "1 passed (6.0s)",
     "key_checks": [
-      "frontend audit/tests/build",
-      "portal browser E2E",
-      "Release build and domain checks",
-      "PostgreSQL 18.7 and EF Core/RLS checks",
-      "Identity/TOTP/tenant-context checks",
-      "failed-password AccessFailedCount and login_failed audit committed atomically",
-      "wrong password increments counter; successful password resets it",
-      "V69 onboarding actor and TOTP audit atomicity",
-      "V65-V68 tenant isolation and trusted-context regressions",
-      "disposable credentials cleared and database container removed"
+      "frontend dependency audit, tests and build",
+      "Release build",
+      "V71 mandatory pending-MFA audit failure aborts login",
+      "rejected pending-MFA audit event is not persisted",
+      "failed audit leaves no usable temporary two-factor cookie",
+      "failed audit cannot be upgraded to an authenticated application session",
+      "HTTP authentication, antiforgery, cookies, session revocation, logout, MFA, audit and role-matrix checks",
+      "V64-V70 regressions remain passing",
+      "disposable credentials cleared and PostgreSQL container removed"
     ]
   },
   "v63_fullstack_baseline": {
@@ -58,7 +62,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Continue backend-first auditing identity/account-security operations that combine persistence with mandatory audit events; make failure paths atomic without weakening lockout or authentication rules.",
+  "next_step": "Review the alreadyLockedOut snapshot and audit-volume policy in OperationalAuthenticationEndpoints.LoginAsync; verify sequential and concurrent behavior at the five-attempt lockout threshold, preserving audit of the threshold-causing failure and suppressing unbounded events only for attempts against an already-locked account.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -144,6 +148,20 @@
       "wrong password increments AccessFailedCount to 1",
       "valid password resets AccessFailedCount to 0 before MFA setup",
       "password check and mandatory failure audit share one identity DbContext transaction"
+    ]
+  },
+  "v71": {
+    "implementation_commits": [
+      "e34dd36632cb51a05cc7b75d2db55d196fb51826",
+      "63ecaa52f8cab3699990bd767d84233717fa755e"
+    ],
+    "approval": "approved",
+    "ci_run": "44458718974",
+    "assertions": [
+      "mandatory pending-MFA audit failure aborts login with HTTP 500",
+      "rejected pending-MFA audit event is not persisted",
+      "temporary two-factor cookie cannot complete MFA after failed audit",
+      "failed pending-MFA audit cannot be upgraded to an authenticated application session"
     ]
   }
 }
