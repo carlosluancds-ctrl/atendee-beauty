@@ -3669,7 +3669,7 @@ static async Task<int> CountAuditEventsWithActorAsync(
 
 internal sealed class FailureInjectingOperationalIdentityUserStore(
     AtendeeIdentityDbContext context)
-    : UserStore<OperationalIdentityUser, AtendeeIdentityDbContext, Guid>(context),
+    : UserOnlyStore<OperationalIdentityUser, AtendeeIdentityDbContext, Guid>(context),
       IUserStore<OperationalIdentityUser>
 {
     public static Guid? ForcedFailureUserId { get; set; }
