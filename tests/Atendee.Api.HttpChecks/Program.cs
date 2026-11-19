@@ -2000,10 +2000,12 @@ try
     var raceLoginEmail = "http-race-login-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     var raceChallengeEmail = "http-race-challenge-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     var raceEnrollmentEmail = "http-race-enrollment-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var raceDirectLoginEmail = "http-race-direct-login-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string racePassword = "Atendee-InFlight-Race-2026!";
     Guid raceLoginUserId;
     Guid raceChallengeUserId;
     Guid raceEnrollmentUserId;
+    Guid raceDirectLoginUserId;
     using var raceFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
@@ -2061,10 +2063,22 @@ try
         var enrollmentCreated = await users.CreateAsync(enrollmentUser, racePassword);
         Ensure(enrollmentCreated.Succeeded, "In-flight MFA enrollment identity is created.");
         raceEnrollmentUserId = enrollmentUser.Id;
+
+        var directLoginUser = new OperationalIdentityUser
+        {
+            UserName = raceDirectLoginEmail,
+            Email = raceDirectLoginEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = true
+        };
+        var directLoginCreated = await users.CreateAsync(directLoginUser, racePassword);
+        Ensure(directLoginCreated.Succeeded, "In-flight direct-login identity is created.");
+        raceDirectLoginUserId = directLoginUser.Id;
     }
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceLoginUserId, roleId: 2);
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceChallengeUserId, roleId: 2);
     await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceEnrollmentUserId, roleId: 2);
+    await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), raceDirectLoginUserId, roleId: 3);
 
     using var raceLoginClient = raceFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
@@ -2229,6 +2243,46 @@ try
         "operational_mfa.enrolled", enabled: false);
     Ensure((await raceEnrollmentClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
         "An application cookie emitted by MFA enrollment racing with account disablement is unusable.");
+
+    // Also cover the non-MFA direct-login branch: a normal Receptionist can
+    // finish password verification, then be disabled while the success audit
+    // is pending, before SignInWithClaimsAsync emits the application cookie.
+    using var raceDirectLoginClient = raceFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"), HandleCookies = true, AllowAutoRedirect = false
+    });
+    var raceDirectLoginToken = await GetAntiforgeryRequestTokenAsync(raceDirectLoginClient);
+    await SetSecurityAuditDelayTriggerAsync(migratorConnectionString, raceDirectLoginUserId,
+        "operational_auth.login_succeeded", enabled: true);
+    await using (var auditDelayLock = await AcquireSecurityAuditDelayLockAsync(migratorConnectionString))
+    {
+        var directLoginTask = PostWithCsrfAsync(raceDirectLoginClient, "/api/v1/auth/login",
+            raceDirectLoginToken, new { email = raceDirectLoginEmail, password = racePassword });
+        try
+        {
+            await WaitForSecurityAuditDelayAsync(migratorConnectionString);
+            await using var scope = raceFactory.Services.CreateAsyncScope();
+            var security = scope.ServiceProvider.GetRequiredService<IOperationalAccountSecurityService>();
+            Ensure(await security.DisableAsync(raceDirectLoginUserId),
+                "Account disablement commits after password verification but before direct application-cookie issuance.");
+            await ReleaseSecurityAuditDelayLockAsync(auditDelayLock);
+            using var response = await directLoginTask;
+            var cookies = response.Headers.TryGetValues("Set-Cookie", out var values)
+                ? values.ToArray()
+                : Array.Empty<string>();
+            Ensure(response.StatusCode == HttpStatusCode.OK &&
+                   cookies.Any(value => value.StartsWith("__Host-Atendee.Auth=", StringComparison.Ordinal)),
+                "The in-flight direct-login response emits an application cookie bound to the pre-disable security stamp.");
+        }
+        finally
+        {
+            await ReleaseSecurityAuditDelayLockAsync(auditDelayLock);
+        }
+    }
+    await SetSecurityAuditDelayTriggerAsync(migratorConnectionString, raceDirectLoginUserId,
+        "operational_auth.login_succeeded", enabled: false);
+    Ensure((await raceDirectLoginClient.GetAsync("/api/v1/auth/me")).StatusCode == HttpStatusCode.Unauthorized,
+        "An application cookie emitted by direct login racing with account disablement is unusable.");
 
     // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
     // logins their own per-IP login budget (4 of 5 permits are used here).
