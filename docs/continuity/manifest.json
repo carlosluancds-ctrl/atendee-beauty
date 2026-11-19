@@ -1,39 +1,44 @@
 {
-  "backup_version": "v82-cross-platform-data-protection-certificate",
+  "backup_version": "v83-tenant-customer-management",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V82_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V82_2026-11-19.md",
-  "latest_implementation_commit": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
-  "latest_documentation_parent_commit": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V83_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V83_2026-11-19.md",
+  "latest_implementation_commit": "6ba155281e157d7b17a95646d4b2ccdd927ab49a",
+  "latest_documentation_parent_commit": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44584885716",
+    "run": "44587416282",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
+    "validated_head_sha": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
     "portal_browser_tests": "8 passed",
-    "domain_checks": "26/26 passed",
-    "postgres_rls_checks": "10/10 passed",
+    "domain_checks": "37/37 passed",
+    "postgres_rls_checks": "19/19 passed",
     "identity_checks": "49/49 passed",
-    "data_protection_certificate_checks": "4 passed",
+    "http_checks": "passed",
     "fullstack_browser_result": "1 passed",
     "key_checks": [
       "frontend dependency audit, tests and build",
       "portal browser E2E 8/8",
       "locked dependency restore",
       "Release build with 0 warnings",
-      "domain checks 26/26",
-      "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
+      "domain checks 37/37",
+      "PostgreSQL 18.7 / EF Core / RLS persistence checks 19/19",
       "Identity/TOTP/tenant-context checks 49/49",
-      "production RSA PFX certificate validation and encrypted persistent Data Protection key ring",
-      "second production host decrypts previously protected payload after restart",
-      "incorrect certificate password fails startup closed",
-      "non-Windows production without explicit certificate fails startup closed",
-      "HTTP authentication, antiforgery, cookies, session security, audit, role-matrix and tenant-status checks",
+      "customer contact normalization and validation",
+      "tenant A/B customer read/list isolation by known UUID",
+      "customer RLS blocks cross-tenant insert",
+      "runtime role cannot directly read customer PII outside transaction runner",
+      "customer creation and archive audit events committed transactionally",
+      "idempotent soft archive and archived-update rejection",
+      "receptionist customer create/list and archive denial",
+      "bounded customer pagination",
+      "owner customer create/update/archive",
+      "HTTP authentication, antiforgery, cookies, session revocation, logout, MFA, audit, role-matrix and tenant-status checks",
       "real Kestrel + disposable PostgreSQL full-stack browser E2E",
       "disposable credentials cleared and PostgreSQL container removed"
     ]
@@ -68,7 +73,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Implement and validate a shared/distributed authentication rate limiter with multi-instance concurrency tests without assuming an unverified production Redis/managed-service topology; continue endpoint authorization coverage. Keep A1/A2 administrative endpoints blocked until the product owner explicitly approves their authorization, step-up MFA/four-eyes and audit model.",
+  "next_step": "Build appointment scheduling in dependency order: business hours and professional availability, timezone-safe availability calculation, then transactional booking with PostgreSQL overlap prevention, idempotency, state transitions and append-only audit. Close shared/distributed authentication rate limiting with multi-instance concurrency tests without assuming an unverified production Redis/managed-service topology. Keep Data Protection certificate rotation blocked until old-key decryption support is implemented.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -233,7 +238,7 @@
       "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
     ]
   },
-  "latest_validated_head": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
+  "latest_validated_head": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
   "v76": {
     "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
     "test_commit": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
@@ -380,6 +385,71 @@
       "encrypted key ring backups must be paired with the matching private certificate and restoration tested",
       "only one active certificate is currently supported; do not rotate it without a coordinated old-key decryption plan",
       "no production configuration or deployment was changed"
+    ]
+  },
+  "v83": {
+    "implementation_commit": "6ba155281e157d7b17a95646d4b2ccdd927ab49a",
+    "follow_up_test_safety_commit": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
+    "approval": "approved",
+    "ci_run": "44587416282",
+    "validated_head": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
+    "scope": "tenant-scoped customer management vertical slice with domain normalization, bounded API pagination, RLS persistence, role/status authorization, soft archive and mandatory audit",
+    "api": [
+      "GET /api/v1/customers (page default 1, pageSize default 50, max 100)",
+      "GET /api/v1/customers/{id}",
+      "POST /api/v1/customers",
+      "PATCH /api/v1/customers/{id}",
+      "POST /api/v1/customers/{id}/archive"
+    ],
+    "authorization": {
+      "read_write": [
+        "Owner",
+        "Manager",
+        "Receptionist"
+      ],
+      "archive": [
+        "Owner",
+        "Manager"
+      ],
+      "professional_directory_access": false,
+      "tenant_capabilities_and_status_enforced": true
+    },
+    "data_model": {
+      "fields": [
+        "full_name",
+        "normalized_phone",
+        "email_address",
+        "is_archived",
+        "created_at_utc",
+        "updated_at_utc"
+      ],
+      "contact_requirement": "at least one phone or email",
+      "phone_format": "E.164 syntax; normalized but not verified/deliverable",
+      "email": "trimmed, lowercase and syntax checked",
+      "shared_phone_numbers": "allowed; no unique constraint or automatic merge",
+      "marketing_consent": "not inferred or implemented"
+    },
+    "assertions": [
+      "Domain checks 37/37",
+      "PostgreSQL/RLS persistence checks 19/19",
+      "Identity/TOTP checks 49/49",
+      "HTTP authentication, antiforgery, customer CRUD, role/status and session security checks pass",
+      "Portal browser E2E 8 passed",
+      "Full-stack browser E2E 1 passed",
+      "cross-tenant customer lookup and list are hidden by RLS",
+      "cross-tenant insert is rejected by RLS",
+      "runtime role cannot directly read customers outside tenant transaction runner",
+      "customer creation and archive audit events are transactional",
+      "runtime cannot DELETE or TRUNCATE customer records",
+      "Release build succeeded with 0 warnings"
+    ],
+    "deferred": [
+      "customer contact uniqueness/deduplication policy",
+      "marketing consent/preferences and verification",
+      "privacy access/correction/export/erasure and retention workflows",
+      "free-form customer notes",
+      "WhatsApp/email outreach",
+      "production deployment"
     ]
   }
 }
