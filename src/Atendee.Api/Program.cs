@@ -1,4 +1,6 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading.RateLimiting;
 using Atendee.Api.Authentication;
 using Atendee.Api.Services;
@@ -169,17 +171,62 @@ if (identityEnabled)
                 "DataProtection:KeyRingPath is required outside Development.");
         }
 
-        if (!OperatingSystem.IsWindows())
-        {
-            throw new InvalidOperationException(
-                "Non-Windows production requires an explicitly configured certificate or managed key protector for Data Protection.");
-        }
-
         var keyDirectory = new DirectoryInfo(Path.GetFullPath(keyRingPath));
         keyDirectory.Create();
-        dataProtectionBuilder
-            .PersistKeysToFileSystem(keyDirectory)
-            .ProtectKeysWithDpapi();
+
+        var certificatePath = builder.Configuration["DataProtection:CertificatePath"];
+        var certificatePassword = builder.Configuration["DataProtection:CertificatePassword"];
+        if (!string.IsNullOrWhiteSpace(certificatePath))
+        {
+            if (string.IsNullOrWhiteSpace(certificatePassword))
+            {
+                throw new InvalidOperationException(
+                    "DataProtection:CertificatePassword is required when a certificate protector is configured.");
+            }
+
+            X509Certificate2 certificate;
+            try
+            {
+                certificate = X509CertificateLoader.LoadPkcs12FromFile(
+                    Path.GetFullPath(certificatePath),
+                    certificatePassword,
+                    X509KeyStorageFlags.EphemeralKeySet);
+            }
+            catch (CryptographicException exception)
+            {
+                throw new InvalidOperationException(
+                    "The configured Data Protection certificate could not be loaded.", exception);
+            }
+
+            using var publicKey = certificate.GetRSAPublicKey();
+            using var privateKey = certificate.GetRSAPrivateKey();
+            if (!certificate.HasPrivateKey ||
+                certificate.NotBefore.ToUniversalTime() > DateTime.UtcNow ||
+                certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow ||
+                publicKey is null ||
+                privateKey is null)
+            {
+                certificate.Dispose();
+                throw new InvalidOperationException(
+                    "The Data Protection certificate must be a currently valid RSA certificate with its private key.");
+            }
+
+            builder.Services.AddSingleton(certificate);
+            dataProtectionBuilder
+                .PersistKeysToFileSystem(keyDirectory)
+                .ProtectKeysWithCertificate(certificate);
+        }
+        else if (OperatingSystem.IsWindows())
+        {
+            dataProtectionBuilder
+                .PersistKeysToFileSystem(keyDirectory)
+                .ProtectKeysWithDpapi();
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Non-Windows production requires DataProtection:CertificatePath and DataProtection:CertificatePassword.");
+        }
     }
     else if (!string.IsNullOrWhiteSpace(keyRingPath))
     {

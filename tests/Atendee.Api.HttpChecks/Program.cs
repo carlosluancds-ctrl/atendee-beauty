@@ -1,11 +1,14 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Atendee.Application.Abstractions;
 using Atendee.Domain.Tenants;
 using Atendee.Infrastructure.Identity;
 using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -65,6 +68,125 @@ var factory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWeb
 
 try
 {
+    var certificateTestDirectory = Path.Combine(
+        Path.GetTempPath(), "atendee-dp-certificate-" + Guid.NewGuid().ToString("N"));
+    var certificateKeyRing = Path.Combine(certificateTestDirectory, "key-ring");
+    Directory.CreateDirectory(certificateTestDirectory);
+    var certificatePath = Path.Combine(certificateTestDirectory, "protector.pfx");
+    const string certificatePassword = "Atendee-DP-CI-Only-2026!";
+    var previousKeyRingPath = Environment.GetEnvironmentVariable("DataProtection__KeyRingPath");
+    var previousCertificatePath = Environment.GetEnvironmentVariable("DataProtection__CertificatePath");
+    var previousCertificatePassword = Environment.GetEnvironmentVariable("DataProtection__CertificatePassword");
+    try
+    {
+        using var rsa = RSA.Create(2048);
+        var certificateRequest = new CertificateRequest(
+            "CN=Atendee Data Protection Integration Test",
+            rsa,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        using var generatedCertificate = certificateRequest.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-5),
+            DateTimeOffset.UtcNow.AddDays(2));
+        await File.WriteAllBytesAsync(
+            certificatePath, generatedCertificate.Export(X509ContentType.Pfx, certificatePassword));
+
+        Environment.SetEnvironmentVariable("DataProtection__KeyRingPath", certificateKeyRing);
+        Environment.SetEnvironmentVariable("DataProtection__CertificatePath", certificatePath);
+        Environment.SetEnvironmentVariable("DataProtection__CertificatePassword", certificatePassword);
+
+        string protectedPayload;
+        using (var certificateFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+            .WithWebHostBuilder(web =>
+            {
+                web.UseContentRoot(apiContentRoot);
+                web.UseEnvironment("Production");
+            }))
+        {
+            var protector = certificateFactory.Services
+                .GetRequiredService<IDataProtectionProvider>()
+                .CreateProtector("Atendee.Api.HttpChecks.DataProtection");
+            protectedPayload = protector.Protect("persistent-certificate-protection");
+        }
+
+        var keyFiles = Directory.GetFiles(certificateKeyRing, "*.xml");
+        Ensure(keyFiles.Length > 0 &&
+               File.ReadAllText(keyFiles[0]).Contains("encryptedSecret", StringComparison.OrdinalIgnoreCase),
+            "Production Data Protection persists certificate-encrypted keys instead of plaintext key material.");
+
+        using (var restartedCertificateFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+            .WithWebHostBuilder(web =>
+            {
+                web.UseContentRoot(apiContentRoot);
+                web.UseEnvironment("Production");
+            }))
+        {
+            var restartedProtector = restartedCertificateFactory.Services
+                .GetRequiredService<IDataProtectionProvider>()
+                .CreateProtector("Atendee.Api.HttpChecks.DataProtection");
+            Ensure(restartedProtector.Unprotect(protectedPayload) == "persistent-certificate-protection",
+                "A restarted production host can unprotect data using the persistent certificate-protected key ring.");
+        }
+
+        Environment.SetEnvironmentVariable("DataProtection__CertificatePassword", "incorrect-password");
+        var invalidCertificateRejected = false;
+        using (var invalidCertificateFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+            .WithWebHostBuilder(web =>
+            {
+                web.UseContentRoot(apiContentRoot);
+                web.UseEnvironment("Production");
+            }))
+        {
+            try
+            {
+                _ = invalidCertificateFactory.Services;
+            }
+            catch (Exception exception) when (
+                exception.ToString().Contains("Data Protection certificate could not be loaded", StringComparison.Ordinal))
+            {
+                invalidCertificateRejected = true;
+            }
+        }
+
+        Ensure(invalidCertificateRejected,
+            "An unreadable or incorrectly password-protected Data Protection certificate fails production startup closed.");
+
+        if (!OperatingSystem.IsWindows())
+        {
+            Environment.SetEnvironmentVariable("DataProtection__CertificatePath", null);
+            Environment.SetEnvironmentVariable("DataProtection__CertificatePassword", null);
+            var missingCertificateRejected = false;
+            using var missingCertificateFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+                .WithWebHostBuilder(web =>
+                {
+                    web.UseContentRoot(apiContentRoot);
+                    web.UseEnvironment("Production");
+                });
+            try
+            {
+                _ = missingCertificateFactory.Services;
+            }
+            catch (Exception exception) when (
+                exception.ToString().Contains("Non-Windows production requires DataProtection:CertificatePath", StringComparison.Ordinal))
+            {
+                missingCertificateRejected = true;
+            }
+
+            Ensure(missingCertificateRejected,
+                "Non-Windows production fails startup closed when no explicit Data Protection certificate is configured.");
+        }
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("DataProtection__KeyRingPath", previousKeyRingPath);
+        Environment.SetEnvironmentVariable("DataProtection__CertificatePath", previousCertificatePath);
+        Environment.SetEnvironmentVariable("DataProtection__CertificatePassword", previousCertificatePassword);
+        if (Directory.Exists(certificateTestDirectory))
+        {
+            Directory.Delete(certificateTestDirectory, recursive: true);
+        }
+    }
+
     var defaultForwardedHeaders = factory.Services
         .GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
     Ensure(defaultForwardedHeaders.ForwardedHeaders ==
