@@ -1,3 +1,4 @@
+using System.Net;
 using System.Threading.RateLimiting;
 using Atendee.Api.Authentication;
 using Atendee.Api.Services;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +18,38 @@ var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
 builder.Services.AddProblemDetails();
 builder.Services.AddAuthorization();
+
+var configuredTrustedProxyAddresses =
+    builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+var trustedProxyAddresses = new List<IPAddress>(configuredTrustedProxyAddresses.Length);
+foreach (var configuredAddress in configuredTrustedProxyAddresses)
+{
+    if (!IPAddress.TryParse(configuredAddress, out var address) ||
+        address.Equals(IPAddress.Any) ||
+        address.Equals(IPAddress.IPv6Any) ||
+        address.Equals(IPAddress.Broadcast) ||
+        address.IsIPv6Multicast)
+    {
+        throw new InvalidOperationException(
+            "ForwardedHeaders:KnownProxies must contain only exact, valid unicast IP addresses.");
+    }
+
+    trustedProxyAddresses.Add(address);
+}
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.RequireHeaderSymmetry = true;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+
+    foreach (var trustedProxyAddress in trustedProxyAddresses)
+    {
+        options.KnownProxies.Add(trustedProxyAddress);
+    }
+});
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -263,6 +297,8 @@ if (identityEnabled)
 }
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 app.Use(async (context, next) =>
 {

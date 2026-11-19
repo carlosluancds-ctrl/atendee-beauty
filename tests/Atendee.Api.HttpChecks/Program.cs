@@ -6,6 +6,8 @@ using Atendee.Domain.Tenants;
 using Atendee.Infrastructure.Identity;
 using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -13,6 +15,8 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -60,6 +64,105 @@ var factory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWeb
 
 try
 {
+    var defaultForwardedHeaders = factory.Services
+        .GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
+    Ensure(defaultForwardedHeaders.ForwardedHeaders ==
+               (ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto) &&
+           defaultForwardedHeaders.ForwardLimit == 1 &&
+           defaultForwardedHeaders.RequireHeaderSymmetry &&
+           defaultForwardedHeaders.KnownProxies.Count == 0 &&
+           defaultForwardedHeaders.KnownNetworks.Count == 0,
+        "Forwarded headers trust no proxy by default and accept only one symmetric X-Forwarded-For/X-Forwarded-Proto hop.");
+
+    using var forwardedHeadersLoggerFactory = LoggerFactory.Create(_ => { });
+    var spoofedForwardedContext = new DefaultHttpContext();
+    spoofedForwardedContext.Connection.RemoteIpAddress = IPAddress.Loopback;
+    spoofedForwardedContext.Request.Scheme = "http";
+    spoofedForwardedContext.Request.Host = new HostString("api.example.invalid");
+    spoofedForwardedContext.Request.Headers["X-Forwarded-For"] = "203.0.113.42";
+    spoofedForwardedContext.Request.Headers["X-Forwarded-Proto"] = "https";
+    spoofedForwardedContext.Request.Headers["X-Forwarded-Host"] = "attacker.example";
+    var untrustedForwardedMiddleware = new ForwardedHeadersMiddleware(
+        _ => Task.CompletedTask,
+        forwardedHeadersLoggerFactory,
+        Options.Create(defaultForwardedHeaders));
+    await untrustedForwardedMiddleware.Invoke(spoofedForwardedContext);
+    Ensure(spoofedForwardedContext.Connection.RemoteIpAddress == IPAddress.Loopback &&
+           spoofedForwardedContext.Request.Scheme == "http" &&
+           spoofedForwardedContext.Request.Host == new HostString("api.example.invalid"),
+        "Untrusted forwarded IP, protocol and host headers cannot spoof the request origin or rate-limit partition.");
+
+    using var trustedProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+        .WithWebHostBuilder(web =>
+        {
+            web.UseContentRoot(apiContentRoot);
+            web.UseEnvironment("Development");
+            web.ConfigureAppConfiguration((_, configuration) =>
+            {
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Identity"] = null,
+                    ["ConnectionStrings:Tenant"] = null,
+                    ["DataProtection:KeyRingPath"] = null,
+                    ["ForwardedHeaders:KnownProxies:0"] = "127.0.0.1"
+                });
+            });
+        });
+    var trustedForwardedHeaders = trustedProxyFactory.Services
+        .GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
+    Ensure(trustedForwardedHeaders.KnownProxies.Contains(IPAddress.Loopback) &&
+           trustedForwardedHeaders.ForwardLimit == 1,
+        "An explicitly configured exact proxy IP is trusted for one forwarding hop.");
+
+    var trustedForwardedContext = new DefaultHttpContext();
+    trustedForwardedContext.Connection.RemoteIpAddress = IPAddress.Loopback;
+    trustedForwardedContext.Request.Scheme = "http";
+    trustedForwardedContext.Request.Host = new HostString("api.example.invalid");
+    trustedForwardedContext.Request.Headers["X-Forwarded-For"] = "203.0.113.42";
+    trustedForwardedContext.Request.Headers["X-Forwarded-Proto"] = "https";
+    trustedForwardedContext.Request.Headers["X-Forwarded-Host"] = "attacker.example";
+    var trustedForwardedMiddleware = new ForwardedHeadersMiddleware(
+        _ => Task.CompletedTask,
+        forwardedHeadersLoggerFactory,
+        Options.Create(trustedForwardedHeaders));
+    await trustedForwardedMiddleware.Invoke(trustedForwardedContext);
+    Ensure(trustedForwardedContext.Connection.RemoteIpAddress == IPAddress.Parse("203.0.113.42") &&
+           trustedForwardedContext.Request.Scheme == "https" &&
+           trustedForwardedContext.Request.Host == new HostString("api.example.invalid"),
+        "A known proxy may supply the client IP and HTTPS scheme, but cannot override the host header.");
+
+    using (var invalidProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+        .WithWebHostBuilder(web =>
+        {
+            web.UseContentRoot(apiContentRoot);
+            web.UseEnvironment("Development");
+            web.ConfigureAppConfiguration((_, configuration) =>
+            {
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Identity"] = null,
+                    ["ConnectionStrings:Tenant"] = null,
+                    ["DataProtection:KeyRingPath"] = null,
+                    ["ForwardedHeaders:KnownProxies:0"] = "not-an-ip"
+                });
+            });
+        }))
+    {
+        var invalidProxyRejected = false;
+        try
+        {
+            _ = invalidProxyFactory.Services;
+        }
+        catch (Exception exception) when (
+            exception.ToString().Contains("ForwardedHeaders:KnownProxies", StringComparison.Ordinal))
+        {
+            invalidProxyRejected = true;
+        }
+
+        Ensure(invalidProxyRejected,
+            "Invalid trusted-proxy configuration fails application startup closed.");
+    }
+
     using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
