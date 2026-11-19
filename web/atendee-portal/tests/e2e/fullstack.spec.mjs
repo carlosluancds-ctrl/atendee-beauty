@@ -184,6 +184,7 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   expect(ownerServiceId).toBeTruthy();
 
   const ownerAuthenticatedRequestToken = await getAntiforgeryToken(page);
+  let secondOwnerServiceId;
 
   // A second independently provisioned salon must not read or mutate Salon A resources.
   // Keep both Owner sessions alive in separate browser contexts to exercise both directions
@@ -270,9 +271,23 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
     });
     expect(secondOwnerList.status).toBe(200);
     expect(secondOwnerList.services).toHaveLength(1);
-    const secondOwnerServiceId = secondOwnerList.services[0].id;
+    secondOwnerServiceId = secondOwnerList.services[0].id;
     expect(secondOwnerServiceId).toBeTruthy();
     expect(secondOwnerServiceId).not.toBe(ownerServiceId);
+
+    const salonBCannotAssignSalonAService = await putWithToken(
+      secondOwnerPage, "/api/v1/professionals/" + salonBProfessionalId + "/services", secondOwnerToken, {
+        serviceIds: [ownerServiceId]
+      });
+    expect(salonBCannotAssignSalonAService).toEqual({
+      status: 400, error: "professional_services_validation_failed"
+    });
+    const salonBProfileAfterRejectedAssignment = await secondOwnerPage.evaluate(async () => {
+      const response = await fetch("/api/v1/professionals", { credentials: "same-origin" });
+      return { status: response.status, profiles: await response.json() };
+    });
+    expect(salonBProfileAfterRejectedAssignment.status).toBe(200);
+    expect(salonBProfileAfterRejectedAssignment.profiles[0].serviceIds).toHaveLength(0);
 
     const salonBReadSalonA = await secondOwnerPage.evaluate(async id =>
       (await fetch("/api/v1/services/" + id, { credentials: "same-origin" })).status, ownerServiceId);
@@ -335,6 +350,7 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   await page.getByLabel("Guardei meus códigos de recuperação em local seguro.").check();
   await page.getByRole("button", { name: "Concluir" }).click();
   await expect(page).toHaveURL(/\/services$/);
+  const managerRequestToken = await getAntiforgeryToken(page);
 
   // Manager creates a Professional profile and assigns the real tenant service.
   await page.goto("/team");
@@ -342,6 +358,26 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   await page.getByLabel("Profissional elegível").selectOption(professionalId);
   await page.getByRole("button", { name: "Criar perfil" }).click();
   await expect(page.getByRole("heading", { name: "Beatriz E2E" })).toBeVisible();
+  const salonAProfessionalListForAssignment = await page.evaluate(async () => {
+    const response = await fetch("/api/v1/professionals", { credentials: "same-origin" });
+    return { status: response.status, profiles: await response.json() };
+  });
+  expect(salonAProfessionalListForAssignment.status).toBe(200);
+  expect(salonAProfessionalListForAssignment.profiles).toHaveLength(1);
+  const salonAProfessionalId = salonAProfessionalListForAssignment.profiles[0].id;
+  const salonACannotAssignSalonBService = await putWithToken(
+    page, "/api/v1/professionals/" + salonAProfessionalId + "/services", managerRequestToken, {
+      serviceIds: [secondOwnerServiceId]
+    });
+  expect(salonACannotAssignSalonBService).toEqual({
+    status: 400, error: "professional_services_validation_failed"
+  });
+  const salonAProfileAfterRejectedAssignment = await page.evaluate(async () => {
+    const response = await fetch("/api/v1/professionals", { credentials: "same-origin" });
+    return { status: response.status, profiles: await response.json() };
+  });
+  expect(salonAProfileAfterRejectedAssignment.status).toBe(200);
+  expect(salonAProfileAfterRejectedAssignment.profiles[0].serviceIds).toHaveLength(0);
   const professionalCard = page.locator(".professional-card").filter({
     has: page.getByRole("heading", { name: "Beatriz E2E" })
   });
