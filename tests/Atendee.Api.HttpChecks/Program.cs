@@ -30,6 +30,7 @@ WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>? statusFactory = null;
 string? statusKeyRing = null;
 string? lockoutKeyRing = null;
 string? sequentialLockoutKeyRing = null;
+string? crossFlowKeyRing = null;
 
 // Minimal hosting reads its default configuration while Program.cs executes;
 // provide connection strings as process environment variables before the
@@ -1588,6 +1589,218 @@ try
                .Count(type => type == "operational_auth.login_failed") == 2,
         "Attempts begun after lockout do not create unbounded login-failure audit rows.");
 
+    // Password failures and MFA failures share one Identity counter. Race them
+    // for both an MFA challenge identity and an enrollment-pending identity.
+    var challengeCrossFlowEmail = "http-crossflow-challenge-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var enrollmentCrossFlowEmail = "http-crossflow-enrollment-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string crossFlowPassword = "Atendee-Cross-Flow-2026!";
+    Guid challengeCrossFlowUserId;
+    Guid enrollmentCrossFlowUserId;
+    crossFlowKeyRing = Path.Combine(Path.GetTempPath(), "atendee-crossflow-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(crossFlowKeyRing);
+    using var crossFlowFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    {
+        web.UseContentRoot(apiContentRoot);
+        web.UseEnvironment("Development");
+        web.ConfigureAppConfiguration((_, configuration) =>
+        {
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Identity"] = identityConnectionString,
+                ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                ["DataProtection:KeyRingPath"] = crossFlowKeyRing
+            });
+        });
+    });
+    await using (var scope = crossFlowFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var challengeUser = new OperationalIdentityUser
+        {
+            UserName = challengeCrossFlowEmail,
+            Email = challengeCrossFlowEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = true
+        };
+        var challengeCreated = await users.CreateAsync(challengeUser, crossFlowPassword);
+        Ensure(challengeCreated.Succeeded, "Cross-flow MFA challenge identity is created.");
+        challengeCrossFlowUserId = challengeUser.Id;
+        var authenticatorKey = await users.ResetAuthenticatorKeyAsync(challengeUser);
+        Ensure(authenticatorKey.Succeeded, "Cross-flow MFA challenge identity receives an authenticator key.");
+        var enabled = await users.SetTwoFactorEnabledAsync(challengeUser, true);
+        Ensure(enabled.Succeeded, "Cross-flow MFA challenge identity is MFA-enabled.");
+        var challengeRecoveryCodes = await users.GenerateNewTwoFactorRecoveryCodesAsync(challengeUser, 10);
+        Ensure(challengeRecoveryCodes is not null && challengeRecoveryCodes.Any(),
+            "Cross-flow MFA challenge identity receives recovery codes.");
+
+        var enrollmentUser = new OperationalIdentityUser
+        {
+            UserName = enrollmentCrossFlowEmail,
+            Email = enrollmentCrossFlowEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = true
+        };
+        var enrollmentCreated = await users.CreateAsync(enrollmentUser, crossFlowPassword);
+        Ensure(enrollmentCreated.Succeeded, "Cross-flow MFA enrollment identity is created.");
+        enrollmentCrossFlowUserId = enrollmentUser.Id;
+    }
+    await SeedMembershipAsync(migratorConnectionString, Guid.NewGuid(), challengeCrossFlowUserId, roleId: 2);
+
+    using var challengeCrossFlowClient = crossFlowFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    using var challengeCrossFlowWrongLoginClient = crossFlowFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    using var enrollmentCrossFlowClient = crossFlowFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    using var enrollmentCrossFlowWrongLoginClient = crossFlowFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        HandleCookies = true,
+        AllowAutoRedirect = false
+    });
+    var challengeCrossFlowToken = await GetAntiforgeryRequestTokenAsync(challengeCrossFlowClient);
+    var challengeWrongLoginToken = await GetAntiforgeryRequestTokenAsync(challengeCrossFlowWrongLoginClient);
+    var enrollmentCrossFlowToken = await GetAntiforgeryRequestTokenAsync(enrollmentCrossFlowClient);
+    var enrollmentWrongLoginToken = await GetAntiforgeryRequestTokenAsync(enrollmentCrossFlowWrongLoginClient);
+
+    using (var response = await PostWithCsrfAsync(challengeCrossFlowClient, "/api/v1/auth/login",
+        challengeCrossFlowToken, new { email = challengeCrossFlowEmail, password = crossFlowPassword }))
+        Ensure(response.StatusCode == HttpStatusCode.Accepted,
+            "MFA-enabled cross-flow identity receives a pending challenge cookie.");
+    using (var response = await PostWithCsrfAsync(enrollmentCrossFlowClient, "/api/v1/auth/login",
+        enrollmentCrossFlowToken, new { email = enrollmentCrossFlowEmail, password = crossFlowPassword }))
+        Ensure(response.StatusCode == HttpStatusCode.Accepted,
+            "Unenrolled cross-flow identity receives an MFA setup cookie.");
+
+    using (var response = await PostWithCsrfAsync(enrollmentCrossFlowClient,
+        "/api/v1/auth/mfa/enrollment/start", enrollmentCrossFlowToken, new { }))
+        Ensure(response.StatusCode == HttpStatusCode.OK,
+            "Cross-flow enrollment session initializes its TOTP secret.");
+
+    string invalidChallengeCrossFlowCode;
+    string invalidEnrollmentCrossFlowCode;
+    await using (var scope = crossFlowFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var challengeUser = await users.FindByIdAsync(challengeCrossFlowUserId.ToString());
+        var enrollmentUser = await users.FindByIdAsync(enrollmentCrossFlowUserId.ToString());
+        Ensure(challengeUser is not null && enrollmentUser is not null,
+            "Both cross-flow identities remain available after their pending-MFA logins.");
+
+        var challengeValidCode = await users.GenerateTwoFactorTokenAsync(
+            challengeUser!, users.Options.Tokens.AuthenticatorTokenProvider);
+        invalidChallengeCrossFlowCode = (challengeValidCode[0] == '0' ? '1' : '0') + challengeValidCode[1..];
+
+        var enrollmentValidCode = await users.GenerateTwoFactorTokenAsync(
+            enrollmentUser!, users.Options.Tokens.AuthenticatorTokenProvider);
+        invalidEnrollmentCrossFlowCode = (enrollmentValidCode[0] == '0' ? '1' : '0') + enrollmentValidCode[1..];
+
+        challengeUser!.AccessFailedCount = 2;
+        enrollmentUser!.AccessFailedCount = 3;
+        var challengeSeeded = await users.UpdateAsync(challengeUser);
+        var enrollmentSeeded = await users.UpdateAsync(enrollmentUser);
+        Ensure(challengeSeeded.Succeeded && enrollmentSeeded.Succeeded,
+            "Both cross-flow identities are seeded below the lockout threshold.");
+    }
+
+    await SetLoginFailureDelayTriggerAsync(migratorConnectionString, challengeCrossFlowUserId, enabled: true);
+    HttpResponseMessage[] challengeCrossFlowResponses;
+    try
+    {
+        challengeCrossFlowResponses = await Task.WhenAll(
+            PostWithCsrfAsync(challengeCrossFlowClient, "/api/v1/auth/mfa/challenge", challengeCrossFlowToken,
+                new { code = invalidChallengeCrossFlowCode, useRecoveryCode = false }),
+            PostWithCsrfAsync(challengeCrossFlowClient, "/api/v1/auth/mfa/challenge", challengeCrossFlowToken,
+                new { code = "invalid-recovery-code", useRecoveryCode = true }),
+            PostWithCsrfAsync(challengeCrossFlowWrongLoginClient, "/api/v1/auth/login", challengeWrongLoginToken,
+                new { email = challengeCrossFlowEmail, password = "Wrong-Cross-Flow-Password-2026!" }));
+    }
+    finally
+    {
+        await SetLoginFailureDelayTriggerAsync(migratorConnectionString, challengeCrossFlowUserId, enabled: false);
+    }
+    foreach (var response in challengeCrossFlowResponses)
+    {
+        using (response)
+            Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
+                "Concurrent password and TOTP failures are both generically rejected.");
+    }
+    await using (var scope = crossFlowFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var user = await users.FindByIdAsync(challengeCrossFlowUserId.ToString());
+        Ensure(user is not null && await users.IsLockedOutAsync(user),
+            "Concurrent password and TOTP failures both count toward the shared five-attempt lockout.");
+    }
+    var challengeCrossFlowEvents = await ReadSecurityAuditTypesAsync(migratorConnectionString, challengeCrossFlowUserId);
+    Ensure(challengeCrossFlowEvents.Count(type => type == "operational_auth.login_failed") == 1 &&
+           challengeCrossFlowEvents.Count(type => type == "operational_mfa.challenge_failed") == 2,
+        "Cross-flow password, TOTP and recovery-code failures each write exactly one mandatory audit event.");
+    using (var response = await PostWithCsrfAsync(challengeCrossFlowClient, "/api/v1/auth/mfa/challenge",
+        challengeCrossFlowToken, new { code = invalidChallengeCrossFlowCode, useRecoveryCode = false }))
+        Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
+            "An already-locked MFA challenge is rejected before another counter or audit mutation.");
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, challengeCrossFlowUserId))
+               .Count(type => type == "operational_mfa.challenge_failed") == 2,
+        "Already-locked MFA challenges do not create extra failure audit events.");
+
+    await SetLoginFailureDelayTriggerAsync(migratorConnectionString, enrollmentCrossFlowUserId, enabled: true);
+    HttpResponseMessage[] enrollmentCrossFlowResponses;
+    try
+    {
+        enrollmentCrossFlowResponses = await Task.WhenAll(
+            PostWithCsrfAsync(enrollmentCrossFlowClient, "/api/v1/auth/mfa/enrollment/verify",
+                enrollmentCrossFlowToken, new { code = invalidEnrollmentCrossFlowCode }),
+            PostWithCsrfAsync(enrollmentCrossFlowWrongLoginClient, "/api/v1/auth/login",
+                enrollmentWrongLoginToken, new
+                {
+                    email = enrollmentCrossFlowEmail,
+                    password = "Wrong-Cross-Flow-Password-2026!"
+                }));
+    }
+    finally
+    {
+        await SetLoginFailureDelayTriggerAsync(migratorConnectionString, enrollmentCrossFlowUserId, enabled: false);
+    }
+    Ensure(enrollmentCrossFlowResponses.Length == 2 &&
+           (enrollmentCrossFlowResponses[0].StatusCode == HttpStatusCode.BadRequest ||
+            enrollmentCrossFlowResponses[0].StatusCode == HttpStatusCode.Unauthorized) &&
+           enrollmentCrossFlowResponses[1].StatusCode == HttpStatusCode.Unauthorized,
+        "Concurrent enrollment and password failures return their expected generic/invalid-code responses.");
+    foreach (var response in enrollmentCrossFlowResponses)
+        response.Dispose();
+    await using (var scope = crossFlowFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var user = await users.FindByIdAsync(enrollmentCrossFlowUserId.ToString());
+        Ensure(user is not null && await users.IsLockedOutAsync(user),
+            "Concurrent password and enrollment failures both count toward the shared five-attempt lockout.");
+    }
+    var enrollmentCrossFlowEvents = await ReadSecurityAuditTypesAsync(migratorConnectionString, enrollmentCrossFlowUserId);
+    Ensure(enrollmentCrossFlowEvents.Count(type => type == "operational_auth.login_failed") == 1 &&
+           enrollmentCrossFlowEvents.Count(type => type == "operational_mfa.enrollment_failed") == 1,
+        "Cross-flow password and enrollment failures each write exactly one mandatory audit event.");
+    using (var response = await PostWithCsrfAsync(enrollmentCrossFlowClient,
+        "/api/v1/auth/mfa/enrollment/verify", enrollmentCrossFlowToken,
+        new { code = invalidEnrollmentCrossFlowCode }))
+        Ensure(response.StatusCode == HttpStatusCode.Unauthorized,
+            "An already-locked MFA enrollment session is rejected before another counter or audit mutation.");
+    Ensure((await ReadSecurityAuditTypesAsync(migratorConnectionString, enrollmentCrossFlowUserId))
+               .Count(type => type == "operational_mfa.enrollment_failed") == 1,
+        "An already-locked MFA enrollment attempt does not create an extra failure audit event.");
+
     // Tenant lifecycle policy through real HTTP sessions. A fresh host gives these
     // logins their own per-IP login budget (4 of 5 permits are used here).
     statusKeyRing = Path.Combine(Path.GetTempPath(), "atendee-status-" + Guid.NewGuid().ToString("N"));
@@ -1735,6 +1948,8 @@ finally
             Directory.Delete(lockoutKeyRing, recursive: true);
         if (sequentialLockoutKeyRing is not null && Directory.Exists(sequentialLockoutKeyRing))
             Directory.Delete(sequentialLockoutKeyRing, recursive: true);
+        if (crossFlowKeyRing is not null && Directory.Exists(crossFlowKeyRing))
+            Directory.Delete(crossFlowKeyRing, recursive: true);
         if (mfaKeyRing is not null && Directory.Exists(mfaKeyRing))
             Directory.Delete(mfaKeyRing, recursive: true);
         if (promotionKeyRing is not null && Directory.Exists(promotionKeyRing))

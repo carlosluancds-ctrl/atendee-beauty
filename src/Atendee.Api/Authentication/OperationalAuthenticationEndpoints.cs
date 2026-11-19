@@ -159,29 +159,11 @@ public static class OperationalAuthenticationEndpoints
         await using (var passwordTransaction = await identityDb.Database.BeginTransactionAsync(
             httpContext.RequestAborted))
         {
-            var connection = identityDb.Database.GetDbConnection();
-            await using (var lockUser = connection.CreateCommand())
-            {
-                lockUser.Transaction = passwordTransaction.GetDbTransaction();
-                lockUser.CommandText = """
-                    SELECT "Id"
-                      FROM identity."AspNetUsers"
-                     WHERE "Id" = @user_id
-                     FOR UPDATE
-                    """;
-                var userIdParameter = lockUser.CreateParameter();
-                userIdParameter.ParameterName = "user_id";
-                userIdParameter.Value = user.Id;
-                lockUser.Parameters.Add(userIdParameter);
+            // FindByEmailAsync ran before the transaction. Lock and refresh so
+            // queued attempts observe the committed counter, lockout end and stamp.
+            if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted))
+                return GenericLoginFailure();
 
-                if (await lockUser.ExecuteScalarAsync(httpContext.RequestAborted) is not Guid)
-                    return GenericLoginFailure();
-            }
-
-            // FindByEmailAsync ran before the transaction. Refresh after acquiring
-            // the row lock so a request queued behind another failed attempt sees
-            // the committed counter, lockout end and concurrency stamp.
-            await identityDb.Entry(user).ReloadAsync(httpContext.RequestAborted);
             var alreadyLockedOut = await userManager.IsLockedOutAsync(user);
 
             var passwordCheck = await signInManager.CheckPasswordSignInAsync(
@@ -338,17 +320,27 @@ public static class OperationalAuthenticationEndpoints
             // identity-database transaction.
             await using var transaction = await identityDb.Database.BeginTransactionAsync(
                 httpContext.RequestAborted);
+            if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
+                await userManager.IsLockedOutAsync(user))
+                return Results.Unauthorized();
+
             var redeemed = await userManager.RedeemTwoFactorRecoveryCodeAsync(user, code);
             if (!redeemed.Succeeded)
             {
-                await userManager.AccessFailedAsync(user);
+                var failed = await userManager.AccessFailedAsync(user);
+                if (!failed.Succeeded)
+                    return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
                 await auditWriter.WriteAsync("operational_mfa.challenge_failed",
                     null, user.Id, httpContext.RequestAborted);
                 await transaction.CommitAsync(httpContext.RequestAborted);
                 return Results.Unauthorized();
             }
 
-            await userManager.ResetAccessFailedCountAsync(user);
+            var reset = await userManager.ResetAccessFailedCountAsync(user);
+            if (!reset.Succeeded)
+                return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
             await auditWriter.WriteAsync("operational_mfa.recovery_code_redeemed",
                 user.Id, user.Id, httpContext.RequestAborted);
             await transaction.CommitAsync(httpContext.RequestAborted);
@@ -367,7 +359,14 @@ public static class OperationalAuthenticationEndpoints
                 // commit together, just like the recovery-code failure path.
                 await using var failureTransaction = await identityDb.Database.BeginTransactionAsync(
                     httpContext.RequestAborted);
-                await userManager.AccessFailedAsync(user);
+                if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
+                    await userManager.IsLockedOutAsync(user))
+                    return Results.Unauthorized();
+
+                var failed = await userManager.AccessFailedAsync(user);
+                if (!failed.Succeeded)
+                    return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
                 await auditWriter.WriteAsync("operational_mfa.challenge_failed",
                     null, user.Id, httpContext.RequestAborted);
                 await failureTransaction.CommitAsync(httpContext.RequestAborted);
@@ -376,7 +375,14 @@ public static class OperationalAuthenticationEndpoints
 
             await using var transaction = await identityDb.Database.BeginTransactionAsync(
                 httpContext.RequestAborted);
-            await userManager.ResetAccessFailedCountAsync(user);
+            if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
+                await userManager.IsLockedOutAsync(user))
+                return Results.Unauthorized();
+
+            var reset = await userManager.ResetAccessFailedCountAsync(user);
+            if (!reset.Succeeded)
+                return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
             await auditWriter.WriteAsync("operational_mfa.totp_challenge_succeeded",
                 user.Id, user.Id, httpContext.RequestAborted);
             await transaction.CommitAsync(httpContext.RequestAborted);
@@ -494,7 +500,18 @@ public static class OperationalAuthenticationEndpoints
                 await using (var failureTransaction = await identityDb.Database.BeginTransactionAsync(
                     httpContext.RequestAborted))
                 {
-                    await userManager.AccessFailedAsync(user);
+                    if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
+                        await userManager.IsLockedOutAsync(user) ||
+                        user.TwoFactorEnabled)
+                    {
+                        await httpContext.SignOutAsync(MfaSetupScheme);
+                        return Results.Unauthorized();
+                    }
+
+                    var failed = await userManager.AccessFailedAsync(user);
+                    if (!failed.Succeeded)
+                        return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
                     await auditWriter.WriteAsync("operational_mfa.enrollment_failed",
                         null, user.Id, httpContext.RequestAborted);
                     await failureTransaction.CommitAsync(httpContext.RequestAborted);
@@ -511,7 +528,18 @@ public static class OperationalAuthenticationEndpoints
 
             await using var transaction = await identityDb.Database.BeginTransactionAsync(
                 httpContext.RequestAborted);
-            await userManager.ResetAccessFailedCountAsync(user);
+            if (!await LockAndReloadIdentityUserAsync(identityDb, user, httpContext.RequestAborted) ||
+                await userManager.IsLockedOutAsync(user) ||
+                user.TwoFactorEnabled)
+            {
+                await httpContext.SignOutAsync(MfaSetupScheme);
+                return Results.Unauthorized();
+            }
+
+            var reset = await userManager.ResetAccessFailedCountAsync(user);
+            if (!reset.Succeeded)
+                return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
+
             var enabled = await userManager.SetTwoFactorEnabledAsync(user, true);
             if (!enabled.Succeeded)
                 return Results.Problem(statusCode: StatusCodes.Status500InternalServerError);
@@ -568,6 +596,34 @@ public static class OperationalAuthenticationEndpoints
     {
         await httpContext.SignOutAsync(MfaSetupScheme);
         return Results.NoContent();
+    }
+
+    private static async Task<bool> LockAndReloadIdentityUserAsync(
+        AtendeeIdentityDbContext identityDb,
+        OperationalIdentityUser user,
+        CancellationToken cancellationToken)
+    {
+        var transaction = identityDb.Database.CurrentTransaction
+            ?? throw new InvalidOperationException("An identity transaction is required before locking a user row.");
+        var connection = identityDb.Database.GetDbConnection();
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction.GetDbTransaction();
+        command.CommandText = """
+            SELECT "Id"
+              FROM identity."AspNetUsers"
+             WHERE "Id" = @user_id
+             FOR UPDATE
+            """;
+        var userIdParameter = command.CreateParameter();
+        userIdParameter.ParameterName = "user_id";
+        userIdParameter.Value = user.Id;
+        command.Parameters.Add(userIdParameter);
+
+        if (await command.ExecuteScalarAsync(cancellationToken) is not Guid)
+            return false;
+
+        await identityDb.Entry(user).ReloadAsync(cancellationToken);
+        return true;
     }
 
     private static async Task<OperationalIdentityUser?> GetSetupUserAsync(
