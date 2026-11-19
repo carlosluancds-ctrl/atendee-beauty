@@ -1,36 +1,33 @@
 {
-  "backup_version": "v77-account-security-identityresult-failure-tests-approved",
+  "backup_version": "v78-account-security-authorization-surface-reviewed",
   "updated_at": "2026-11-19",
   "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
   "branch": "security/csrf-webhook-antiforgery-v23",
-  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V77_2026-11-19.md",
-  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V77_2026-11-19.md",
+  "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V78_2026-11-19.md",
+  "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V78_2026-11-19.md",
   "latest_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
-  "latest_documentation_parent_commit": "c3d8ad0fc9f43a76ba82309e72d5a51a51342211",
+  "latest_documentation_parent_commit": "867496cce35baae69e35c2cd7cdbd2f05de32320",
   "latest_ci": {
     "workflow": "PostgreSQL 18 persistence integration",
-    "run": "44568548323",
+    "run": "44569197822",
     "attempt": 1,
     "status": "success",
-    "validated_head_sha": "c3d8ad0fc9f43a76ba82309e72d5a51a51342211",
+    "validated_head_sha": "867496cce35baae69e35c2cd7cdbd2f05de32320",
     "job": "Build and verify tenant isolation",
     "job_status": "success",
-    "portal_browser_tests": "8 passed (4.6s)",
+    "portal_browser_tests": "8 passed",
     "domain_checks": "26/26 passed",
     "postgres_rls_checks": "10/10 passed",
     "identity_checks": "49/49 passed",
-    "fullstack_browser_result": "1 passed (4.8s)",
+    "fullstack_browser_result": "1 passed",
     "key_checks": [
       "frontend dependency audit, tests and build",
       "Release build",
       "domain checks 26/26",
       "PostgreSQL 18.7 / EF Core / RLS checks 10/10",
       "Identity/TOTP/tenant-context checks 49/49",
-      "DisableAsync explicit IdentityResult.Failed aborts before security-stamp update and audit persistence",
-      "RevokeSessionsAsync explicit IdentityResult.Failed aborts before audit persistence",
-      "persisted LockoutEnd and SecurityStamp remain unchanged after both explicit IdentityResult failures",
-      "V64-V76 security regressions remain passing",
-      "HTTP authentication/session security and real Kestrel full-stack browser checks",
+      "HTTP authentication, session security and full-stack browser checks",
+      "V64-V77 security regression coverage remains passing",
       "disposable credentials cleared and PostgreSQL container removed"
     ]
   },
@@ -64,7 +61,7 @@
     "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
     "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
   },
-  "next_step": "Perform a read-only authorization-surface review of every IOperationalAccountSecurityService call site and route registration; confirm no unapproved cross-tenant administrative endpoint exposes disable/revoke and document required actor/tenant authorization boundaries.",
+  "next_step": "Do not add an A1/A2 administrative HTTP endpoint until explicit owner approval of actor/tenant/role scope, self/last-Owner rules, Platform Admin realm, step-up MFA/four-eyes and tenant-scoped audit requirements. Continue unrelated backend work without crossing this boundary.",
   "safeguards": {
     "main_untouched": true,
     "production_deploy_authorized": false,
@@ -229,7 +226,7 @@
       "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
     ]
   },
-  "latest_validated_head": "c3d8ad0fc9f43a76ba82309e72d5a51a51342211",
+  "latest_validated_head": "867496cce35baae69e35c2cd7cdbd2f05de32320",
   "v76": {
     "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
     "test_commit": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
@@ -257,6 +254,20 @@
       "RevokeSessionsAsync aborts on UserManager store IdentityResult.Failed before audit",
       "persisted LockoutEnd and SecurityStamp remain unchanged after failed IdentityResult responses",
       "no misleading account-disabled or sessions-revoked audit event persists"
+    ]
+  },
+  "v78": {
+    "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+    "documentation_commit": "867496cce35baae69e35c2cd7cdbd2f05de32320",
+    "approval": "approved",
+    "ci_run": "44569197822",
+    "scope": "read-only review of account-security service exposure and administrative authorization boundary",
+    "findings": [
+      "IOperationalAccountSecurityService is registered in Infrastructure DI but has no src/Atendee.Api endpoint call sites",
+      "DisableAsync and RevokeSessionsAsync are invoked only from integration tests in the current repository",
+      "no administrative HTTP route exposes account disablement or session revocation",
+      "the service records the trusted actor but does not enforce tenant/role authorization and must not be exposed directly",
+      "ADMIN_ACTIONS_DESIGN_V1 remains a proposal; explicit owner decisions are required before A1/A2 endpoints"
     ]
   }
 }

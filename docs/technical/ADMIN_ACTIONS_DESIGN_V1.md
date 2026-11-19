@@ -1,8 +1,10 @@
-# Administrative actions - design V1 (PROPOSAL, nothing implemented)
+# Administrative actions - design V1 (PROPOSAL; no administrative endpoints implemented)
 
-Status: design only. No endpoint, service or migration described here exists. Every item marked **DECISION** needs the product owner before implementation. This document does not claim production readiness.
+Status: proposal only. No administrative HTTP endpoint or migration described here exists. A narrow internal service for atomic account disablement/session revocation now exists, but it is not an administrative API and does not implement the authorization model below. Every item marked **DECISION** needs the product owner before implementation. This document does not claim production readiness.
 
 Branch context: `security/csrf-webhook-antiforgery-v23`. Builds on `docs/technical/AUTHORIZATION_MATRIX_V1.md` and the audit ledger (`identity."SecurityAuditEvents"`, migrations 003-007).
+
+Implementation status update (2026-11-19): `IOperationalAccountSecurityService` / `OperationalAccountSecurityService` are registered in infrastructure DI and provide transactional `DisableAsync` and `RevokeSessionsAsync` primitives. A repository-wide call-site review found no invocation from `src/Atendee.Api` endpoint handlers; current callers are integration tests. The service records the trusted actor supplied by `ICurrentActorContext`, but it does not perform tenant/role authorization itself. Do not expose it directly from an HTTP route. Any future A1/A2 endpoint requires the owner-approved actor, tenant, role, step-up MFA, antiforgery, rate-limit and audit scope described below.
 
 ## 1. Principles
 
