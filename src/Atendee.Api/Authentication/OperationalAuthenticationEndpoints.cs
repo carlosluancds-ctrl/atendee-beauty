@@ -329,9 +329,14 @@ public static class OperationalAuthenticationEndpoints
                 code);
             if (!validTotp)
             {
+                // The failed-attempt counter and its mandatory audit event must
+                // commit together, just like the recovery-code failure path.
+                await using var failureTransaction = await identityDb.Database.BeginTransactionAsync(
+                    httpContext.RequestAborted);
                 await userManager.AccessFailedAsync(user);
                 await auditWriter.WriteAsync("operational_mfa.challenge_failed",
                     null, user.Id, httpContext.RequestAborted);
+                await failureTransaction.CommitAsync(httpContext.RequestAborted);
                 return Results.Unauthorized();
             }
 

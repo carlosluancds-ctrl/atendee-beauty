@@ -951,6 +951,26 @@ try
             owner!, users.Options.Tokens.AuthenticatorTokenProvider);
     }
 
+    var invalidTotpCode = (secondTotpCode[0] == '0' ? '1' : '0') + secondTotpCode[1..];
+    var invalidTotpChallenge = await PostWithCsrfAsync(
+        mfaClient, "/api/v1/auth/mfa/challenge", afterRecoveryLogoutToken, new
+        {
+            code = invalidTotpCode,
+            useRecoveryCode = false
+        });
+    Ensure(invalidTotpChallenge.StatusCode == HttpStatusCode.Unauthorized,
+        "An invalid TOTP code is rejected without completing MFA.");
+    var failedTotpAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
+    Ensure(failedTotpAudit.Count(type => type == "operational_mfa.challenge_failed") == 2,
+        "Invalid TOTP and replayed recovery-code attempts are each durably audited exactly once.");
+    await using (var scope = mfaFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var owner = await users.FindByIdAsync(ownerUserId.ToString());
+        Ensure(owner is not null && owner.AccessFailedCount == 2,
+            "Invalid TOTP and replayed recovery-code attempts each increment the failed-attempt counter.");
+    }
+
     var totpChallenge = await PostWithCsrfAsync(
         mfaClient, "/api/v1/auth/mfa/challenge", afterRecoveryLogoutToken, new
         {
@@ -959,6 +979,13 @@ try
         });
     Ensure(totpChallenge.StatusCode == HttpStatusCode.OK,
         "A fresh TOTP code completes the MFA challenge.");
+    await using (var scope = mfaFactory.Services.CreateAsyncScope())
+    {
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var owner = await users.FindByIdAsync(ownerUserId.ToString());
+        Ensure(owner is not null && owner.AccessFailedCount == 0,
+            "A successful TOTP challenge resets the accumulated failed-attempt counter.");
+    }
     var completeMfaAudit = await ReadSecurityAuditTypesAsync(migratorConnectionString, ownerUserId);
     Ensure(completeMfaAudit.Contains("operational_mfa.totp_challenge_succeeded"),
         "Successful TOTP challenge is durably audited.");
