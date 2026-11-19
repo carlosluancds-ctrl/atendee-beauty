@@ -104,6 +104,7 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
   const secondOwnerEmail = required("ATENDEE_E2E_SECOND_OWNER_EMAIL");
   const secondOwnerPassword = required("ATENDEE_E2E_SECOND_OWNER_PASSWORD");
   const secondOwnerSecret = required("ATENDEE_E2E_SECOND_OWNER_TOTP_SECRET");
+  const secondProfessionalId = required("ATENDEE_E2E_SECOND_PROFESSIONAL_ID");
 
   const mutations = [];
   const eligibleRequests = [];
@@ -204,6 +205,55 @@ test("real API browser flow: Owner, Manager MFA enrollment, Professional and Rec
     await expect(secondOwnerPage).toHaveURL(/\/services$/);
 
     const secondOwnerToken = await getAntiforgeryToken(secondOwnerPage);
+    const salonBEligibleMembers = await secondOwnerPage.evaluate(async () => {
+      const response = await fetch("/api/v1/professionals/eligible-members", { credentials: "same-origin" });
+      return { status: response.status, members: await response.json() };
+    });
+    expect(salonBEligibleMembers.status).toBe(200);
+    expect(salonBEligibleMembers.members.map(member => member.identityUserId)).toEqual([secondProfessionalId]);
+
+    const salonBCreateProfessional = await postWithToken(secondOwnerPage, "/api/v1/professionals", secondOwnerToken, {
+      identityUserId: secondProfessionalId
+    });
+    expect(salonBCreateProfessional.status).toBe(201);
+    const salonBProfessionalList = await secondOwnerPage.evaluate(async () => {
+      const response = await fetch("/api/v1/professionals", { credentials: "same-origin" });
+      return { status: response.status, profiles: await response.json() };
+    });
+    expect(salonBProfessionalList.status).toBe(200);
+    expect(salonBProfessionalList.profiles).toHaveLength(1);
+    const salonBProfessionalId = salonBProfessionalList.profiles[0].id;
+    expect(salonBProfessionalList.profiles[0].identityUserId).toBe(secondProfessionalId);
+
+    const salonBCannotCreateProfileForSalonAIdentity = await postWithToken(
+      secondOwnerPage, "/api/v1/professionals", secondOwnerToken, { identityUserId: professionalId });
+    expect(salonBCannotCreateProfileForSalonAIdentity).toEqual({
+      status: 400, error: "professional_membership_invalid"
+    });
+
+    const salonAEligibleMembers = await page.evaluate(async () => {
+      const response = await fetch("/api/v1/professionals/eligible-members", { credentials: "same-origin" });
+      return { status: response.status, members: await response.json() };
+    });
+    expect(salonAEligibleMembers.status).toBe(200);
+    expect(salonAEligibleMembers.members.map(member => member.identityUserId)).toEqual([professionalId]);
+
+    const salonACannotCreateProfileForSalonBIdentity = await postWithToken(
+      page, "/api/v1/professionals", ownerAuthenticatedRequestToken, { identityUserId: secondProfessionalId });
+    expect(salonACannotCreateProfileForSalonBIdentity).toEqual({
+      status: 400, error: "professional_membership_invalid"
+    });
+    const salonAProfessionalListBeforeSetup = await page.evaluate(async () => {
+      const response = await fetch("/api/v1/professionals", { credentials: "same-origin" });
+      return { status: response.status, profiles: await response.json() };
+    });
+    expect(salonAProfessionalListBeforeSetup.status).toBe(200);
+    expect(salonAProfessionalListBeforeSetup.profiles).toHaveLength(0);
+    const salonACannotUpdateSalonBProfile = await putWithToken(
+      page, "/api/v1/professionals/" + salonBProfessionalId + "/services", ownerAuthenticatedRequestToken, {
+        serviceIds: [ownerServiceId]
+      });
+    expect(salonACannotUpdateSalonBProfile).toEqual({ status: 404, error: null });
     const secondOwnerCreate = await postWithToken(secondOwnerPage, "/api/v1/services", secondOwnerToken, {
       name: "Serviço Salão B",
       durationMinutes: 30,
