@@ -31,6 +31,7 @@ public sealed class TenantDbContext : DbContext
     internal DbSet<TenantCustomerRow> TenantCustomers => Set<TenantCustomerRow>();
     internal DbSet<TenantBusinessHoursRow> TenantBusinessHours => Set<TenantBusinessHoursRow>();
     internal DbSet<TenantProfessionalAvailabilityRow> TenantProfessionalAvailability => Set<TenantProfessionalAvailabilityRow>();
+    internal DbSet<TenantProfessionalTimeOffRow> TenantProfessionalTimeOff => Set<TenantProfessionalTimeOffRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -133,6 +134,27 @@ public sealed class TenantDbContext : DbContext
             { row.TenantId, row.ProfessionalId, row.IsActive, row.IsoDayOfWeek, row.StartTime });
         professionalAvailability.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
 
+        var professionalTimeOff = modelBuilder.Entity<TenantProfessionalTimeOffRow>();
+        professionalTimeOff.ToTable("professional_time_off", "atendee");
+        professionalTimeOff.HasKey(row => new { row.TenantId, row.Id });
+        professionalTimeOff.Property(row => row.TenantId).HasColumnName("tenant_id").IsRequired();
+        professionalTimeOff.Property(row => row.Id).HasColumnName("time_off_id").IsRequired();
+        professionalTimeOff.Property(row => row.ProfessionalId).HasColumnName("professional_id").IsRequired();
+        professionalTimeOff.Property(row => row.Date).HasColumnName("local_date").IsRequired();
+        professionalTimeOff.Property(row => row.StartTime).HasColumnName("start_time");
+        professionalTimeOff.Property(row => row.EndTime).HasColumnName("end_time");
+        professionalTimeOff.Property(row => row.IsActive).HasColumnName("is_active").IsRequired();
+        professionalTimeOff.Property(row => row.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        professionalTimeOff.Property(row => row.UpdatedAtUtc).HasColumnName("updated_at_utc").IsRequired();
+        professionalTimeOff.HasOne<TenantProfessionalRow>()
+            .WithMany()
+            .HasForeignKey(row => new { row.TenantId, row.ProfessionalId })
+            .HasPrincipalKey(row => new { row.TenantId, row.Id })
+            .OnDelete(DeleteBehavior.Restrict);
+        professionalTimeOff.HasIndex(row => new
+            { row.TenantId, row.ProfessionalId, row.IsActive, row.Date, row.StartTime });
+        professionalTimeOff.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
+
         // Defense in depth only. PostgreSQL RLS remains the database boundary.
         notes.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
     }
@@ -188,6 +210,13 @@ public sealed class TenantDbContext : DbContext
             if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
                 entry.Entity.TenantId != _boundTenantId.Value)
                 throw new InvalidOperationException("Professional availability does not belong to this DbContext tenant.");
+        }
+
+        foreach (EntityEntry<TenantProfessionalTimeOffRow> entry in ChangeTracker.Entries<TenantProfessionalTimeOffRow>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&
+                entry.Entity.TenantId != _boundTenantId.Value)
+                throw new InvalidOperationException("Professional time off does not belong to this DbContext tenant.");
         }
 
         foreach (EntityEntry<TenantBusinessHoursRow> entry in ChangeTracker.Entries<TenantBusinessHoursRow>())

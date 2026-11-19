@@ -1277,6 +1277,168 @@ try
         await professionalAvailabilityAfterInvalidUpdate.Content.ReadFromJsonAsync<JsonElement>();
     Ensure(professionalAvailabilityAfterInvalidUpdateBody.GetProperty("intervals").GetArrayLength() == 2,
         "Rejected professional availability updates leave the last valid schedule unchanged.");
+
+    var createPartialTimeOff = await PostWithCsrfAsync(
+        mfaClient,
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off",
+        ownerAuthenticatedToken,
+        new { date = "2026-12-01", startTime = "10:00", endTime = "11:00" });
+    Ensure(createPartialTimeOff.StatusCode == HttpStatusCode.Created,
+        "Owner can create date-specific partial-day time off for a professional.");
+    var createdPartialTimeOffBody = await createPartialTimeOff.Content.ReadFromJsonAsync<JsonElement>();
+    var createdPartialTimeOffId = createdPartialTimeOffBody.GetProperty("id").GetGuid();
+    Ensure(createdPartialTimeOffBody.GetProperty("timeZoneId").GetString() == "America/Sao_Paulo" &&
+           createdPartialTimeOffBody.GetProperty("date").GetString() == "2026-12-01" &&
+           createdPartialTimeOffBody.GetProperty("startTime").GetString() == "10:00" &&
+           createdPartialTimeOffBody.GetProperty("endTime").GetString() == "11:00",
+        "Time-off API preserves tenant-local calendar date, time zone and wall-clock values.");
+
+    var overlappingTimeOff = await PostWithCsrfAsync(
+        mfaClient,
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off",
+        ownerAuthenticatedToken,
+        new { date = "2026-12-01", startTime = "10:30", endTime = "11:30" });
+    Ensure(overlappingTimeOff.StatusCode == HttpStatusCode.BadRequest,
+        "Overlapping date-specific time-off intervals are rejected without replacing the existing entry.");
+
+    var createFullDayTimeOff = await PostWithCsrfAsync(
+        mfaClient,
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off",
+        ownerAuthenticatedToken,
+        new { date = "2026-12-02", startTime = (string?)null, endTime = (string?)null });
+    Ensure(createFullDayTimeOff.StatusCode == HttpStatusCode.Created,
+        "Owner can create full-day time off using a null local-time pair.");
+    var createdFullDayTimeOffBody = await createFullDayTimeOff.Content.ReadFromJsonAsync<JsonElement>();
+    var createdFullDayTimeOffId = createdFullDayTimeOffBody.GetProperty("id").GetGuid();
+    Ensure(createdFullDayTimeOffBody.GetProperty("startTime").ValueKind == JsonValueKind.Null &&
+           createdFullDayTimeOffBody.GetProperty("endTime").ValueKind == JsonValueKind.Null,
+        "Full-day time off is represented explicitly without inventing local hours.");
+
+    var partialDuringFullDay = await PostWithCsrfAsync(
+        mfaClient,
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off",
+        ownerAuthenticatedToken,
+        new { date = "2026-12-02", startTime = "10:00", endTime = "11:00" });
+    Ensure(partialDuringFullDay.StatusCode == HttpStatusCode.BadRequest,
+        "Full-day time off cannot coexist with partial-day entries on the same date.");
+
+    var listedTimeOff = await mfaClient.GetAsync(
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off?from=2026-12-01&to=2026-12-02");
+    var listedTimeOffBody = await listedTimeOff.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(listedTimeOff.StatusCode == HttpStatusCode.OK &&
+           listedTimeOffBody.GetArrayLength() == 2,
+        "Owner can list a bounded inclusive range of persisted local-date time-off entries.");
+
+    var invalidTimeOffRange = await mfaClient.GetAsync(
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off?from=2026-12-03&to=2026-12-01");
+    Ensure(invalidTimeOffRange.StatusCode == HttpStatusCode.BadRequest,
+        "Time-off listing rejects an inverted date range.");
+
+    var archivedTimeOff = await PostWithCsrfAsync(
+        mfaClient,
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off/{createdPartialTimeOffId}/archive",
+        ownerAuthenticatedToken,
+        new { });
+    Ensure(archivedTimeOff.StatusCode == HttpStatusCode.OK,
+        "Owner can archive a time-off entry without physically deleting its audit history.");
+
+    var listedTimeOffAfterArchive = await mfaClient.GetAsync(
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off?from=2026-12-01&to=2026-12-02");
+    var listedTimeOffAfterArchiveBody = await listedTimeOffAfterArchive.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(listedTimeOffAfterArchiveBody.GetArrayLength() == 1 &&
+           listedTimeOffAfterArchiveBody[0].GetProperty("id").GetGuid() == createdFullDayTimeOffId,
+        "Archived time-off entries are excluded from active listings while full-day entries remain.");
+
+    var professionalTimeOffAudit = await ReadProfessionalAuditAsync(
+        tenantConnectionString, ownerTenantId, assignedAssignedProfessionalProfileId);
+    Ensure(professionalTimeOffAudit.Contains("professional_time_off.created") &&
+           professionalTimeOffAudit.Contains("professional_time_off.archived"),
+        "Time-off creation and archive are recorded in the mandatory tenant audit ledger.");
+
+    await using (var crossTenantTimeOffConnection = new NpgsqlConnection(tenantConnectionString))
+    {
+        await crossTenantTimeOffConnection.OpenAsync();
+        await using var transaction = await crossTenantTimeOffConnection.BeginTransactionAsync();
+        await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_runtime", crossTenantTimeOffConnection, transaction))
+            await role.ExecuteNonQueryAsync();
+        await using (var tenant = new NpgsqlCommand(
+            "SELECT set_config('app.tenant_id', @tenant, true)", crossTenantTimeOffConnection, transaction))
+        {
+            tenant.Parameters.AddWithValue("tenant", tenantId.ToString("D"));
+            await tenant.ExecuteScalarAsync();
+        }
+        await using var count = new NpgsqlCommand(
+            "SELECT count(*) FROM atendee.professional_time_off WHERE professional_id = @professional",
+            crossTenantTimeOffConnection, transaction);
+        count.Parameters.AddWithValue("professional", assignedAssignedProfessionalProfileId);
+        Ensure(Convert.ToInt64(await count.ExecuteScalarAsync()) == 0,
+            "PostgreSQL RLS hides professional time off from another salon even when the profile UUID is known.");
+        await transaction.RollbackAsync();
+    }
+
+    await using (var unscopedTimeOffConnection = new NpgsqlConnection(tenantConnectionString))
+    {
+        await unscopedTimeOffConnection.OpenAsync();
+        await using var transaction = await unscopedTimeOffConnection.BeginTransactionAsync();
+        await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_runtime", unscopedTimeOffConnection, transaction))
+            await role.ExecuteNonQueryAsync();
+        await using (var clearTenant = new NpgsqlCommand(
+            "SELECT set_config('app.tenant_id', '', true)", unscopedTimeOffConnection, transaction))
+            await clearTenant.ExecuteScalarAsync();
+        await using var count = new NpgsqlCommand(
+            "SELECT count(*) FROM atendee.professional_time_off", unscopedTimeOffConnection, transaction);
+        Ensure(Convert.ToInt64(await count.ExecuteScalarAsync()) == 0,
+            "Runtime SQL without tenant context cannot read professional time-off records.");
+        await using var privileges = new NpgsqlCommand(
+            "SELECT has_table_privilege('atendee_runtime', 'atendee.professional_time_off', 'DELETE') OR " +
+            "has_table_privilege('atendee_runtime', 'atendee.professional_time_off', 'TRUNCATE')",
+            unscopedTimeOffConnection, transaction);
+        Ensure(!Convert.ToBoolean(await privileges.ExecuteScalarAsync()),
+            "Runtime database role cannot physically delete or truncate professional time-off records.");
+        await transaction.RollbackAsync();
+    }
+
+    var databaseTimeOffOverlapRejected = false;
+    await using (var overlapTimeOffConnection = new NpgsqlConnection(tenantConnectionString))
+    {
+        await overlapTimeOffConnection.OpenAsync();
+        await using var transaction = await overlapTimeOffConnection.BeginTransactionAsync();
+        try
+        {
+            await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_runtime", overlapTimeOffConnection, transaction))
+                await role.ExecuteNonQueryAsync();
+            await using (var context = new NpgsqlCommand(
+                "SELECT set_config('app.tenant_id', @tenant, true), set_config('app.actor_id', @actor, true)",
+                overlapTimeOffConnection, transaction))
+            {
+                context.Parameters.AddWithValue("tenant", ownerTenantId.ToString("D"));
+                context.Parameters.AddWithValue("actor", ownerUserId.ToString("D"));
+                await context.ExecuteNonQueryAsync();
+            }
+            await using (var insert = new NpgsqlCommand(
+                """
+                INSERT INTO atendee.professional_time_off
+                    (tenant_id, time_off_id, professional_id, local_date, start_time, end_time,
+                     is_active, created_at_utc, updated_at_utc)
+                VALUES
+                    (@tenant, @id, @professional, DATE '2026-12-02', TIME '10:00', TIME '11:00',
+                     true, now(), now())
+                """, overlapTimeOffConnection, transaction))
+            {
+                insert.Parameters.AddWithValue("tenant", ownerTenantId);
+                insert.Parameters.AddWithValue("id", Guid.NewGuid());
+                insert.Parameters.AddWithValue("professional", assignedAssignedProfessionalProfileId);
+                await insert.ExecuteNonQueryAsync();
+            }
+            await transaction.CommitAsync();
+        }
+        catch (PostgresException exception) when (exception.SqlState == "23P01")
+        {
+            databaseTimeOffOverlapRejected = true;
+        }
+    }
+    Ensure(databaseTimeOffOverlapRejected,
+        "PostgreSQL deferred constraint trigger rejects partial time off that conflicts with a full-day entry even when domain validation is bypassed.");
     await using (var crossTenantAvailabilityConnection = new NpgsqlConnection(tenantConnectionString))
     {
         await crossTenantAvailabilityConnection.OpenAsync();
@@ -1416,6 +1578,13 @@ try
            assignedOwnAvailabilityBody.GetProperty("professionalId").GetGuid() == assignedAssignedProfessionalProfileId &&
            assignedOwnAvailabilityBody.GetProperty("intervals").GetArrayLength() == 2,
         "Professional can read only their own recurring availability through the /me route.");
+    var assignedOwnTimeOff = await assignedAssignedProfessionalClient.GetAsync(
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off?from=2026-12-01&to=2026-12-02");
+    var assignedOwnTimeOffBody = await assignedOwnTimeOff.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(assignedOwnTimeOff.StatusCode == HttpStatusCode.OK &&
+           assignedOwnTimeOffBody.GetArrayLength() == 1 &&
+           assignedOwnTimeOffBody[0].GetProperty("date").GetString() == "2026-12-02",
+        "Professional can read only their own active time-off entries.");
     var assignedOwnAvailabilityById = await assignedAssignedProfessionalClient.GetAsync(
         $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability");
     Ensure(assignedOwnAvailabilityById.StatusCode == HttpStatusCode.OK,
@@ -1430,6 +1599,13 @@ try
     Ensure(professionalAvailabilityCsrf.IsSuccessStatusCode &&
            !string.IsNullOrWhiteSpace(professionalAvailabilityRequestToken),
         "Professional obtains a fresh antiforgery token after login before attempting availability changes.");
+    var professionalCannotCreateTimeOff = await PostWithCsrfAsync(
+        assignedAssignedProfessionalClient,
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/time-off",
+        professionalAvailabilityRequestToken!,
+        new { date = "2026-12-03", startTime = (string?)null, endTime = (string?)null });
+    Ensure(professionalCannotCreateTimeOff.StatusCode == HttpStatusCode.Forbidden,
+        "Professional can read but cannot create team time-off entries; management remains Owner/Manager-only.");
     using (var professionalAvailabilityPut = new HttpRequestMessage(
         HttpMethod.Put, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability"))
     {

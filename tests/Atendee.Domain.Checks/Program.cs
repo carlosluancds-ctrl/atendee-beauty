@@ -166,6 +166,56 @@ var checks = new (string Name, Action Run)[]
         Throws<ArgumentException>(() => ProfessionalAvailabilitySchedule.Create(
             Enumerable.Range(0, 29).Select(_ => new ProfessionalAvailabilityInterval(
                 1, new TimeOnly(9, 0), new TimeOnly(10, 0)))))),
+    ("professional time off sorts local dates and times", () =>
+    {
+        var schedule = ProfessionalTimeOffSchedule.Create(new[]
+        {
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 2), new TimeOnly(13, 0), new TimeOnly(14, 0)),
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), new TimeOnly(9, 0), new TimeOnly(10, 0)),
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), new TimeOnly(11, 0), new TimeOnly(12, 0))
+        });
+        Assert(schedule.Intervals.Count == 3 &&
+               schedule.Intervals[0].Date == new DateOnly(2026, 12, 1) &&
+               schedule.Intervals[0].StartTime == new TimeOnly(9, 0) &&
+               schedule.Intervals[2].Date == new DateOnly(2026, 12, 2));
+    }),
+    ("professional time off permits a full local day", () =>
+        Assert(ProfessionalTimeOffSchedule.Create(new[]
+        {
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), null, null)
+        }).Intervals.Count == 1)),
+    ("professional time off rejects a half-specified interval", () =>
+        Throws<ArgumentException>(() => ProfessionalTimeOffSchedule.Create(new[]
+        {
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), new TimeOnly(9, 0), null)
+        }))),
+    ("professional time off rejects zero-length intervals", () =>
+        Throws<ArgumentException>(() => ProfessionalTimeOffSchedule.Create(new[]
+        {
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), new TimeOnly(9, 0), new TimeOnly(9, 0))
+        }))),
+    ("professional time off rejects overlapping intervals", () =>
+        Throws<ArgumentException>(() => ProfessionalTimeOffSchedule.Create(new[]
+        {
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), new TimeOnly(9, 0), new TimeOnly(12, 0)),
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), new TimeOnly(11, 0), new TimeOnly(14, 0))
+        }))),
+    ("professional time off rejects full-day and partial-day coexistence", () =>
+        Throws<ArgumentException>(() => ProfessionalTimeOffSchedule.Create(new[]
+        {
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), null, null),
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), new TimeOnly(11, 0), new TimeOnly(14, 0))
+        }))),
+    ("professional time off allows adjacent partial-day intervals", () =>
+        Assert(ProfessionalTimeOffSchedule.Create(new[]
+        {
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), new TimeOnly(9, 0), new TimeOnly(12, 0)),
+            new ProfessionalTimeOffInterval(new DateOnly(2026, 12, 1), new TimeOnly(12, 0), new TimeOnly(14, 0))
+        }).Intervals.Count == 2)),
+    ("professional time off caps a date at four partial intervals", () =>
+        Throws<ArgumentException>(() => ProfessionalTimeOffSchedule.Create(
+            Enumerable.Range(0, 5).Select(hour => new ProfessionalTimeOffInterval(
+                new DateOnly(2026, 12, 1), new TimeOnly(8 + hour * 2, 0), new TimeOnly(9 + hour * 2, 0)))))),
     ("service name is trimmed and currency normalized", () => { var service = SalonService.Create(Guid.NewGuid(), "  Corte  ", 45, 7500, "brl", 5, 10, true, nowUtc); Assert(service.Name == "Corte" && service.Currency == "BRL"); }),
     ("service price is an integer minor-unit amount", () => Assert(SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "BRL", 0, 0, true, nowUtc).PriceMinorUnits == 7500)),
     ("invalid ISO currency is rejected", () => Throws<ArgumentException>(() => SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "ZZZ", 0, 0, true, nowUtc))),

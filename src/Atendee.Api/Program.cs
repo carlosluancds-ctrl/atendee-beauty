@@ -452,6 +452,7 @@ if (identityEnabled)
     app.MapTenantOnboarding();
     app.MapTenantProfessionals();
     app.MapTenantProfessionalAvailability();
+    app.MapTenantProfessionalTimeOff();
 }
 
 app.Run();
