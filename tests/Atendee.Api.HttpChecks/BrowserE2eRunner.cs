@@ -69,6 +69,7 @@ internal static class BrowserE2eRunner
             (Guid Id, string Email, string Password, string? AuthenticatorKey) professional;
             (Guid Id, string Email, string Password, string? AuthenticatorKey) receptionist;
             (Guid Id, string Email, string Password, string? AuthenticatorKey) secondOwner;
+            (Guid Id, string Email, string Password, string? AuthenticatorKey) secondProfessional;
 
             await using (var scope = factory.Services.CreateAsyncScope())
             {
@@ -78,6 +79,7 @@ internal static class BrowserE2eRunner
                 professional = await CreateUserAsync(users, "browser-professional-", "Atendee-E2E-Professional-2026!", enableMfa: false);
                 receptionist = await CreateUserAsync(users, "browser-receptionist-", "Atendee-E2E-Receptionist-2026!", enableMfa: false);
                 secondOwner = await CreateUserAsync(users, "browser-second-owner-", "Atendee-E2E-Second-Owner-2026!", enableMfa: true);
+                secondProfessional = await CreateUserAsync(users, "browser-second-professional-", "Atendee-E2E-Second-Professional-2026!", enableMfa: false);
             }
 
             var tenantSlug = "browser-e2e-" + Guid.NewGuid().ToString("N");
@@ -94,6 +96,7 @@ internal static class BrowserE2eRunner
                 new FirstOwnerProvisioningRequest(
                     secondOwner.Id, "Browser E2E Salon B", secondTenantSlug, "America/Sao_Paulo", "Second Owner E2E"));
             await SetTenantActiveAsync(migratorConnectionString, secondProvisioned.TenantId);
+            await SeedMembershipAsync(migratorConnectionString, secondProvisioned.TenantId, secondProfessional.Id, "Beatriz Salon B E2E", roleId: 4);
 
             var startInfo = new ProcessStartInfo
             {
@@ -127,6 +130,7 @@ internal static class BrowserE2eRunner
             startInfo.Environment["ATENDEE_E2E_SECOND_OWNER_EMAIL"] = secondOwner.Email;
             startInfo.Environment["ATENDEE_E2E_SECOND_OWNER_PASSWORD"] = secondOwner.Password;
             startInfo.Environment["ATENDEE_E2E_SECOND_OWNER_TOTP_SECRET"] = secondOwner.AuthenticatorKey!;
+            startInfo.Environment["ATENDEE_E2E_SECOND_PROFESSIONAL_ID"] = secondProfessional.Id.ToString("D");
 
             using var process = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Could not start the full-stack Playwright process.");
