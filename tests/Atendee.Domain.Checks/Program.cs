@@ -2,6 +2,7 @@ using Atendee.Domain.Primitives;
 using Atendee.Domain.Catalog;
 using Atendee.Domain.Customers;
 using Atendee.Domain.Scheduling;
+using Atendee.Domain.Professionals;
 using Atendee.Domain.Tenants;
 
 var nowUtc = new DateTimeOffset(2026, 11, 17, 12, 0, 0, TimeSpan.Zero);
@@ -109,6 +110,61 @@ var checks = new (string Name, Action Run)[]
     ("business-hours schedule caps a week at 28 intervals", () =>
         Throws<ArgumentException>(() => BusinessHoursSchedule.Create(
             Enumerable.Range(0, 29).Select(_ => new BusinessHoursInterval(
+                1, new TimeOnly(9, 0), new TimeOnly(10, 0)))))),
+    ("professional availability sorts recurring intervals by ISO weekday and local start time", () =>
+    {
+        var schedule = ProfessionalAvailabilitySchedule.Create(new[]
+        {
+            new ProfessionalAvailabilityInterval(2, new TimeOnly(10, 0), new TimeOnly(16, 0)),
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(13, 0), new TimeOnly(17, 0)),
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(9, 0), new TimeOnly(12, 0))
+        });
+        Assert(schedule.Intervals.Count == 3 &&
+               schedule.Intervals[0].StartTime == new TimeOnly(9, 0) &&
+               schedule.Intervals[1].StartTime == new TimeOnly(13, 0) &&
+               schedule.Intervals[2].IsoDayOfWeek == 2);
+    }),
+    ("professional availability permits an empty unavailable week", () =>
+        Assert(ProfessionalAvailabilitySchedule.Create(Array.Empty<ProfessionalAvailabilityInterval>()).Intervals.Count == 0)),
+    ("professional availability rejects invalid ISO weekday", () =>
+        Throws<ArgumentOutOfRangeException>(() => ProfessionalAvailabilitySchedule.Create(new[]
+        {
+            new ProfessionalAvailabilityInterval(0, new TimeOnly(9, 0), new TimeOnly(12, 0))
+        }))),
+    ("professional availability rejects zero-length intervals", () =>
+        Throws<ArgumentException>(() => ProfessionalAvailabilitySchedule.Create(new[]
+        {
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(9, 0), new TimeOnly(9, 0))
+        }))),
+    ("professional availability rejects overnight intervals", () =>
+        Throws<ArgumentException>(() => ProfessionalAvailabilitySchedule.Create(new[]
+        {
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(22, 0), new TimeOnly(2, 0))
+        }))),
+    ("professional availability rejects overlapping intervals", () =>
+        Throws<ArgumentException>(() => ProfessionalAvailabilitySchedule.Create(new[]
+        {
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(9, 0), new TimeOnly(12, 0)),
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(11, 0), new TimeOnly(14, 0))
+        }))),
+    ("professional availability allows adjacent intervals", () =>
+        Assert(ProfessionalAvailabilitySchedule.Create(new[]
+        {
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(9, 0), new TimeOnly(12, 0)),
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(12, 0), new TimeOnly(17, 0))
+        }).Intervals.Count == 2)),
+    ("professional availability limits each day to four intervals", () =>
+        Throws<ArgumentException>(() => ProfessionalAvailabilitySchedule.Create(new[]
+        {
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(8, 0), new TimeOnly(9, 0)),
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(9, 0), new TimeOnly(10, 0)),
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(10, 0), new TimeOnly(11, 0)),
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(11, 0), new TimeOnly(12, 0)),
+            new ProfessionalAvailabilityInterval(1, new TimeOnly(12, 0), new TimeOnly(13, 0))
+        }))),
+    ("professional availability caps a week at 28 intervals", () =>
+        Throws<ArgumentException>(() => ProfessionalAvailabilitySchedule.Create(
+            Enumerable.Range(0, 29).Select(_ => new ProfessionalAvailabilityInterval(
                 1, new TimeOnly(9, 0), new TimeOnly(10, 0)))))),
     ("service name is trimmed and currency normalized", () => { var service = SalonService.Create(Guid.NewGuid(), "  Corte  ", 45, 7500, "brl", 5, 10, true, nowUtc); Assert(service.Name == "Corte" && service.Currency == "BRL"); }),
     ("service price is an integer minor-unit amount", () => Assert(SalonService.Create(Guid.NewGuid(), "Corte", 45, 7500, "BRL", 0, 0, true, nowUtc).PriceMinorUnits == 7500)),

@@ -1224,6 +1224,199 @@ try
            assignedAssignedProfessionalListBody[0].GetProperty("id").GetGuid() == assignedAssignedProfessionalProfileId,
         "Professional list contains the current salon's profile.");
 
+    using (var ownerProfessionalAvailabilityPut = new HttpRequestMessage(
+        HttpMethod.Put, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability"))
+    {
+        ownerProfessionalAvailabilityPut.Headers.Add("X-CSRF-TOKEN", ownerAuthenticatedToken);
+        ownerProfessionalAvailabilityPut.Content = JsonContent.Create(new
+        {
+            intervals = new[]
+            {
+                new { isoDayOfWeek = 1, startTime = "09:00", endTime = "12:00" },
+                new { isoDayOfWeek = 1, startTime = "13:00", endTime = "18:00" }
+            }
+        });
+        using var ownerProfessionalAvailabilityResponse = await mfaClient.SendAsync(ownerProfessionalAvailabilityPut);
+        var ownerProfessionalAvailabilityBody =
+            await ownerProfessionalAvailabilityResponse.Content.ReadFromJsonAsync<JsonElement>();
+        Ensure(ownerProfessionalAvailabilityResponse.StatusCode == HttpStatusCode.OK &&
+               ownerProfessionalAvailabilityBody.GetProperty("professionalId").GetGuid() == assignedAssignedProfessionalProfileId &&
+               ownerProfessionalAvailabilityBody.GetProperty("timeZoneId").GetString() == "America/Sao_Paulo" &&
+               ownerProfessionalAvailabilityBody.GetProperty("intervals").GetArrayLength() == 2 &&
+               ownerProfessionalAvailabilityBody.GetProperty("intervals")[0].GetProperty("startTime").GetString() == "09:00" &&
+               ownerProfessionalAvailabilityBody.GetProperty("intervals")[1].GetProperty("startTime").GetString() == "13:00",
+            "Owner can configure a professional's recurring local-time availability.");
+    }
+    var ownerProfessionalAvailabilityGet = await mfaClient.GetAsync(
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability");
+    var ownerProfessionalAvailabilityGetBody =
+        await ownerProfessionalAvailabilityGet.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(ownerProfessionalAvailabilityGet.StatusCode == HttpStatusCode.OK &&
+           ownerProfessionalAvailabilityGetBody.GetProperty("intervals").GetArrayLength() == 2,
+        "Owner can read the professional's persisted weekly availability.");
+
+    using (var invalidProfessionalAvailabilityPut = new HttpRequestMessage(
+        HttpMethod.Put, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability"))
+    {
+        invalidProfessionalAvailabilityPut.Headers.Add("X-CSRF-TOKEN", ownerAuthenticatedToken);
+        invalidProfessionalAvailabilityPut.Content = JsonContent.Create(new
+        {
+            intervals = new[]
+            {
+                new { isoDayOfWeek = 1, startTime = "09:00", endTime = "12:00" },
+                new { isoDayOfWeek = 1, startTime = "11:00", endTime = "14:00" }
+            }
+        });
+        using var invalidProfessionalAvailabilityResponse = await mfaClient.SendAsync(invalidProfessionalAvailabilityPut);
+        Ensure(invalidProfessionalAvailabilityResponse.StatusCode == HttpStatusCode.BadRequest,
+            "Professional availability API rejects overlapping intervals.");
+    }
+    var professionalAvailabilityAfterInvalidUpdate = await mfaClient.GetAsync(
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability");
+    var professionalAvailabilityAfterInvalidUpdateBody =
+        await professionalAvailabilityAfterInvalidUpdate.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(professionalAvailabilityAfterInvalidUpdateBody.GetProperty("intervals").GetArrayLength() == 2,
+        "Rejected professional availability updates leave the last valid schedule unchanged.");
+    var availabilityReceptionistEmail =
+        "http-availability-receptionist-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    const string availabilityReceptionistPassword = "Atendee-Availability-HTTP-2026!";
+    Guid availabilityReceptionistUserId;
+    await using (var availabilityReceptionistScope = mfaFactory.Services.CreateAsyncScope())
+    {
+        var users = availabilityReceptionistScope.ServiceProvider
+            .GetRequiredService<UserManager<OperationalIdentityUser>>();
+        var receptionistUser = new OperationalIdentityUser
+        {
+            UserName = availabilityReceptionistEmail,
+            Email = availabilityReceptionistEmail,
+            EmailConfirmed = true
+        };
+        var created = await users.CreateAsync(receptionistUser, availabilityReceptionistPassword);
+        Ensure(created.Succeeded, "Synthetic availability receptionist identity is created.");
+        availabilityReceptionistUserId = receptionistUser.Id;
+    }
+    await SeedMembershipAsync(
+        migratorConnectionString, ownerTenantId, availabilityReceptionistUserId, roleId: 3, statusId: 3);
+    using (var availabilityReceptionistClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        AllowAutoRedirect = false,
+        HandleCookies = true
+    }))
+    {
+        var receptionistCsrf = await availabilityReceptionistClient.GetAsync("/api/v1/auth/antiforgery");
+        var receptionistCsrfBody = await receptionistCsrf.Content.ReadFromJsonAsync<JsonElement>();
+        var receptionistToken = receptionistCsrfBody.GetProperty("requestToken").GetString();
+        using var receptionistLogin = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login");
+        receptionistLogin.Headers.Add("X-CSRF-TOKEN", receptionistToken!);
+        receptionistLogin.Content = JsonContent.Create(new
+        {
+            email = availabilityReceptionistEmail,
+            password = availabilityReceptionistPassword
+        });
+        using var receptionistLoginResponse = await availabilityReceptionistClient.SendAsync(receptionistLogin);
+        Ensure(receptionistLoginResponse.StatusCode == HttpStatusCode.OK,
+            "Availability receptionist signs in to the same tenant as the configured professional.");
+        var receptionistAvailability = await availabilityReceptionistClient.GetAsync(
+            $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability");
+        var receptionistAvailabilityBody =
+            await receptionistAvailability.Content.ReadFromJsonAsync<JsonElement>();
+        Ensure(receptionistAvailability.StatusCode == HttpStatusCode.OK &&
+               receptionistAvailabilityBody.GetProperty("intervals").GetArrayLength() == 2,
+            "Receptionist can read professional availability within their own salon.");
+        var receptionistAfterLoginCsrf =
+            await availabilityReceptionistClient.GetAsync("/api/v1/auth/antiforgery");
+        var receptionistAfterLoginCsrfBody =
+            await receptionistAfterLoginCsrf.Content.ReadFromJsonAsync<JsonElement>();
+        using var receptionistAvailabilityPut = new HttpRequestMessage(
+            HttpMethod.Put, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability");
+        receptionistAvailabilityPut.Headers.Add(
+            "X-CSRF-TOKEN", receptionistAfterLoginCsrfBody.GetProperty("requestToken").GetString()!);
+        receptionistAvailabilityPut.Content = JsonContent.Create(new
+        {
+            intervals = new[] { new { isoDayOfWeek = 1, startTime = "09:00", endTime = "17:00" } }
+        });
+        using var receptionistAvailabilityPutResponse =
+            await availabilityReceptionistClient.SendAsync(receptionistAvailabilityPut);
+        Ensure(receptionistAvailabilityPutResponse.StatusCode == HttpStatusCode.Forbidden,
+            "Receptionist can read professional availability but cannot change team schedules.");
+    }
+
+    var crossTenantProfessionalAvailability = await client.GetAsync(
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability");
+    Ensure(crossTenantProfessionalAvailability.StatusCode == HttpStatusCode.NotFound,
+        "A different salon cannot discover professional availability by a known profile UUID.");
+
+    await using (var directAvailabilityConnection = new NpgsqlConnection(tenantConnectionString))
+    {
+        await directAvailabilityConnection.OpenAsync();
+        await using var directAvailabilityTransaction = await directAvailabilityConnection.BeginTransactionAsync();
+        await using (var setRuntimeRole = new NpgsqlCommand("SET LOCAL ROLE atendee_runtime", directAvailabilityConnection, directAvailabilityTransaction))
+            await setRuntimeRole.ExecuteNonQueryAsync();
+        await using (var clearTenantContext = new NpgsqlCommand(
+            "SELECT set_config('app.tenant_id', '', true)", directAvailabilityConnection, directAvailabilityTransaction))
+            await clearTenantContext.ExecuteScalarAsync();
+        await using var directAvailabilityCount = new NpgsqlCommand(
+            "SELECT count(*) FROM atendee.professional_availability",
+            directAvailabilityConnection,
+            directAvailabilityTransaction);
+        var directCount = Convert.ToInt64(await directAvailabilityCount.ExecuteScalarAsync());
+        Ensure(directCount == 0,
+            "Runtime SQL without the tenant transaction context cannot read professional availability rows.");
+        await directAvailabilityTransaction.RollbackAsync();
+    }
+
+    var databaseAvailabilityOverlapRejected = false;
+    await using (var overlapAvailabilityConnection = new NpgsqlConnection(tenantConnectionString))
+    {
+        await overlapAvailabilityConnection.OpenAsync();
+        await using var overlapAvailabilityTransaction = await overlapAvailabilityConnection.BeginTransactionAsync();
+        try
+        {
+            await using (var setRuntimeRole = new NpgsqlCommand(
+                "SET LOCAL ROLE atendee_runtime", overlapAvailabilityConnection, overlapAvailabilityTransaction))
+                await setRuntimeRole.ExecuteNonQueryAsync();
+            await using (var setAvailabilityContext = new NpgsqlCommand(
+                "SELECT set_config('app.tenant_id', @tenant_id, true), set_config('app.actor_id', @actor_id, true)",
+                overlapAvailabilityConnection,
+                overlapAvailabilityTransaction))
+            {
+                setAvailabilityContext.Parameters.AddWithValue("tenant_id", ownerTenantId.ToString("D"));
+                setAvailabilityContext.Parameters.AddWithValue("actor_id", ownerUserId.ToString("D"));
+                await setAvailabilityContext.ExecuteNonQueryAsync();
+            }
+            await using (var insertOverlappingAvailability = new NpgsqlCommand(
+                """
+                INSERT INTO atendee.professional_availability
+                    (tenant_id, availability_id, professional_id, iso_day_of_week, start_time, end_time,
+                     is_active, created_at_utc, updated_at_utc)
+                VALUES
+                    (@tenant_id, @availability_id, @professional_id, 1, TIME '10:00', TIME '11:00',
+                     true, now(), now())
+                """,
+                overlapAvailabilityConnection,
+                overlapAvailabilityTransaction))
+            {
+                insertOverlappingAvailability.Parameters.AddWithValue("tenant_id", ownerTenantId);
+                insertOverlappingAvailability.Parameters.AddWithValue("availability_id", Guid.NewGuid());
+                insertOverlappingAvailability.Parameters.AddWithValue("professional_id", assignedAssignedProfessionalProfileId);
+                await insertOverlappingAvailability.ExecuteNonQueryAsync();
+            }
+            await using var forceDeferredAvailabilityCheck = new NpgsqlCommand(
+                "SET CONSTRAINTS tr_professional_availability_no_overlap IMMEDIATE",
+                overlapAvailabilityConnection,
+                overlapAvailabilityTransaction);
+            await forceDeferredAvailabilityCheck.ExecuteNonQueryAsync();
+        }
+        catch (PostgresException exception) when (exception.SqlState == "23P01")
+        {
+            databaseAvailabilityOverlapRejected = true;
+            await overlapAvailabilityTransaction.RollbackAsync();
+        }
+    }
+    Ensure(databaseAvailabilityOverlapRejected,
+        "PostgreSQL deferred constraint trigger rejects overlapping professional availability even when domain validation is bypassed.");
+
     using var assignedAssignedProfessionalClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
@@ -1259,6 +1452,40 @@ try
            assignedOwnServicesBody[0].GetProperty("id").GetGuid() == salonServiceId &&
            assignedOwnServicesBody[0].GetProperty("name").GetString() == "Corte de cabelo",
         "Professional assigned-service details contain only the assigned salon service.");
+
+    var assignedOwnAvailability = await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals/me/availability");
+    var assignedOwnAvailabilityBody = await assignedOwnAvailability.Content.ReadFromJsonAsync<JsonElement>();
+    Ensure(assignedOwnAvailability.StatusCode == HttpStatusCode.OK &&
+           assignedOwnAvailabilityBody.GetProperty("professionalId").GetGuid() == assignedAssignedProfessionalProfileId &&
+           assignedOwnAvailabilityBody.GetProperty("intervals").GetArrayLength() == 2,
+        "Professional can read only their own recurring availability through the /me route.");
+    var assignedOwnAvailabilityById = await assignedAssignedProfessionalClient.GetAsync(
+        $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability");
+    Ensure(assignedOwnAvailabilityById.StatusCode == HttpStatusCode.OK,
+        "Professional can read their own availability when addressing their own profile ID.");
+    var unknownProfessionalAvailability = await assignedAssignedProfessionalClient.GetAsync(
+        $"/api/v1/professionals/{Guid.NewGuid()}/availability");
+    Ensure(unknownProfessionalAvailability.StatusCode == HttpStatusCode.NotFound,
+        "Professional cannot enumerate another professional's availability by arbitrary UUID.");
+    var professionalAvailabilityCsrf = await assignedAssignedProfessionalClient.GetAsync("/api/v1/auth/antiforgery");
+    var professionalAvailabilityCsrfBody = await professionalAvailabilityCsrf.Content.ReadFromJsonAsync<JsonElement>();
+    var professionalAvailabilityRequestToken = professionalAvailabilityCsrfBody.GetProperty("requestToken").GetString();
+    Ensure(professionalAvailabilityCsrf.IsSuccessStatusCode &&
+           !string.IsNullOrWhiteSpace(professionalAvailabilityRequestToken),
+        "Professional obtains a fresh antiforgery token after login before attempting availability changes.");
+    using (var professionalAvailabilityPut = new HttpRequestMessage(
+        HttpMethod.Put, $"/api/v1/professionals/{assignedAssignedProfessionalProfileId}/availability"))
+    {
+        professionalAvailabilityPut.Headers.Add("X-CSRF-TOKEN", professionalAvailabilityRequestToken!);
+        professionalAvailabilityPut.Content = JsonContent.Create(new
+        {
+            intervals = new[] { new { isoDayOfWeek = 1, startTime = "09:00", endTime = "17:00" } }
+        });
+        using var professionalAvailabilityResponse = await assignedAssignedProfessionalClient.SendAsync(professionalAvailabilityPut);
+        Ensure(professionalAvailabilityResponse.StatusCode == HttpStatusCode.Forbidden,
+            "Professional can view but cannot change their recurring availability; management remains Owner/Manager-only.");
+    }
+
     Ensure((await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals")).StatusCode == HttpStatusCode.Forbidden &&
            (await assignedAssignedProfessionalClient.GetAsync("/api/v1/professionals/eligible-members")).StatusCode == HttpStatusCode.Forbidden &&
            (await assignedAssignedProfessionalClient.GetAsync("/api/v1/services")).StatusCode == HttpStatusCode.Forbidden &&
@@ -1269,8 +1496,9 @@ try
     var professionalAudit = await ReadProfessionalAuditAsync(
         migratorConnectionString, ownerTenantId, assignedAssignedProfessionalProfileId);
     Ensure(professionalAudit.Contains("professional.created") &&
-           professionalAudit.Contains("professional_service.assigned"),
-        "Professional creation and service assignment are durably audited.");
+           professionalAudit.Contains("professional_service.assigned") &&
+           professionalAudit.Contains("professional_availability.created"),
+        "Professional creation, service assignment and recurring availability are durably audited.");
 
     var updateSalonService = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/services/{salonServiceId}")
     {

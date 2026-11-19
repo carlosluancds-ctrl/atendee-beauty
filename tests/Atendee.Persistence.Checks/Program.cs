@@ -178,6 +178,16 @@ await using (var scopeB = provider.CreateAsyncScope())
     Check(true, "runtime login cannot directly read business-hours configuration outside the tenant transaction runner");
     await ExpectDbFailureAsync(async () =>
     {
+        await db.Database.ExecuteSqlRawAsync("SELECT availability_id FROM atendee.professional_availability");
+    });
+    Check(true, "runtime login cannot directly read professional availability outside the tenant transaction runner");
+    await ExpectDbFailureAsync(async () =>
+    {
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM atendee.professional_availability");
+    });
+    Check(true, "runtime login cannot physically delete professional availability history");
+    await ExpectDbFailureAsync(async () =>
+    {
         await runner.ExecuteAsync(ct => db.Database.ExecuteSqlRawAsync(
             "DELETE FROM atendee.business_hours", ct));
     });

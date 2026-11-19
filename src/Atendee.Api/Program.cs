@@ -451,6 +451,7 @@ if (identityEnabled)
     app.MapTenantBusinessHours();
     app.MapTenantOnboarding();
     app.MapTenantProfessionals();
+    app.MapTenantProfessionalAvailability();
 }
 
 app.Run();
