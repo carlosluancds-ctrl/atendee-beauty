@@ -52,6 +52,11 @@
           "Npgsql": "10.0.3"
         }
       },
+      "RabbitMQ.Client": {
+        "type": "Transitive",
+        "resolved": "7.1.1",
+        "contentHash": "WggKwAQqPyV3h4RADfWgHA8LuVQkOgkh335rn578JZI6BDH8Z1ICztY32vr57NlhbN3eELPjLerPK3P+O/w/Yw=="
+      },
       "atendee.application": {
         "type": "Project",
         "dependencies": {
@@ -69,7 +74,8 @@
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.15, )",
           "Microsoft.EntityFrameworkCore": "[10.0.15, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.15, )",
-          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
+          "RabbitMQ.Client": "[7.1.1, )"
         }
       }
     }

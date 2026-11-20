@@ -1,11 +1,13 @@
 using Atendee.Application.Abstractions;
 using Atendee.Infrastructure.Identity;
+using Atendee.Infrastructure.Messaging;
 using Atendee.Infrastructure.Persistence;
 using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace Atendee.Infrastructure;
@@ -133,6 +135,49 @@ public static class DependencyInjection
         services.AddScoped<ITenantProfessionalTimeOffStore, EfTenantProfessionalTimeOffStore>();
         services.AddScoped<ITenantAppointmentStore, EfTenantAppointmentStore>();
         services.AddScoped<ITenantProfessionalStore, EfTenantProfessionalStore>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the transactional outbox dispatcher with RabbitMQ.
+    /// Requires AddAtendeePersistence to be called first for TenantDbContext.
+    /// </summary>
+    public static IServiceCollection AddAtendeeOutboxDispatcher(
+        this IServiceCollection services,
+        Action<OutboxDispatcherOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var options = new OutboxDispatcherOptions();
+        configure(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.ConnectionString, nameof(options.ConnectionString));
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.TenantConnectionString, nameof(options.TenantConnectionString));
+
+        var tenantConnStr = options.TenantConnectionString;
+
+        services.Configure<OutboxDispatcherOptions>(opt =>
+        {
+            opt.ConnectionString = options.ConnectionString;
+            opt.ExchangeName = options.ExchangeName;
+            opt.ExchangeType = options.ExchangeType;
+            opt.PollInterval = options.PollInterval;
+            opt.BatchSize = options.BatchSize;
+            opt.MaxRetryAttempts = options.MaxRetryAttempts;
+            opt.BaseRetryDelay = options.BaseRetryDelay;
+            opt.MaxRetryDelay = options.MaxRetryDelay;
+            opt.DeadLetterExchange = options.DeadLetterExchange;
+            opt.DeadLetterQueue = options.DeadLetterQueue;
+            opt.TenantConnectionString = options.TenantConnectionString;
+        });
+
+        // Register OutboxDbContext for the dispatcher (no tenant isolation)
+        services.AddDbContext<OutboxDbContext>(opt =>
+            opt.UseNpgsql(tenantConnStr, npgsql => npgsql.SetPostgresVersion(18, 7)),
+            contextLifetime: ServiceLifetime.Scoped);
+
+        services.AddHostedService<OutboxDispatcher>();
+
         return services;
     }
 }
