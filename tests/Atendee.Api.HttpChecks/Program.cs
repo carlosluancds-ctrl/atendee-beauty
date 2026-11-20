@@ -614,6 +614,48 @@ try
         Ensure(boundaryResponse.StatusCode != HttpStatusCode.RequestEntityTooLarge,
             "A request body exactly at the ceiling is not rejected by the size limit.");
     }
+
+    // V93: verify request body limit on actual API endpoints (health and unknown routes)
+    // The middleware sits before routing, so all endpoints including health should reject oversized bodies.
+    using (var v93Client = factory.CreateClient())
+    {
+        foreach (var endpoint in new[] { "/health/live", "/health/ready", "/v93-unknown-route" })
+        {
+            using var oversized = new ByteArrayContent(new byte[Atendee.Api.Security.ApiRequestLimits.MaxRequestBodyBytes + 1]);
+            oversized.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            var resp = await v93Client.PostAsync(endpoint, oversized);
+            var body = await resp.Content.ReadAsStringAsync();
+            Ensure(resp.StatusCode == HttpStatusCode.RequestEntityTooLarge &&
+                   body == "{\"status\":\"payload_too_large\"}" &&
+                   resp.Headers.CacheControl?.NoStore == true &&
+                   resp.Headers.TryGetValues("X-Content-Type-Options", out var nosniff) &&
+                   nosniff.Contains("nosniff") &&
+                   resp.Headers.TryGetValues("X-Frame-Options", out var frameDeny) &&
+                   frameDeny.Contains("DENY") &&
+                   resp.Headers.TryGetValues("Content-Security-Policy", out var csp) &&
+                   csp.Contains("default-src 'none'") &&
+                   resp.Headers.TryGetValues("Cross-Origin-Resource-Policy", out var corp) &&
+                   corp.Contains("same-origin") &&
+                   resp.Headers.TryGetValues("Cross-Origin-Opener-Policy", out var coop) &&
+                   coop.Contains("same-origin") &&
+                   resp.Headers.TryGetValues("X-Permitted-Cross-Domain-Policies", out var xpcdp) &&
+                   xpcdp.Contains("none") &&
+                   resp.Headers.TryGetValues("Referrer-Policy", out var referrer) &&
+                   referrer.Contains("no-referrer") &&
+                   resp.Headers.TryGetValues("Permissions-Policy", out var perm) &&
+                   perm.Contains("camera=()"),
+                $"V93: POST {endpoint} with oversized body returns 413 with all baseline security headers.");
+        }
+
+        foreach (var endpoint in new[] { "/health/live", "/health/ready", "/v93-unknown-route" })
+        {
+            using var boundary = new ByteArrayContent(new byte[Atendee.Api.Security.ApiRequestLimits.MaxRequestBodyBytes]);
+            boundary.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+            var resp = await v93Client.PostAsync(endpoint, boundary);
+            Ensure(resp.StatusCode != HttpStatusCode.RequestEntityTooLarge,
+                $"V93: POST {endpoint} with body exactly at the ceiling is not rejected by the size limit.");
+        }
+    }
     using (var unavailableReadyFactory = factory.WithWebHostBuilder(web =>
                web.ConfigureTestServices(services =>
                    services.AddSingleton<IDatabaseReadinessProbe>(identityDownProbe))))
