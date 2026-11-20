@@ -1056,6 +1056,13 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         });
     });
 
+    var configuredMfaPartitionSecret = mfaFactory.Services
+        .GetRequiredService<IConfiguration>()["AuthenticationRateLimiting:PartitionKeySecret"];
+    var sharedWorkflowPartitionSecret = Environment.GetEnvironmentVariable(
+        "AuthenticationRateLimiting__PartitionKeySecret");
+    Console.WriteLine(
+        "V89 diagnostic: MFA test host uses an isolated rate-limit partition key: " +
+        (!string.Equals(configuredMfaPartitionSecret, sharedWorkflowPartitionSecret, StringComparison.Ordinal)));
     using var mfaClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
@@ -1095,7 +1102,10 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         email = ownerEmail,
         password = ownerPassword
     });
-    var ownerLoginBody = await ownerLogin.Content.ReadFromJsonAsync<JsonElement>();
+    var ownerLoginBodyText = await ownerLogin.Content.ReadAsStringAsync();
+    Console.WriteLine("V89 diagnostic: owner MFA-setup login returned HTTP " + (int)ownerLogin.StatusCode + "; body=" + ownerLoginBodyText);
+    using var ownerLoginBodyDocument = JsonDocument.Parse(ownerLoginBodyText);
+    var ownerLoginBody = ownerLoginBodyDocument.RootElement;
     Ensure(ownerLogin.StatusCode == HttpStatusCode.Accepted &&
            ownerLoginBody.GetProperty("state").GetString() == "mfa_setup_required",
         "Owner without MFA receives only a short-lived MFA-setup session.");
