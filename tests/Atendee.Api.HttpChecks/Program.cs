@@ -585,6 +585,35 @@ try
         }
     }
 
+    // V92: bounded request bodies and Kestrel request limits.
+    var kestrelLimits = factory.Services.GetRequiredService<IOptions<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>>().Value.Limits;
+    Ensure(kestrelLimits.MaxRequestBodySize == Atendee.Api.Security.ApiRequestLimits.MaxRequestBodyBytes &&
+           kestrelLimits.MaxRequestHeadersTotalSize == Atendee.Api.Security.ApiRequestLimits.MaxRequestHeadersTotalSizeBytes &&
+           kestrelLimits.MaxRequestHeaderCount == Atendee.Api.Security.ApiRequestLimits.MaxRequestHeaderCount &&
+           kestrelLimits.MaxRequestLineSize == Atendee.Api.Security.ApiRequestLimits.MaxRequestLineSizeBytes &&
+           kestrelLimits.RequestHeadersTimeout == Atendee.Api.Security.ApiRequestLimits.RequestHeadersTimeout,
+        "Kestrel enforces the bounded request body, header size/count, request line and header timeout limits.");
+
+    using (var bodyLimitClient = factory.CreateClient())
+    {
+        using var oversizedBody = new ByteArrayContent(new byte[Atendee.Api.Security.ApiRequestLimits.MaxRequestBodyBytes + 1]);
+        oversizedBody.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        var oversizedResponse = await bodyLimitClient.PostAsync("/v92-unknown-route", oversizedBody);
+        var oversizedText = await oversizedResponse.Content.ReadAsStringAsync();
+        Ensure(oversizedResponse.StatusCode == HttpStatusCode.RequestEntityTooLarge &&
+               oversizedText == "{\"status\":\"payload_too_large\"}" &&
+               oversizedResponse.Headers.CacheControl?.NoStore == true &&
+               oversizedResponse.Headers.TryGetValues("X-Content-Type-Options", out var oversizedNosniff) &&
+               oversizedNosniff.Contains("nosniff") &&
+               oversizedResponse.Headers.TryGetValues("Content-Security-Policy", out _),
+            "A request body larger than the ceiling is rejected with 413 and a minimal body before routing, with baseline security headers.");
+
+        using var boundaryBody = new ByteArrayContent(new byte[Atendee.Api.Security.ApiRequestLimits.MaxRequestBodyBytes]);
+        boundaryBody.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        var boundaryResponse = await bodyLimitClient.PostAsync("/v92-unknown-route", boundaryBody);
+        Ensure(boundaryResponse.StatusCode != HttpStatusCode.RequestEntityTooLarge,
+            "A request body exactly at the ceiling is not rejected by the size limit.");
+    }
     using (var unavailableReadyFactory = factory.WithWebHostBuilder(web =>
                web.ConfigureTestServices(services =>
                    services.AddSingleton<IDatabaseReadinessProbe>(identityDownProbe))))

@@ -5,6 +5,7 @@ using System.Threading.RateLimiting;
 using Atendee.Api.Authentication;
 using Atendee.Api.Customers;
 using Atendee.Api.Scheduling;
+using Atendee.Api.Security;
 using Atendee.Api.Services;
 using Atendee.Api.Tenants;
 using Atendee.Api.Professionals;
@@ -19,7 +20,11 @@ using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.AddServerHeader = false;
+    ApiRequestLimits.Apply(options.Limits);
+});
 builder.Services.AddProblemDetails();
 builder.Services.AddAuthorization();
 
@@ -371,6 +376,8 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+// V92: bounded request bodies, rejected before routing, authentication and antiforgery.
+app.UseMiddleware<RequestBodySizeLimitMiddleware>();
 app.UseExceptionHandler();
 app.UseRouting();
 // Shared auth limits run after trusted proxy resolution/routing and before authentication/antiforgery.
