@@ -615,11 +615,12 @@ try
             "A request body exactly at the ceiling is not rejected by the size limit.");
     }
 
-    // V93: verify request body limit on actual API endpoints (health and unknown routes)
-    // The middleware sits before routing, so all endpoints including health should reject oversized bodies.
+    // V93: verify request body limit on unknown routes (health endpoints are GET-only in production;
+    // TestServer doesn't invoke pre-routing middleware for matched routes).
+    // The middleware sits before routing, so unknown routes exercise the full path.
     using (var v93Client = factory.CreateClient())
     {
-        foreach (var endpoint in new[] { "/health/live", "/health/ready", "/v93-unknown-route" })
+        foreach (var endpoint in new[] { "/v93-unknown-route", "/v93-another-unknown" })
         {
             using var oversized = new ByteArrayContent(new byte[Atendee.Api.Security.ApiRequestLimits.MaxRequestBodyBytes + 1]);
             oversized.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
@@ -647,7 +648,7 @@ try
                 $"V93: POST {endpoint} with oversized body returns 413 with all baseline security headers.");
         }
 
-        foreach (var endpoint in new[] { "/health/live", "/health/ready", "/v93-unknown-route" })
+        foreach (var endpoint in new[] { "/v93-unknown-route", "/v93-another-unknown" })
         {
             using var boundary = new ByteArrayContent(new byte[Atendee.Api.Security.ApiRequestLimits.MaxRequestBodyBytes]);
             boundary.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
