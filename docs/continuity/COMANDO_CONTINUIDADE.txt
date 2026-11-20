@@ -6,6 +6,9 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V93: commit de teste e1fec9ade0b97652d94e3a9e7bb20cd56c7106ce (teste abrangente de limite de corpo de requisicao em rotas desconhecidas com cabecalhos de seguranca).
+- CI run 259 / 44671789665: em andamento no SHA exato.
+- V93: teste HTTP verifica limite de 1 MiB (HTTP 413) em rotas desconhecidas com todos os cabecalhos de seguranca basicos; corpo exatamente no limite e aceito; health endpoints sao GET-only em producao, TestServer roteia POST para 404 antes do middleware de pre-roteamento.
 - V92: commit de implementacao 98d8fc47009e67dfd691180261344ce260d41b9c.
 - CI run 255 / 44667879306: sucesso no mesmo SHA (todos os passos do job com sucesso).
 - V92: limite de corpo de requisicao de 1 MiB (HTTP 413 antes de roteamento/autenticacao/antiforgery; Kestrel MaxRequestBodySize), cabecalhos ate 32 KiB/100 itens, linha de requisicao 8 KiB e timeout de cabecalhos de 15 s; novo teste cobre limites configurados, 413 acima do limite e corpo exatamente no limite.
@@ -15,10 +18,10 @@ PONTO VALIDADO
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
 ANTES DE QUALQUER ALTERACAO
-Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V93_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
-V93 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas (incluindo WhatsApp Cloud API) e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Ligar probes de orquestrador a /health/live e /health/ready e decisao de deploy. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel; ITenantNoteStore e apenas exemplo e nao e funcionalidade de produto.
+V94 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas (incluindo WhatsApp Cloud API) e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Ligar probes de orquestrador a /health/live e /health/ready e decisao de deploy. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel; ITenantNoteStore e apenas exemplo e nao e funcionalidade de produto.
 
 REGRAS PERMANENTES
 1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.

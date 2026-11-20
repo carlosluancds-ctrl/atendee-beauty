@@ -1,803 +1,856 @@
-﻿{
-    "backup_version":  "v92-api-request-limits",
-    "updated_at":  "2026-11-20",
-    "repository":  "https://github.com/carlosluancds-ctrl/atendee-beauty",
-    "branch":  "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
-    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
-    "latest_implementation_commit":  "98d8fc47009e67dfd691180261344ce260d41b9c",
-    "latest_documentation_parent_commit":  "98d8fc47009e67dfd691180261344ce260d41b9c",
-    "latest_ci":  {
-                      "workflow":  "PostgreSQL 18 persistence integration",
-                      "run":  "44667879306",
-                      "run_number":  255,
-                      "attempt":  1,
-                      "status":  "success",
-                      "validated_head_sha":  "98d8fc47009e67dfd691180261344ce260d41b9c",
-                      "job":  "Build and verify tenant isolation",
-                      "job_status":  "success",
-                      "portal_browser_tests":  "8 passed",
-                      "domain_checks":  "79/79 passed",
-                      "postgres_rls_checks":  "43/43 passed",
-                      "identity_checks":  "49/49 passed",
-                      "http_checks":  "passed",
-                      "fullstack_browser_result":  "passed",
-                      "key_checks":  [ "V92: request body ceiling 1 MiB (413 for larger Content-Length, boundary size accepted) and configured Kestrel body/header/request-line/timeout limits; all CI job steps success", "V91: baseline API security headers (CSP, CORP, COOP, X-Permitted-Cross-Domain-Policies) asserted on /health/live, /health/ready and 404; all CI job steps success",
-                                         "frontend dependency audit, tests and build",
-                                         "portal browser E2E 8/8",
-                                         "locked dependency restore",
-                                         "Release build succeeded with zero warnings and errors",
-                                         "domain checks 79/79",
-                                         "PostgreSQL 18.7 / EF Core / RLS persistence checks 43/43",
-                                         "Identity/TOTP/tenant-context checks 49/49",
-                                         "V90: readiness probe reports ready when identity and tenant PostgreSQL are reachable and not ready when either is unreachable",
-                                         "V90: GET /health/ready returns 200 {status:ready} and 503 {status:unavailable} with no-store and no dependency details, anonymously and without antiforgery",
-                                         "V89: two independent API limiter instances share atomic PostgreSQL fixed-window counter under 40 concurrent acquisitions, exactly 7 permits",
-                                         "V89: HMAC-SHA256 partition digest, no plaintext IP storage, independent IP partitions and IPv4-mapped IPv6 normalization",
-                                         "V89: UTC window rollover and bounded expired-bucket cleanup",
-                                         "V89: PostgreSQL outage returns fail-closed HTTP 503 without invoking protected endpoint",
-                                         "V89: exhausted quota returns HTTP 429 with Retry-After",
-                                         "HTTP authentication, session-security and integration checks passed",
-                                         "disposable credentials cleared and PostgreSQL container removed"
-                                     ]
-                  },
-    "v63_fullstack_baseline":  {
-                                   "implementation_commit":  "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
-                                   "workflow_run":  "44319685006",
-                                   "workflow_status":  "success",
-                                   "mocked_browser_tests":  8,
-                                   "real_fullstack_browser_tests":  1,
-                                   "database":  "disposable PostgreSQL 18.7",
-                                   "roles":  [
-                                                 "Owner",
-                                                 "Manager",
-                                                 "Professional",
-                                                 "Receptionist"
-                                             ]
-                               },
-    "v64_work_in_progress":  {
-                                 "commits":  [
-                                                 "b27b4030bb8f8a44a6184d1fc8acaac3f8b6c8f9",
-                                                 "aa38361ed16017a9642145400a94d9b3a4088286"
-                                             ],
-                                 "test_file":  "web/atendee-portal/tests/e2e/fullstack.spec.mjs",
-                                 "assertions":  [
-                                                    "anonymous request token is rejected after Owner authentication",
-                                                    "authenticated request token is rejected after logout"
-                                                ],
-                                 "expected_result":  "HTTP 400 antiforgery_validation_failed",
-                                 "approval":  "validated_by_v65_full_ci",
-                                 "validation_run":  "44451964941",
-                                 "validation_head":  "0a06ab045691a336c6114bf173f1383e3aafb4ac",
-                                 "note":  "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
-                             },
-    "next_step":  "V93: obtain explicit product decisions for appointment rescheduling/cancellation before implementation; if no decision is pending, choose only a single autonomous, safe and testable backend increment. Outbox dispatcher remains blocked until real idempotent handlers, retry/backoff, dead-letter and observability plus provider/credential/cost approvals are defined. Data Protection key rotation, Platform Admin, external providers and production deployment remain blocked pending explicit security, product, credential and operational decisions.",
-    "safeguards":  {
-                       "main_untouched":  true,
-                       "production_deploy_authorized":  false,
-                       "ses_configuration_authorized":  false,
-                       "billing_trial_activation_authorized":  false
-                   },
-    "v65":  {
-                "implementation_head":  "0a06ab045691a336c6114bf173f1383e3aafb4ac",
-                "approval":  "approved",
-                "cross_tenant_service_assertions":  [
-                                                        "Salon B list contains only B service",
-                                                        "Salon B read A service returns 404",
-                                                        "Salon B update A service returns 404",
-                                                        "Salon A list contains only A service",
-                                                        "Salon A read B service returns 404",
-                                                        "Salon A update B service returns 404"
-                                                    ],
-                "antiforgery_assertions":  [
-                                               "anonymous token rejected after Owner login (400 antiforgery_validation_failed)",
-                                               "authenticated token rejected after logout (400 antiforgery_validation_failed)"
-                                           ]
+{
+    "backup_version": "v93-http-checks-request-body-limit",
+    "updated_at": "2026-11-20",
+    "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
+    "branch": "security/csrf-webhook-antiforgery-v23",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V93_2026-11-20.md",
+    "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
+    "latest_implementation_commit": "98d8fc47009e67dfd691180261344ce260d41b9c",
+    "latest_documentation_parent_commit": "e1fec9ade0b97652d94e3a9e7bb20cd56c7106ce",
+    "latest_ci": {
+        "workflow": "PostgreSQL 18 persistence integration",
+        "run": "44671789665",
+        "run_number": 259,
+        "attempt": 1,
+        "status": "in_progress",
+        "validated_head_sha": "e1fec9ade0b97652d94e3a9e7bb20cd56c7106ce",
+        "job": "Build and verify tenant isolation",
+        "job_status": "in_progress",
+        "portal_browser_tests": "8 passed",
+        "domain_checks": "79/79 passed",
+        "postgres_rls_checks": "43/43 passed",
+        "identity_checks": "49/49 passed",
+        "http_checks": "in_progress",
+        "fullstack_browser_result": "in_progress",
+        "key_checks": [
+            "V93: request body limit (1 MiB) verified on unknown routes with 413 and all baseline security headers; boundary size accepted",
+            "V92: request body ceiling 1 MiB (413 for larger Content-Length, boundary size accepted) and configured Kestrel body/header/request-line/timeout limits",
+            "V91: baseline API security headers (CSP, CORP, COOP, X-Permitted-Cross-Domain-Policies) asserted on /health/live, /health/ready and 404",
+            "frontend dependency audit, tests and build",
+            "portal browser E2E 8/8",
+            "locked dependency restore",
+            "Release build succeeded with zero warnings and errors",
+            "domain checks 79/79",
+            "PostgreSQL 18.7 / EF Core / RLS persistence checks 43/43",
+            "Identity/TOTP/tenant-context checks 49/49",
+            "V90: readiness probe reports ready when identity and tenant PostgreSQL are reachable and not ready when either is unreachable",
+            "V90: GET /health/ready returns 200 {status:ready} and 503 {status:unavailable} with no-store and no dependency details, anonymously and without antiforgery",
+            "V89: two independent API limiter instances share atomic PostgreSQL fixed-window counter under 40 concurrent acquisitions, exactly 7 permits",
+            "V89: HMAC-SHA256 partition digest, no plaintext IP storage, independent IP partitions and IPv4-mapped IPv6 normalization",
+            "V89: UTC window rollover and bounded expired-bucket cleanup",
+            "V89: PostgreSQL outage returns fail-closed HTTP 503 without invoking protected endpoint",
+            "V89: exhausted quota returns HTTP 429 with Retry-After",
+            "HTTP authentication, session-security and integration checks passed",
+            "disposable credentials cleared and PostgreSQL container removed"
+        ]
+    },
+    "v63_fullstack_baseline": {
+        "implementation_commit": "e106c5926b93168ca4e0c9b7b2a6e762fc6606a4",
+        "workflow_run": "44319685006",
+        "workflow_status": "success",
+        "mocked_browser_tests": 8,
+        "real_fullstack_browser_tests": 1,
+        "database": "disposable PostgreSQL 18.7",
+        "roles": [
+            "Owner",
+            "Manager",
+            "Professional",
+            "Receptionist"
+        ]
+    },
+    "v64_work_in_progress": {
+        "commits": [
+            "b27b4030bb8f8a44a6184d1fc8acaac3f8b6c8f9",
+            "aa38361ed16017a9642145400a94d9b3a4088286"
+        ],
+        "test_file": "web/atendee-portal/tests/e2e/fullstack.spec.mjs",
+        "assertions": [
+            "anonymous request token is rejected after Owner authentication",
+            "authenticated request token is rejected after logout"
+        ],
+        "expected_result": "HTTP 400 antiforgery_validation_failed",
+        "approval": "validated_by_v65_full_ci",
+        "validation_run": "44451964941",
+        "validation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
+        "note": "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
+    },
+    "next_step": "V94: obtain explicit product decisions for appointment rescheduling/cancellation before implementation; if no decision is pending, choose only a single autonomous, safe and testable backend increment. Outbox dispatcher remains blocked until real idempotent handlers, retry/backoff, dead-letter and observability plus provider/credential/cost approvals are defined. Data Protection key rotation, Platform Admin, external providers and production deployment remain blocked pending explicit security, product, credential and operational decisions.",
+    "safeguards": {
+        "main_untouched": true,
+        "production_deploy_authorized": false,
+        "ses_configuration_authorized": false,
+        "billing_trial_activation_authorized": false
+    },
+    "v65": {
+        "implementation_head": "0a06ab045691a336c6114bf173f1383e3aafb4ac",
+        "approval": "approved",
+        "cross_tenant_service_assertions": [
+            "Salon B list contains only B service",
+            "Salon B read A service returns 404",
+            "Salon B update A service returns 404",
+            "Salon A list contains only A service",
+            "Salon A read B service returns 404",
+            "Salon A update B service returns 404"
+        ],
+        "antiforgery_assertions": [
+            "anonymous token rejected after Owner login (400 antiforgery_validation_failed)",
+            "authenticated token rejected after logout (400 antiforgery_validation_failed)"
+        ]
+    },
+    "v66": {
+        "implementation_commits": [
+            "c1333a70572d8cdcacea3dc6c475bfdb273cf6dd",
+            "90c6b6c20a3b881395d07d335dda32eabaff009a"
+        ],
+        "approval": "approved",
+        "assertions": [
+            "Salon A eligible-member list exposes only A professional identity",
+            "Salon B eligible-member list exposes only B professional identity",
+            "Salon B can create only B professional profile",
+            "Salon B cannot create profile for A identity (400 professional_membership_invalid)",
+            "Salon A cannot create profile for B identity (400 professional_membership_invalid)",
+            "Salon A profile list does not expose B profile",
+            "Salon A cannot update B profile by known ID (404)"
+        ]
+    },
+    "v67": {
+        "implementation_commit": "962649067d02f4d65e347025c16b5cd069927565",
+        "approval": "approved",
+        "assertions": [
+            "Salon B cannot assign Salon A service to B professional profile (400 professional_services_validation_failed)",
+            "Salon B professional profile remains unchanged after rejection",
+            "Salon A cannot assign Salon B service to A professional profile (400 professional_services_validation_failed)",
+            "Salon A professional profile remains unchanged after rejection",
+            "legitimate Salon A service assignment still succeeds"
+        ]
+    },
+    "v68": {
+        "implementation_commit": "2065f4ecab9969795f4dc6be7af3376cc51340c1",
+        "approval": "approved",
+        "assertions": [
+            "Forged X-Tenant-Id, X-Actor-Id, X-Tenant-Role, X-Tenant-Status and equivalent query parameters do not change persisted tenant context",
+            "GET /api/v1/tenant returns actual persisted tenant/status/Receptionist role",
+            "Receptionist onboarding completion with forged Owner headers and body returns 403"
+        ]
+    },
+    "v69": {
+        "implementation_commits": [
+            "773fb0f7694643b8c6c95897ff574b99db280539",
+            "d90d8906d91a68da979be60e02ba5ffeaea5c1e0",
+            "00c4b55955738b06602b8cbb0519f6f3ef60ebf4"
+        ],
+        "approval": "approved",
+        "assertions": [
+            "onboarding status audit ActorIdentityUserId equals authenticated Owner ID",
+            "onboarding status audit remains tenant-targeted without identity target",
+            "migrator status changes without actor remain actor-null",
+            "invalid TOTP rejected and audited once",
+            "replayed recovery code and invalid TOTP each increment failed-attempt count",
+            "successful TOTP resets failed-attempt count"
+        ]
+    },
+    "v70": {
+        "implementation_commits": [
+            "495abc10160d4210850b9cd5217b96b72e8b96de",
+            "49b8e0bb235905f7d7d3663419fe9c2eb337214c"
+        ],
+        "approval": "approved",
+        "assertions": [
+            "wrong password returns 401 and writes exactly one operational_auth.login_failed event",
+            "wrong password increments AccessFailedCount to 1",
+            "valid password resets AccessFailedCount to 0 before MFA setup",
+            "password check and mandatory failure audit share one identity DbContext transaction"
+        ]
+    },
+    "v71": {
+        "implementation_commits": [
+            "e34dd36632cb51a05cc7b75d2db55d196fb51826",
+            "63ecaa52f8cab3699990bd767d84233717fa755e"
+        ],
+        "approval": "approved",
+        "ci_run": "44458718974",
+        "assertions": [
+            "mandatory pending-MFA audit failure aborts login with HTTP 500",
+            "rejected pending-MFA audit event is not persisted",
+            "temporary two-factor cookie cannot complete MFA after failed audit",
+            "failed pending-MFA audit cannot be upgraded to an authenticated application session"
+        ]
+    },
+    "v72": {
+        "implementation_commits": [
+            "bd9543e43b5ce773471a48c008b728ca90a6a809",
+            "9dd9bfe6ac90fdcfd60401ba0e3eaf7c11ab4af3"
+        ],
+        "approval": "approved",
+        "ci_run": "44460367169",
+        "assertions": [
+            "five sequential wrong-password attempts are each audited exactly once",
+            "the fifth sequential failed attempt locks the account",
+            "two simultaneous wrong-password attempts are both counted and audited",
+            "the second concurrent attempt reaches the configured five-failure lockout threshold",
+            "subsequent already-locked login is generically rejected without an additional login_failed event"
+        ]
+    },
+    "v73": {
+        "implementation_commits": [
+            "eb38175ef2b3b6a325535740b99f27f9fcbd28e6"
+        ],
+        "approval": "approved",
+        "ci_run": "44461641990",
+        "assertions": [
+            "password login and failed TOTP challenge concurrently update the shared counter without lost increments",
+            "password login and failed recovery-code challenge concurrently update the shared counter without lost increments",
+            "cross-flow three-way failure reaches lockout and writes one login_failed plus two challenge_failed events",
+            "password login and failed MFA enrollment concurrently update the shared counter without lost increments",
+            "cross-flow enrollment failure reaches lockout and writes one login_failed plus one enrollment_failed event",
+            "already-locked MFA challenge and enrollment attempts add no further failure audit events",
+            "IdentityResult failures for AccessFailedAsync and ResetAccessFailedCountAsync abort before audit commit",
+            "TOTP replay guard remains independent and passing"
+        ]
+    },
+    "v74": {
+        "implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+        "approval": "approved",
+        "ci_run": "44558003655",
+        "assertions": [
+            "MFA setup cookie is reissued with the new Identity security stamp after authenticator-key initialization",
+            "original MFA setup ticket expiry is preserved; missing or elapsed expiry is rejected without extension",
+            "fresh antiforgery tokens are used after setup-ticket refresh, enrollment and login transitions",
+            "invalid authenticator code is rejected during MFA enrollment and successful enrollment still completes",
+            "cross-flow MFA enrollment failure uses the refreshed setup ticket and antiforgery token",
+            "pending MFA challenge cannot complete after session revocation",
+            "pending MFA setup cannot continue after session revocation or account disablement",
+            "session revocation and account disablement remain durably audited",
+            "audit-before-cookie ordering and independent TOTP replay guard remain passing"
+        ]
+    },
+    "v75": {
+        "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+        "test_commit": "8744d1730882dff3ca7c3fe848c8f282934de8fc",
+        "approval": "approved",
+        "ci_run": "44565239959",
+        "scope": "test-only deterministic concurrent authentication/session-revocation and account-disablement coverage",
+        "assertions": [
+            "password verification followed by session revocation before pending-MFA challenge-cookie issuance leaves an unusable challenge ticket",
+            "MFA challenge completion racing with session revocation leaves an unusable application cookie",
+            "MFA enrollment completion racing with account disablement leaves an unusable application cookie",
+            "direct non-MFA login racing with account disablement leaves an unusable application cookie",
+            "initial MFA setup-ticket issuance racing with account disablement cannot continue enrollment or establish an application session",
+            "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
+        ]
+    },
+    "latest_validated_head": "5716f69d6f9d1f8032da150797d3572bad876909",
+    "v76": {
+        "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+        "test_commit": "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
+        "approval": "approved",
+        "ci_run": "44566734046",
+        "scope": "test-only transactional rollback coverage for account disablement and session revocation",
+        "assertions": [
+            "Identity LockoutEnd update failure aborts DisableAsync and rolls back lockout/security stamp without audit",
+            "Identity SecurityStamp update failure aborts RevokeSessionsAsync without audit",
+            "mandatory disabled audit failure rolls back lockout/security stamp and leaves no audit row",
+            "mandatory sessions-revoked audit failure rolls back security stamp and leaves no audit row"
+        ]
+    },
+    "v77": {
+        "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+        "test_commits": [
+            "67e4f49504638776ef736c2770d0b4a9ed4c9bf8",
+            "c3d8ad0fc9f43a76ba82309e72d5a51a51342211"
+        ],
+        "approval": "approved",
+        "ci_run": "44568548323",
+        "scope": "test-only explicit IdentityResult failure handling in account disablement and session revocation",
+        "assertions": [
+            "DisableAsync aborts on UserManager store IdentityResult.Failed before security-stamp update and audit",
+            "RevokeSessionsAsync aborts on UserManager store IdentityResult.Failed before audit",
+            "persisted LockoutEnd and SecurityStamp remain unchanged after failed IdentityResult responses",
+            "no misleading account-disabled or sessions-revoked audit event persists"
+        ]
+    },
+    "v78": {
+        "production_implementation_commit": "86565921a64332864fa97d386685f977cd5df69d",
+        "documentation_commit": "867496cce35baae69e35c2cd7cdbd2f05de32320",
+        "approval": "approved",
+        "ci_run": "44569197822",
+        "scope": "read-only review of account-security service exposure and administrative authorization boundary",
+        "findings": [
+            "IOperationalAccountSecurityService is registered in Infrastructure DI but has no src/Atendee.Api endpoint call sites",
+            "DisableAsync and RevokeSessionsAsync are invoked only from integration tests in the current repository",
+            "no administrative HTTP route exposes account disablement or session revocation",
+            "the service records the trusted actor but does not enforce tenant/role authorization and must not be exposed directly",
+            "ADMIN_ACTIONS_DESIGN_V1 remains a proposal; explicit owner decisions are required before A1/A2 endpoints"
+        ]
+    },
+    "v79": {
+        "implementation_commit": "8232d4e48ce7e9b4445f05e02813ad83fc8bd633",
+        "test_commits": [
+            "9b72fadb645bd3f58de24f72b25abff0b9b45394",
+            "4a13aa3b72112c4147062a83859ed1f2be605082",
+            "60ecee8e2b1e2e1711181aa08f8e8c0422ae2592",
+            "a7164625f3335602a617388c977f3daa0f09b8c0",
+            "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d"
+        ],
+        "approval": "approved",
+        "ci_run": "44578183985",
+        "validated_head": "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d",
+        "scope": "explicit trusted forwarded-proxy allowlist, deny-all default and HTTP regression coverage",
+        "assertions": [
+            "default configuration trusts no real proxy using unmatchable unspecified-IP sentinels",
+            "untrusted forwarded IP, scheme and host headers cannot spoof request origin or rate-limit partition",
+            "only exact valid unicast IPs from ForwardedHeaders:KnownProxies are accepted",
+            "an explicitly configured exact proxy IP is trusted for one forwarding hop",
+            "X-Forwarded-For and X-Forwarded-Proto are enabled with one-hop limit and required header symmetry",
+            "X-Forwarded-Host is ignored unless explicitly enabled",
+            "invalid trusted-proxy configuration fails application startup closed",
+            "all existing frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
+        ]
+    },
+    "v80": {
+        "implementation_commit": "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
+        "approval": "approved",
+        "ci_run": "44579219902",
+        "validated_head": "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
+        "scope": "canonical IPv4-mapped IPv6 proxy addresses and reject non-unicast IPv4/IPv6 trusted-proxy values",
+        "rejected_addresses": [
+            "not-an-ip",
+            "0.0.0.0",
+            "224.0.0.1",
+            "240.0.0.1",
+            "255.255.255.255",
+            "::",
+            "ff02::1",
+            "::ffff:0.0.0.0",
+            "::ffff:224.0.0.1"
+        ],
+        "assertions": [
+            "IPv4-mapped IPv6 proxy addresses are canonicalized to IPv4 before validation and storage",
+            "unspecified IPv4/IPv6, IPv4 broadcast, IPv4 multicast/reserved and IPv6 multicast proxy addresses fail application startup closed",
+            "all nine invalid proxy-address regression cases pass in HTTP integration checks",
+            "V79 deny-all default, exact trusted-proxy allowlist, one-hop forwarding, header symmetry and X-Forwarded-Host rejection remain passing",
+            "all frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
+        ]
+    },
+    "v81": {
+        "test_commit": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+        "approval": "approved",
+        "ci_run": "44580208061",
+        "validated_head": "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
+        "scope": "positive regression coverage for native IPv6, IPv4 and IPv4-mapped IPv6 trusted-proxy addresses",
+        "accepted_address_cases": [
+            {
+                "configured": "::1",
+                "canonical": "::1"
             },
-    "v66":  {
-                "implementation_commits":  [
-                                               "c1333a70572d8cdcacea3dc6c475bfdb273cf6dd",
-                                               "90c6b6c20a3b881395d07d335dda32eabaff009a"
-                                           ],
-                "approval":  "approved",
-                "assertions":  [
-                                   "Salon A eligible-member list exposes only A professional identity",
-                                   "Salon B eligible-member list exposes only B professional identity",
-                                   "Salon B can create only B professional profile",
-                                   "Salon B cannot create profile for A identity (400 professional_membership_invalid)",
-                                   "Salon A cannot create profile for B identity (400 professional_membership_invalid)",
-                                   "Salon A profile list does not expose B profile",
-                                   "Salon A cannot update B profile by known ID (404)"
-                               ]
+            {
+                "configured": "127.0.0.1",
+                "canonical": "127.0.0.1"
             },
-    "v67":  {
-                "implementation_commit":  "962649067d02f4d65e347025c16b5cd069927565",
-                "approval":  "approved",
-                "assertions":  [
-                                   "Salon B cannot assign Salon A service to B professional profile (400 professional_services_validation_failed)",
-                                   "Salon B professional profile remains unchanged after rejection",
-                                   "Salon A cannot assign Salon B service to A professional profile (400 professional_services_validation_failed)",
-                                   "Salon A professional profile remains unchanged after rejection",
-                                   "legitimate Salon A service assignment still succeeds"
-                               ]
-            },
-    "v68":  {
-                "implementation_commit":  "2065f4ecab9969795f4dc6be7af3376cc51340c1",
-                "approval":  "approved",
-                "assertions":  [
-                                   "Forged X-Tenant-Id, X-Actor-Id, X-Tenant-Role, X-Tenant-Status and equivalent query parameters do not change persisted tenant context",
-                                   "GET /api/v1/tenant returns actual persisted tenant/status/Receptionist role",
-                                   "Receptionist onboarding completion with forged Owner headers and body returns 403"
-                               ]
-            },
-    "v69":  {
-                "implementation_commits":  [
-                                               "773fb0f7694643b8c6c95897ff574b99db280539",
-                                               "d90d8906d91a68da979be60e02ba5ffeaea5c1e0",
-                                               "00c4b55955738b06602b8cbb0519f6f3ef60ebf4"
-                                           ],
-                "approval":  "approved",
-                "assertions":  [
-                                   "onboarding status audit ActorIdentityUserId equals authenticated Owner ID",
-                                   "onboarding status audit remains tenant-targeted without identity target",
-                                   "migrator status changes without actor remain actor-null",
-                                   "invalid TOTP rejected and audited once",
-                                   "replayed recovery code and invalid TOTP each increment failed-attempt count",
-                                   "successful TOTP resets failed-attempt count"
-                               ]
-            },
-    "v70":  {
-                "implementation_commits":  [
-                                               "495abc10160d4210850b9cd5217b96b72e8b96de",
-                                               "49b8e0bb235905f7d7d3663419fe9c2eb337214c"
-                                           ],
-                "approval":  "approved",
-                "assertions":  [
-                                   "wrong password returns 401 and writes exactly one operational_auth.login_failed event",
-                                   "wrong password increments AccessFailedCount to 1",
-                                   "valid password resets AccessFailedCount to 0 before MFA setup",
-                                   "password check and mandatory failure audit share one identity DbContext transaction"
-                               ]
-            },
-    "v71":  {
-                "implementation_commits":  [
-                                               "e34dd36632cb51a05cc7b75d2db55d196fb51826",
-                                               "63ecaa52f8cab3699990bd767d84233717fa755e"
-                                           ],
-                "approval":  "approved",
-                "ci_run":  "44458718974",
-                "assertions":  [
-                                   "mandatory pending-MFA audit failure aborts login with HTTP 500",
-                                   "rejected pending-MFA audit event is not persisted",
-                                   "temporary two-factor cookie cannot complete MFA after failed audit",
-                                   "failed pending-MFA audit cannot be upgraded to an authenticated application session"
-                               ]
-            },
-    "v72":  {
-                "implementation_commits":  [
-                                               "bd9543e43b5ce773471a48c008b728ca90a6a809",
-                                               "9dd9bfe6ac90fdcfd60401ba0e3eaf7c11ab4af3"
-                                           ],
-                "approval":  "approved",
-                "ci_run":  "44460367169",
-                "assertions":  [
-                                   "five sequential wrong-password attempts are each audited exactly once",
-                                   "the fifth sequential failed attempt locks the account",
-                                   "two simultaneous wrong-password attempts are both counted and audited",
-                                   "the second concurrent attempt reaches the configured five-failure lockout threshold",
-                                   "subsequent already-locked login is generically rejected without an additional login_failed event"
-                               ]
-            },
-    "v73":  {
-                "implementation_commits":  [
-                                               "eb38175ef2b3b6a325535740b99f27f9fcbd28e6"
-                                           ],
-                "approval":  "approved",
-                "ci_run":  "44461641990",
-                "assertions":  [
-                                   "password login and failed TOTP challenge concurrently update the shared counter without lost increments",
-                                   "password login and failed recovery-code challenge concurrently update the shared counter without lost increments",
-                                   "cross-flow three-way failure reaches lockout and writes one login_failed plus two challenge_failed events",
-                                   "password login and failed MFA enrollment concurrently update the shared counter without lost increments",
-                                   "cross-flow enrollment failure reaches lockout and writes one login_failed plus one enrollment_failed event",
-                                   "already-locked MFA challenge and enrollment attempts add no further failure audit events",
-                                   "IdentityResult failures for AccessFailedAsync and ResetAccessFailedCountAsync abort before audit commit",
-                                   "TOTP replay guard remains independent and passing"
-                               ]
-            },
-    "v74":  {
-                "implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "approval":  "approved",
-                "ci_run":  "44558003655",
-                "assertions":  [
-                                   "MFA setup cookie is reissued with the new Identity security stamp after authenticator-key initialization",
-                                   "original MFA setup ticket expiry is preserved; missing or elapsed expiry is rejected without extension",
-                                   "fresh antiforgery tokens are used after setup-ticket refresh, enrollment and login transitions",
-                                   "invalid authenticator code is rejected during MFA enrollment and successful enrollment still completes",
-                                   "cross-flow MFA enrollment failure uses the refreshed setup ticket and antiforgery token",
-                                   "pending MFA challenge cannot complete after session revocation",
-                                   "pending MFA setup cannot continue after session revocation or account disablement",
-                                   "session revocation and account disablement remain durably audited",
-                                   "audit-before-cookie ordering and independent TOTP replay guard remain passing"
-                               ]
-            },
-    "v75":  {
-                "production_implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "test_commit":  "8744d1730882dff3ca7c3fe848c8f282934de8fc",
-                "approval":  "approved",
-                "ci_run":  "44565239959",
-                "scope":  "test-only deterministic concurrent authentication/session-revocation and account-disablement coverage",
-                "assertions":  [
-                                   "password verification followed by session revocation before pending-MFA challenge-cookie issuance leaves an unusable challenge ticket",
-                                   "MFA challenge completion racing with session revocation leaves an unusable application cookie",
-                                   "MFA enrollment completion racing with account disablement leaves an unusable application cookie",
-                                   "direct non-MFA login racing with account disablement leaves an unusable application cookie",
-                                   "initial MFA setup-ticket issuance racing with account disablement cannot continue enrollment or establish an application session",
-                                   "existing audit-before-cookie ordering, row locks, security-stamp checks and TOTP replay guard remain passing"
-                               ]
-            },
-    "latest_validated_head":  "5716f69d6f9d1f8032da150797d3572bad876909",
-    "v76":  {
-                "production_implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "test_commit":  "d2d51327e639ae18755d9cf4cafd47f29892dc0e",
-                "approval":  "approved",
-                "ci_run":  "44566734046",
-                "scope":  "test-only transactional rollback coverage for account disablement and session revocation",
-                "assertions":  [
-                                   "Identity LockoutEnd update failure aborts DisableAsync and rolls back lockout/security stamp without audit",
-                                   "Identity SecurityStamp update failure aborts RevokeSessionsAsync without audit",
-                                   "mandatory disabled audit failure rolls back lockout/security stamp and leaves no audit row",
-                                   "mandatory sessions-revoked audit failure rolls back security stamp and leaves no audit row"
-                               ]
-            },
-    "v77":  {
-                "production_implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "test_commits":  [
-                                     "67e4f49504638776ef736c2770d0b4a9ed4c9bf8",
-                                     "c3d8ad0fc9f43a76ba82309e72d5a51a51342211"
-                                 ],
-                "approval":  "approved",
-                "ci_run":  "44568548323",
-                "scope":  "test-only explicit IdentityResult failure handling in account disablement and session revocation",
-                "assertions":  [
-                                   "DisableAsync aborts on UserManager store IdentityResult.Failed before security-stamp update and audit",
-                                   "RevokeSessionsAsync aborts on UserManager store IdentityResult.Failed before audit",
-                                   "persisted LockoutEnd and SecurityStamp remain unchanged after failed IdentityResult responses",
-                                   "no misleading account-disabled or sessions-revoked audit event persists"
-                               ]
-            },
-    "v78":  {
-                "production_implementation_commit":  "86565921a64332864fa97d386685f977cd5df69d",
-                "documentation_commit":  "867496cce35baae69e35c2cd7cdbd2f05de32320",
-                "approval":  "approved",
-                "ci_run":  "44569197822",
-                "scope":  "read-only review of account-security service exposure and administrative authorization boundary",
-                "findings":  [
-                                 "IOperationalAccountSecurityService is registered in Infrastructure DI but has no src/Atendee.Api endpoint call sites",
-                                 "DisableAsync and RevokeSessionsAsync are invoked only from integration tests in the current repository",
-                                 "no administrative HTTP route exposes account disablement or session revocation",
-                                 "the service records the trusted actor but does not enforce tenant/role authorization and must not be exposed directly",
-                                 "ADMIN_ACTIONS_DESIGN_V1 remains a proposal; explicit owner decisions are required before A1/A2 endpoints"
-                             ]
-            },
-    "v79":  {
-                "implementation_commit":  "8232d4e48ce7e9b4445f05e02813ad83fc8bd633",
-                "test_commits":  [
-                                     "9b72fadb645bd3f58de24f72b25abff0b9b45394",
-                                     "4a13aa3b72112c4147062a83859ed1f2be605082",
-                                     "60ecee8e2b1e2e1711181aa08f8e8c0422ae2592",
-                                     "a7164625f3335602a617388c977f3daa0f09b8c0",
-                                     "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d"
-                                 ],
-                "approval":  "approved",
-                "ci_run":  "44578183985",
-                "validated_head":  "a8e9ce8196d66c3699b0625d3991bd3d6f19f53d",
-                "scope":  "explicit trusted forwarded-proxy allowlist, deny-all default and HTTP regression coverage",
-                "assertions":  [
-                                   "default configuration trusts no real proxy using unmatchable unspecified-IP sentinels",
-                                   "untrusted forwarded IP, scheme and host headers cannot spoof request origin or rate-limit partition",
-                                   "only exact valid unicast IPs from ForwardedHeaders:KnownProxies are accepted",
-                                   "an explicitly configured exact proxy IP is trusted for one forwarding hop",
-                                   "X-Forwarded-For and X-Forwarded-Proto are enabled with one-hop limit and required header symmetry",
-                                   "X-Forwarded-Host is ignored unless explicitly enabled",
-                                   "invalid trusted-proxy configuration fails application startup closed",
-                                   "all existing frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
-                               ]
-            },
-    "v80":  {
-                "implementation_commit":  "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
-                "approval":  "approved",
-                "ci_run":  "44579219902",
-                "validated_head":  "48ef700aeb1dd082e8b2386dbe33c14fefaff2bb",
-                "scope":  "canonical IPv4-mapped IPv6 proxy addresses and reject non-unicast IPv4/IPv6 trusted-proxy values",
-                "rejected_addresses":  [
-                                           "not-an-ip",
-                                           "0.0.0.0",
-                                           "224.0.0.1",
-                                           "240.0.0.1",
-                                           "255.255.255.255",
-                                           "::",
-                                           "ff02::1",
-                                           "::ffff:0.0.0.0",
-                                           "::ffff:224.0.0.1"
-                                       ],
-                "assertions":  [
-                                   "IPv4-mapped IPv6 proxy addresses are canonicalized to IPv4 before validation and storage",
-                                   "unspecified IPv4/IPv6, IPv4 broadcast, IPv4 multicast/reserved and IPv6 multicast proxy addresses fail application startup closed",
-                                   "all nine invalid proxy-address regression cases pass in HTTP integration checks",
-                                   "V79 deny-all default, exact trusted-proxy allowlist, one-hop forwarding, header symmetry and X-Forwarded-Host rejection remain passing",
-                                   "all frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
-                               ]
-            },
-    "v81":  {
-                "test_commit":  "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
-                "approval":  "approved",
-                "ci_run":  "44580208061",
-                "validated_head":  "aa84099feb65d6cb6b9214e9745d0d98b1648a86",
-                "scope":  "positive regression coverage for native IPv6, IPv4 and IPv4-mapped IPv6 trusted-proxy addresses",
-                "accepted_address_cases":  [
-                                               {
-                                                   "configured":  "::1",
-                                                   "canonical":  "::1"
-                                               },
-                                               {
-                                                   "configured":  "127.0.0.1",
-                                                   "canonical":  "127.0.0.1"
-                                               },
-                                               {
-                                                   "configured":  "::ffff:127.0.0.1",
-                                                   "canonical":  "127.0.0.1"
-                                               }
-                                           ],
-                "assertions":  [
-                                   "all three explicit proxy address forms are accepted and canonicalized to the expected KnownProxies entry",
-                                   "the middleware accepts the canonicalized mapped IPv4 proxy for one forwarding hop",
-                                   "V80 invalid-address startup rejection cases remain passing",
-                                   "all frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
-                               ]
-            },
-    "v82":  {
-                "implementation_commit":  "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
-                "approval":  "approved",
-                "ci_run":  "44584885716",
-                "validated_head":  "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
-                "scope":  "explicit RSA certificate-backed persistent ASP.NET Core Data Protection key protection for non-Windows production, retaining Windows DPAPI default",
-                "configuration":  {
-                                      "key_ring":  "DataProtection:KeyRingPath (required outside Development)",
-                                      "certificate_path":  "DataProtection:CertificatePath (PKCS#12/PFX)",
-                                      "certificate_password":  "DataProtection:CertificatePassword (secret-manager injection only)",
-                                      "windows_default":  "DPAPI when no certificate is configured",
-                                      "non_windows":  "certificate path and password required; startup fails closed otherwise"
-                                  },
-                "assertions":  [
-                                   "production key ring is persisted with certificate-encrypted key material rather than plaintext",
-                                   "a restarted production host decrypts data protected by the previous host using the same persistent key ring and certificate",
-                                   "incorrect PFX password fails production startup closed",
-                                   "Linux production without explicit certificate configuration fails startup closed",
-                                   "certificate validity and RSA public/private key availability are checked before configuring protection",
-                                   "all frontend, Release, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
-                               ],
-                "operational_constraints":  [
-                                                "PFX and password are never committed and must be injected from a deployment secret manager or protected mount",
-                                                "key ring must be persistent, permission-restricted and shared by replicas with the same application name and certificate",
-                                                "encrypted key ring backups must be paired with the matching private certificate and restoration tested",
-                                                "only one active certificate is currently supported; do not rotate it without a coordinated old-key decryption plan",
-                                                "no production configuration or deployment was changed"
-                                            ]
-            },
-    "v83":  {
-                "implementation_commit":  "6ba155281e157d7b17a95646d4b2ccdd927ab49a",
-                "follow_up_test_safety_commit":  "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
-                "approval":  "approved",
-                "ci_run":  "44587416282",
-                "validated_head":  "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
-                "scope":  "tenant-scoped customer management vertical slice with domain normalization, bounded API pagination, RLS persistence, role/status authorization, soft archive and mandatory audit",
-                "api":  [
-                            "GET /api/v1/customers (page default 1, pageSize default 50, max 100)",
-                            "GET /api/v1/customers/{id}",
-                            "POST /api/v1/customers",
-                            "PATCH /api/v1/customers/{id}",
-                            "POST /api/v1/customers/{id}/archive"
-                        ],
-                "authorization":  {
-                                      "read_write":  [
-                                                         "Owner",
-                                                         "Manager",
-                                                         "Receptionist"
-                                                     ],
-                                      "archive":  [
-                                                      "Owner",
-                                                      "Manager"
-                                                  ],
-                                      "professional_directory_access":  false,
-                                      "tenant_capabilities_and_status_enforced":  true
-                                  },
-                "data_model":  {
-                                   "fields":  [
-                                                  "full_name",
-                                                  "normalized_phone",
-                                                  "email_address",
-                                                  "is_archived",
-                                                  "created_at_utc",
-                                                  "updated_at_utc"
-                                              ],
-                                   "contact_requirement":  "at least one phone or email",
-                                   "phone_format":  "E.164 syntax; normalized but not verified/deliverable",
-                                   "email":  "trimmed, lowercase and syntax checked",
-                                   "shared_phone_numbers":  "allowed; no unique constraint or automatic merge",
-                                   "marketing_consent":  "not inferred or implemented"
-                               },
-                "assertions":  [
-                                   "Domain checks 37/37",
-                                   "PostgreSQL/RLS persistence checks 19/19",
-                                   "Identity/TOTP checks 49/49",
-                                   "HTTP authentication, antiforgery, customer CRUD, role/status and session security checks pass",
-                                   "Portal browser E2E 8 passed",
-                                   "Full-stack browser E2E 1 passed",
-                                   "cross-tenant customer lookup and list are hidden by RLS",
-                                   "cross-tenant insert is rejected by RLS",
-                                   "runtime role cannot directly read customers outside tenant transaction runner",
-                                   "customer creation and archive audit events are transactional",
-                                   "runtime cannot DELETE or TRUNCATE customer records",
-                                   "Release build succeeded with 0 warnings"
-                               ],
-                "deferred":  [
-                                 "customer contact uniqueness/deduplication policy",
-                                 "marketing consent/preferences and verification",
-                                 "privacy access/correction/export/erasure and retention workflows",
-                                 "free-form customer notes",
-                                 "WhatsApp/email outreach",
-                                 "production deployment"
-                             ]
-            },
-    "v84":  {
-                "implementation_commit":  "6417a46953e3504a597784edb7215bfeb157a732",
-                "persistence_namespace_fix_commit":  "99c8b3a",
-                "transaction_runner_fix_commit":  "5716f69d6f9d1f8032da150797d3572bad876909",
-                "approval":  "approved",
-                "ci_run":  "44590386383",
-                "validated_head":  "5716f69d6f9d1f8032da150797d3572bad876909",
-                "scope":  "tenant-scoped recurring weekly salon business-hours configuration with local wall-clock times, RLS, audit, advisory-lock replacement and deferred database overlap constraint",
-                "api":  [
-                            "GET /api/v1/business-hours",
-                            "PUT /api/v1/business-hours"
-                        ],
-                "configuration":  {
-                                      "time_zone":  "Uses tenant\u0027s persisted time-zone ID; API values are local wall-clock HH:mm, not UTC",
-                                      "iso_weekdays":  "Monday=1 through Sunday=7",
-                                      "max_intervals_per_day":  4,
-                                      "max_intervals_per_week":  28,
-                                      "empty_schedule":  "closed all week",
-                                      "overnight_intervals":  "rejected; split across local days",
-                                      "split_shifts":  "supported",
-                                      "roles":  {
-                                                    "read":  [
-                                                                 "Owner",
-                                                                 "Manager",
-                                                                 "Receptionist"
-                                                             ],
-                                                    "write":  [
-                                                                  "Owner",
-                                                                  "Manager"
-                                                              ],
-                                                    "professional_access":  false
-                                                }
-                                  },
-                "integrity":  [
-                                  "domain rejects invalid day, invalid/zero-length/overnight intervals, overlaps and more than four intervals per day",
-                                  "database deferred constraint trigger independently rejects overlaps and interval count violations",
-                                  "transaction-scoped advisory lock serializes full schedule replacement per tenant",
-                                  "unchanged intervals retain identity; removed intervals are soft-archived",
-                                  "runtime has no DELETE/TRUNCATE grant",
-                                  "business-hours mutations require trusted actor context and transactional audit",
-                                  "tenant transaction runner preserves original deferred constraint exception when Npgsql marks transaction complete"
-                              ],
-                "assertions":  [
-                                   "Domain checks 46/46",
-                                   "PostgreSQL/RLS persistence checks 30/30",
-                                   "Identity/TOTP checks 49/49",
-                                   "Portal browser E2E 8 passed",
-                                   "HTTP authentication, antiforgery, business-hours and customer role/status checks pass",
-                                   "Full-stack browser E2E 1 passed",
-                                   "Release build 0 warnings, 0 errors"
-                               ],
-                "deferred":  [
-                                 "professional weekly availability and date-specific exceptions/time off",
-                                 "availability slot calculation",
-                                 "DST ambiguous/nonexistent local-time handling",
-                                 "appointment booking, overlap prevention, idempotency and state transitions",
-                                 "customer consent, contact verification, retention and privacy-request workflows",
-                                 "production deployment and external provider activation"
-                             ]
-            },
-    "v85":  {
-                "implementation_commit":  "21d594b7734128a9b50702f57a3cc647fcbaf87c",
-                "approval":  "approved",
-                "ci_run":  "44595166252",
-                "validated_head":  "b68f6feb5869d77f829061f28994029a5ab8b707",
-                "scope":  "tenant-scoped recurring weekly professional availability using tenant-local wall-clock times",
-                "api":  [
-                            "GET /api/v1/professionals/{professionalId}/availability",
-                            "GET /api/v1/professionals/me/availability",
-                            "PUT /api/v1/professionals/{professionalId}/availability"
-                        ],
-                "configuration":  {
-                                      "iso_weekdays":  "Monday=1 through Sunday=7",
-                                      "empty_schedule":  "No recurring professional availability",
-                                      "time_zone":  "Uses persisted tenant time-zone ID; local HH:mm values, not UTC",
-                                      "overnight_intervals":  "rejected",
-                                      "max_intervals_per_week":  28,
-                                      "roles":  {
-                                                    "write":  [
-                                                                  "Owner",
-                                                                  "Manager"
-                                                              ],
-                                                    "professional_write":  false,
-                                                    "read":  [
-                                                                 "Owner",
-                                                                 "Manager",
-                                                                 "Receptionist"
-                                                             ],
-                                                    "professional_read":  "Own profile only"
-                                                },
-                                      "split_shifts":  "supported",
-                                      "max_intervals_per_day":  4
-                                  },
-                "integrity":  [
-                                  "RLS enabled and forced with composite tenant/professional FK",
-                                  "tenant-scoped advisory lock serializes schedule replacement",
-                                  "deferred PostgreSQL trigger rejects overlaps and daily interval cap violations",
-                                  "unchanged intervals retain identity; removed intervals are soft-archived",
-                                  "mandatory transactional audit; runtime cannot DELETE/TRUNCATE"
-                              ],
-                "assertions":  [
-                                   "Domain checks 55/55",
-                                   "PostgreSQL/RLS persistence checks 32/32",
-                                   "Identity/TOTP checks 49/49",
-                                   "Portal browser E2E 8 passed",
-                                   "HTTP authentication and role/status checks passed",
-                                   "Full-stack browser E2E 1 passed"
-                               ],
-                "deferred":  [
-                                 "date-specific time off (implemented in V86)",
-                                 "authoritative availability slot calculation",
-                                 "DST ambiguous/nonexistent local-time handling",
-                                 "appointment booking and overlap/idempotency/state transitions"
-                             ]
-            },
-    "v86":  {
-                "implementation_commit":  "3f6d64b4b6a725ef502767476e50c69c7fd56a2f",
-                "test_correction_commit":  "0be194941318e38ee7cbaa2e0fc465eba287c8bd",
-                "approval":  "approved",
-                "ci_run":  "44633827726",
-                "validated_head":  "0be194941318e38ee7cbaa2e0fc465eba287c8bd",
-                "scope":  "tenant-scoped date-specific full-day and partial-day professional time off",
-                "api":  [
-                            "GET /api/v1/professionals/{professionalId}/time-off?from=YYYY-MM-DD\u0026to=YYYY-MM-DD",
-                            "POST /api/v1/professionals/{professionalId}/time-off",
-                            "POST /api/v1/professionals/{professionalId}/time-off/{timeOffId}/archive"
-                        ],
-                "configuration":  {
-                                      "full_day":  "startTime and endTime both null",
-                                      "max_intervals_per_date":  4,
-                                      "full_day_exclusivity":  "A full-day entry cannot coexist with another entry on the date",
-                                      "date_range":  "Required inclusive range, maximum 366 days",
-                                      "overlaps":  "rejected; adjacent intervals allowed",
-                                      "roles":  {
-                                                    "read_team":  [
-                                                                      "Owner",
-                                                                      "Manager",
-                                                                      "Receptionist"
-                                                                  ],
-                                                    "write":  [
-                                                                  "Owner",
-                                                                  "Manager"
-                                                              ],
-                                                    "read_own":  [
-                                                                     "Professional"
-                                                                 ]
-                                                },
-                                      "policy":  "Subtractive only; does not add availability outside recurring weekly schedule",
-                                      "partial_day":  "Both local times required, start strictly before end",
-                                      "time_zone":  "Tenant persisted time-zone ID; local calendar date and HH:mm wall-clock values"
-                                  },
-                "integrity":  [
-                                  "Migration 019 with composite tenant key and FK to active same-tenant professional",
-                                  "RLS enabled and forced; tenant-scoped indexes",
-                                  "per-tenant/per-professional transaction advisory lock",
-                                  "deferred PostgreSQL constraint trigger enforces exclusivity, overlaps and daily cap",
-                                  "mandatory transactional created/archive audit events",
-                                  "soft archive; runtime cannot DELETE/TRUNCATE"
-                              ],
-                "assertions":  [
-                                   "Domain checks 63/63",
-                                   "PostgreSQL/RLS persistence checks 32/32",
-                                   "Identity/TOTP checks 49/49",
-                                   "Portal browser E2E 8 passed",
-                                   "HTTP time-off, audit, RLS, role and session checks passed",
-                                   "Direct SQL conflict rejected by deferred trigger",
-                                   "Full-stack browser E2E 1 passed"
-                               ],
-                "deferred":  [
-                                 "combine business hours, recurring availability, time off and service buffers into authoritative slots",
-                                 "DST ambiguous/nonexistent local-time handling",
-                                 "transactional appointment booking, overlap prevention, idempotency and state transitions"
-                             ]
-            },
-    "v87":  {
-                "implementation_commit":  "2833e52aeddb063bfb85e16ead1c8f89fbb257ab",
-                "test_correction_commit":  "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee",
-                "approval":  "approved",
-                "ci_run":  "44638633076",
-                "validated_head":  "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee",
-                "scope":  "authoritative tenant-aware service-start availability windows",
-                "api":  [
-                            "GET /api/v1/availability?from=YYYY-MM-DD\u0026to=YYYY-MM-DD\u0026serviceId={id}\u0026professionalId={optional}"
-                        ],
-                "configuration":  {
-                                      "date_range":  "Required inclusive local-date range, maximum 31 days",
-                                      "time_zone":  "Persisted tenant time-zone ID; response start boundaries are UTC instants",
-                                      "precision":  "Minute-aligned starts; earliest and latest boundaries are inclusive",
-                                      "working_time":  "Intersection of tenant business hours and recurring professional availability",
-                                      "exclusions":  "Date-specific full-day and partial-day time off",
-                                      "service":  "Active service assigned to active professional; duration and before/after buffers included",
-                                      "dst":  "UTC timeline traversal skips nonexistent local minutes and represents both ambiguous occurrences without guessing an offset",
-                                      "roles":  {
-                                                    "team_read":  [
-                                                                      "Owner",
-                                                                      "Manager",
-                                                                      "Receptionist"
-                                                                  ],
-                                                    "professional_read":  "Own profile only",
-                                                    "write":  false
-                                                }
-                                  },
-                "integrity":  [
-                                  "Reads execute inside trusted tenant transaction and CPU-bound calculation occurs after commit",
-                                  "RLS and tenant-scoped stores remain the data boundary",
-                                  "Unknown/inactive service, invalid date range and unauthorized professional lookup are rejected",
-                                  "No appointment conflict exclusion yet; appointment booking is the next increment"
-                              ],
-                "assertions":  [
-                                   "Domain checks 69/69",
-                                   "Release build zero warnings and zero errors",
-                                   "PostgreSQL/RLS persistence checks 32/32",
-                                   "Identity/TOTP checks 49/49",
-                                   "Portal browser E2E 8 passed",
-                                   "HTTP availability integration and authorization checks passed",
-                                   "Full-stack browser E2E 1 passed"
-                               ],
-                "ci":  {
-                           "run":  "44638633076",
-                           "status":  "success",
-                           "head":  "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee"
-                       },
-                "deferred":  [
-                                 "subtract active appointments from availability",
-                                 "transactional booking and database overlap prevention",
-                                 "idempotency, immutable snapshots and appointment lifecycle",
-                                 "rescheduling and cancellation policy"
-                             ]
-            },
-    "v88":  {
-                "implementation_commits":  [
-                                               "cdc164100dc80f84706e57c95869d1dd8266223d",
-                                               "e7efdc40bc2d6c2e88dbb2e182add2379eeea370"
-                                           ],
-                "approval":  "validated",
-                "ci_run":  "44646121213",
-                "validated_head":  "e7efdc40bc2d6c2e88dbb2e182add2379eeea370",
-                "assertions":  [
-                                   "domain 79/79",
-                                   "PostgreSQL/RLS 43/43",
-                                   "Identity/TOTP 49/49",
-                                   "portal browser E2E 8/8",
-                                   "HTTP appointment and security integration passed",
-                                   "full-stack browser E2E 1/1",
-                                   "active appointment occupancy subtracted from availability",
-                                   "idempotency replay and mismatch conflict",
-                                   "overlap rejected by deferred PostgreSQL trigger",
-                                   "lifecycle and transactional event/audit/outbox assertions passed"
-                               ],
-                "remaining":  [
-                                  "distributed authentication rate limiting",
-                                  "dedicated reschedule semantics pending product policy",
-                                  "outbox dispatcher/handlers pending integration and delivery semantics",
-                                  "Data Protection key rotation plan",
-                                  "independent production security review and backup/restore"
-                              ]
-            },
-    "v89":  {
-                "implementation_commit":  "90c2a2f",
-                "test_and_isolation_commits":  [
-                                                   "82dd5a5",
-                                                   "87b321e",
-                                                   "f08a180",
-                                                   "09dcdca",
-                                                   "92ea4d4",
-                                                   "9d2ed24",
-                                                   "95e4956",
-                                                   "90a5bc6"
-                                               ],
-                "approval":  "validated",
-                "ci_run":  "44660361862",
-                "validated_head":  "90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34",
-                "migration":  "db/migrations/021_create_distributed_authentication_rate_limits.sql",
-                "scope":  "atomic PostgreSQL-backed distributed authentication fixed-window rate limiting with HMAC-protected client IP partitions and fail-closed behavior",
-                "assertions":  [
-                                   "two independent limiter instances, 40 concurrent acquisitions and exact seven-permit limit",
-                                   "persisted counter and 32-byte HMAC digest; no raw IP storage",
-                                   "independent IP partitions and IPv4-mapped IPv6 normalization",
-                                   "UTC fixed-window rollover",
-                                   "bounded opportunistic cleanup of expired buckets",
-                                   "database outage returns HTTP 503 and does not invoke protected endpoint",
-                                   "exhausted quota returns HTTP 429 with Retry-After",
-                                   "endpoint metadata and trusted-client partition behavior verified"
-                               ],
-                "configuration":  "AuthenticationRateLimiting:PartitionKeySecret must be base64 of at least 32 random bytes and identical on every API instance sharing the database; keep it in deployment secret management and rotate only with a coordinated plan",
-                "remaining":  [
-                                  "appointment rescheduling/cancellation product policy",
-                                  "outbox dispatcher and handlers with idempotency/retry/dead-letter/observability and provider approvals",
-                                  "Data Protection coordinated key rotation",
-                                  "independent production security review and backup/restore validation"
-                              ]
-            },
-    "v90":  {
-                "implementation_commit":  "399ead5e86aadde12eb7e06a03051aa839767e6e",
-                "approval":  "validated",
-                "ci_run":  "44663263477",
-                "ci_run_number":  251,
-                "validated_head":  "399ead5e86aadde12eb7e06a03051aa839767e6e",
-                "scope":  "anonymous GET /health/ready probing the shared identity data source and the tenant PostgreSQL database with SELECT 1 under a 2 second timeout",
-                "api":  [
-                            "GET /health/ready -> 200 {status:ready} or 503 {status:unavailable}, Cache-Control no-store"
-                        ],
-                "assertions":  [
-                                   "probe ready when both databases are reachable",
-                                   "probe not ready when the identity database is unreachable",
-                                   "probe not ready when the tenant database is unreachable",
-                                   "HTTP 200 minimal no-store body, anonymous, no antiforgery",
-                                   "HTTP 503 minimal no-store body without dependency details"
-                               ],
-                "limits":  [
-                               "reachability only: no schema, migration, grant, secret or Data Protection verification",
-                               "uses the process-local bootstrap-health limit (60 per minute per client IP)",
-                               "orchestrator probe wiring is deployment-specific and was not done"
-                           ],
-                "corrections":  [
-                                    "V89 CI is run 44660361862 = run 248; CONTINUE_HERE.md previously said 238 by mistake"
-                                ],
-                "remaining":  [
-                                  "appointment rescheduling/cancellation product policy",
-                                  "outbox dispatcher and handlers with idempotency/retry/dead-letter/observability and provider approvals",
-                                  "Data Protection coordinated key rotation",
-                                  "Platform Admin approvals",
-                                  "WhatsApp Cloud API: Meta Business approval, provider, credentials and costs",
-                                  "independent production security review and backup/restore validation"
-                              ]
-            },
-    "v91":  {
-                "implementation_commit":  "d495c65aacbd05c59c8934b3428a9cb1e5da86bb",
-                "approval":  "validated",
-                "ci_run":  "44665423258",
-                "ci_run_number":  253,
-                "validated_head":  "d495c65aacbd05c59c8934b3428a9cb1e5da86bb",
-                "scope":  "baseline API security response headers on every response",
-                "headers":  [ "Content-Security-Policy: default-src none; base-uri none; form-action none; frame-ancestors none", "Cross-Origin-Resource-Policy: same-origin", "Cross-Origin-Opener-Policy: same-origin", "X-Permitted-Cross-Domain-Policies: none" ],
-                "assertions":  [ "all baseline headers present on /health/live, /health/ready and unknown-route 404" ],
-                "limits":  [ "CI log not readable unauthenticated; success inferred from all job steps success and fail-fast Ensure checks", "API assumed JSON-only; revisit CSP if HTML is ever served" ],
-                "remaining":  [ "appointment rescheduling/cancellation product policy", "outbox dispatcher and handlers with provider approvals", "Data Protection coordinated key rotation", "Platform Admin approvals", "WhatsApp Cloud API approvals", "independent production security review and backup/restore validation" ]
-            },
-    "v92":  {
-                "implementation_commit":  "98d8fc47009e67dfd691180261344ce260d41b9c",
-                "approval":  "validated",
-                "ci_run":  "44667879306",
-                "ci_run_number":  255,
-                "validated_head":  "98d8fc47009e67dfd691180261344ce260d41b9c",
-                "scope":  "bounded API request body size and Kestrel request limits",
-                "limits":  [ "MaxRequestBodySize 1 MiB", "MaxRequestHeadersTotalSize 32 KiB", "MaxRequestHeaderCount 100", "MaxRequestLineSize 8 KiB", "RequestHeadersTimeout 15 s", "HTTP 413 payload_too_large for Content-Length above 1 MiB before routing/authentication/antiforgery" ],
-                "assertions":  [ "configured Kestrel limits equal ApiRequestLimits constants", "1 MiB + 1 byte body rejected with 413, minimal body, no-store and security headers", "exactly 1 MiB body not rejected by the size limit" ],
-                "notes":  [ "TestServer does not enforce Kestrel socket limits; chunked-body and header-limit enforcement are covered by asserting configured values", "CI log not readable unauthenticated; success inferred from all job steps success and fail-fast Ensure checks" ],
-                "remaining":  [ "appointment rescheduling/cancellation product policy", "outbox dispatcher and handlers with provider approvals", "Data Protection coordinated key rotation", "Platform Admin approvals", "WhatsApp Cloud API approvals", "independent production security review and backup/restore validation" ]
+            {
+                "configured": "::ffff:127.0.0.1",
+                "canonical": "127.0.0.1"
             }
+        ],
+        "assertions": [
+            "all three explicit proxy address forms are accepted and canonicalized to the expected KnownProxies entry",
+            "the middleware accepts the canonicalized mapped IPv4 proxy for one forwarding hop",
+            "V80 invalid-address startup rejection cases remain passing",
+            "all frontend, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
+        ]
+    },
+    "v82": {
+        "implementation_commit": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
+        "approval": "approved",
+        "ci_run": "44584885716",
+        "validated_head": "179c7753d10f2c7d88cce552bf7d12e0bf7c2da8",
+        "scope": "explicit RSA certificate-backed persistent ASP.NET Core Data Protection key protection for non-Windows production, retaining Windows DPAPI default",
+        "configuration": {
+            "key_ring": "DataProtection:KeyRingPath (required outside Development)",
+            "certificate_path": "DataProtection:CertificatePath (PKCS#12/PFX)",
+            "certificate_password": "DataProtection:CertificatePassword (secret-manager injection only)",
+            "windows_default": "DPAPI when no certificate is configured",
+            "non_windows": "certificate path and password required; startup fails closed otherwise"
+        },
+        "assertions": [
+            "production key ring is persisted with certificate-encrypted key material rather than plaintext",
+            "a restarted production host decrypts data protected by the previous host using the same persistent key ring and certificate",
+            "incorrect PFX password fails production startup closed",
+            "Linux production without explicit certificate configuration fails startup closed",
+            "certificate validity and RSA public/private key availability are checked before configuring protection",
+            "all frontend, Release, domain, PostgreSQL/RLS, Identity/TOTP, HTTP security and full-stack browser checks remain passing"
+        ],
+        "operational_constraints": [
+            "PFX and password are never committed and must be injected from a deployment secret manager or protected mount",
+            "key ring must be persistent, permission-restricted and shared by replicas with the same application name and certificate",
+            "encrypted key ring backups must be paired with the matching private certificate and restoration tested",
+            "only one active certificate is currently supported; do not rotate it without a coordinated old-key decryption plan",
+            "no production configuration or deployment was changed"
+        ]
+    },
+    "v83": {
+        "implementation_commit": "6ba155281e157d7b17a95646d4b2ccdd927ab49a",
+        "follow_up_test_safety_commit": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
+        "approval": "approved",
+        "ci_run": "44587416282",
+        "validated_head": "2a4a1aff0b3a53b34167981fd894092bb0b8f7a3",
+        "scope": "tenant-scoped customer management vertical slice with domain normalization, bounded API pagination, RLS persistence, role/status authorization, soft archive and mandatory audit",
+        "api": [
+            "GET /api/v1/customers (page default 1, pageSize default 50, max 100)",
+            "GET /api/v1/customers/{id}",
+            "POST /api/v1/customers",
+            "PATCH /api/v1/customers/{id}",
+            "POST /api/v1/customers/{id}/archive"
+        ],
+        "authorization": {
+            "read_write": [
+                "Owner",
+                "Manager",
+                "Receptionist"
+            ],
+            "archive": [
+                "Owner",
+                "Manager"
+            ],
+            "professional_directory_access": false,
+            "tenant_capabilities_and_status_enforced": true
+        },
+        "data_model": {
+            "fields": [
+                "full_name",
+                "normalized_phone",
+                "email_address",
+                "is_archived",
+                "created_at_utc",
+                "updated_at_utc"
+            ],
+            "contact_requirement": "at least one phone or email",
+            "phone_format": "E.164 syntax; normalized but not verified/deliverable",
+            "email": "trimmed, lowercase and syntax checked",
+            "shared_phone_numbers": "allowed; no unique constraint or automatic merge",
+            "marketing_consent": "not inferred or implemented"
+        },
+        "assertions": [
+            "Domain checks 37/37",
+            "PostgreSQL/RLS persistence checks 19/19",
+            "Identity/TOTP checks 49/49",
+            "HTTP authentication, antiforgery, customer CRUD, role/status and session security checks pass",
+            "Portal browser E2E 8 passed",
+            "Full-stack browser E2E 1 passed",
+            "cross-tenant customer lookup and list are hidden by RLS",
+            "cross-tenant insert is rejected by RLS",
+            "runtime role cannot directly read customers outside tenant transaction runner",
+            "customer creation and archive audit events are transactional",
+            "runtime cannot DELETE or TRUNCATE customer records",
+            "Release build succeeded with 0 warnings"
+        ],
+        "deferred": [
+            "customer contact uniqueness/deduplication policy",
+            "marketing consent/preferences and verification",
+            "privacy access/correction/export/erasure and retention workflows",
+            "free-form customer notes",
+            "WhatsApp/email outreach",
+            "production deployment"
+        ]
+    },
+    "v84": {
+        "implementation_commit": "6417a46953e3504a597784edb7215bfeb157a732",
+        "persistence_namespace_fix_commit": "99c8b3a",
+        "transaction_runner_fix_commit": "5716f69d6f9d1f8032da150797d3572bad876909",
+        "approval": "approved",
+        "ci_run": "44590386383",
+        "validated_head": "5716f69d6f9d1f8032da150797d3572bad876909",
+        "scope": "tenant-scoped recurring weekly salon business-hours configuration with local wall-clock times, RLS, audit, advisory-lock replacement and deferred database overlap constraint",
+        "api": [
+            "GET /api/v1/business-hours",
+            "PUT /api/v1/business-hours"
+        ],
+        "configuration": {
+            "time_zone": "Uses tenant's persisted time-zone ID; API values are local wall-clock HH:mm, not UTC",
+            "iso_weekdays": "Monday=1 through Sunday=7",
+            "max_intervals_per_day": 4,
+            "max_intervals_per_week": 28,
+            "empty_schedule": "closed all week",
+            "overnight_intervals": "rejected; split across local days",
+            "split_shifts": "supported",
+            "roles": {
+                "read": [
+                    "Owner",
+                    "Manager",
+                    "Receptionist"
+                ],
+                "write": [
+                    "Owner",
+                    "Manager"
+                ],
+                "professional_access": false
+            }
+        },
+        "integrity": [
+            "domain rejects invalid day, invalid/zero-length/overnight intervals, overlaps and more than four intervals per day",
+            "database deferred constraint trigger independently rejects overlaps and interval count violations",
+            "transaction-scoped advisory lock serializes full schedule replacement per tenant",
+            "unchanged intervals retain identity; removed intervals are soft-archived",
+            "runtime has no DELETE/TRUNCATE grant",
+            "business-hours mutations require trusted actor context and transactional audit",
+            "tenant transaction runner preserves original deferred constraint exception when Npgsql marks transaction complete"
+        ],
+        "assertions": [
+            "Domain checks 46/46",
+            "PostgreSQL/RLS persistence checks 30/30",
+            "Identity/TOTP checks 49/49",
+            "Portal browser E2E 8 passed",
+            "HTTP authentication, antiforgery, business-hours and customer role/status checks pass",
+            "Full-stack browser E2E 1 passed",
+            "Release build 0 warnings, 0 errors"
+        ],
+        "deferred": [
+            "professional weekly availability and date-specific exceptions/time off",
+            "availability slot calculation",
+            "DST ambiguous/nonexistent local-time handling",
+            "appointment booking, overlap prevention, idempotency and state transitions",
+            "customer consent, contact verification, retention and privacy-request workflows",
+            "production deployment and external provider activation"
+        ]
+    },
+    "v85": {
+        "implementation_commit": "21d594b7734128a9b50702f57a3cc647fcbaf87c",
+        "approval": "approved",
+        "ci_run": "44595166252",
+        "validated_head": "b68f6feb5869d77f829061f28994029a5ab8b707",
+        "scope": "tenant-scoped recurring weekly professional availability using tenant-local wall-clock times",
+        "api": [
+            "GET /api/v1/professionals/{professionalId}/availability",
+            "GET /api/v1/professionals/me/availability",
+            "PUT /api/v1/professionals/{professionalId}/availability"
+        ],
+        "configuration": {
+            "iso_weekdays": "Monday=1 through Sunday=7",
+            "empty_schedule": "No recurring professional availability",
+            "time_zone": "Uses persisted tenant time-zone ID; local HH:mm values, not UTC",
+            "overnight_intervals": "rejected",
+            "max_intervals_per_week": 28,
+            "roles": {
+                "write": [
+                    "Owner",
+                    "Manager"
+                ],
+                "professional_write": false,
+                "read": [
+                    "Owner",
+                    "Manager",
+                    "Receptionist"
+                ],
+                "professional_read": "Own profile only"
+            },
+            "split_shifts": "supported",
+            "max_intervals_per_day": 4
+        },
+        "integrity": [
+            "RLS enabled and forced with composite tenant/professional FK",
+            "tenant-scoped advisory lock serializes schedule replacement",
+            "deferred PostgreSQL trigger rejects overlaps and daily interval cap violations",
+            "unchanged intervals retain identity; removed intervals are soft-archived",
+            "mandatory transactional audit; runtime cannot DELETE/TRUNCATE"
+        ],
+        "assertions": [
+            "Domain checks 55/55",
+            "PostgreSQL/RLS persistence checks 32/32",
+            "Identity/TOTP checks 49/49",
+            "Portal browser E2E 8 passed",
+            "HTTP authentication and role/status checks passed",
+            "Full-stack browser E2E 1 passed"
+        ],
+        "deferred": [
+            "date-specific time off (implemented in V86)",
+            "authoritative availability slot calculation",
+            "DST ambiguous/nonexistent local-time handling",
+            "appointment booking and overlap/idempotency/state transitions"
+        ]
+    },
+    "v86": {
+        "implementation_commit": "3f6d64b4b6a725ef502767476e50c69c7fd56a2f",
+        "test_correction_commit": "0be194941318e38ee7cbaa2e0fc465eba287c8bd",
+        "approval": "approved",
+        "ci_run": "44633827726",
+        "validated_head": "0be194941318e38ee7cbaa2e0fc465eba287c8bd",
+        "scope": "tenant-scoped date-specific full-day and partial-day professional time off",
+        "api": [
+            "GET /api/v1/professionals/{professionalId}/time-off?from=YYYY-MM-DD&to=YYYY-MM-DD",
+            "POST /api/v1/professionals/{professionalId}/time-off",
+            "POST /api/v1/professionals/{professionalId}/time-off/{timeOffId}/archive"
+        ],
+        "configuration": {
+            "full_day": "startTime and endTime both null",
+            "max_intervals_per_date": 4,
+            "full_day_exclusivity": "A full-day entry cannot coexist with another entry on the date",
+            "date_range": "Required inclusive range, maximum 366 days",
+            "overlaps": "rejected; adjacent intervals allowed",
+            "roles": {
+                "read_team": [
+                    "Owner",
+                    "Manager",
+                    "Receptionist"
+                ],
+                "write": [
+                    "Owner",
+                    "Manager"
+                ],
+                "read_own": [
+                    "Professional"
+                ]
+            },
+            "policy": "Subtractive only; does not add availability outside recurring weekly schedule",
+            "partial_day": "Both local times required, start strictly before end",
+            "time_zone": "Tenant persisted time-zone ID; local calendar date and HH:mm wall-clock values"
+        },
+        "integrity": [
+            "Migration 019 with composite tenant key and FK to active same-tenant professional",
+            "RLS enabled and forced; tenant-scoped indexes",
+            "per-tenant/per-professional transaction advisory lock",
+            "deferred PostgreSQL constraint trigger enforces exclusivity, overlaps and daily cap",
+            "mandatory transactional created/archive audit events",
+            "soft archive; runtime cannot DELETE/TRUNCATE"
+        ],
+        "assertions": [
+            "Domain checks 63/63",
+            "PostgreSQL/RLS persistence checks 32/32",
+            "Identity/TOTP checks 49/49",
+            "Portal browser E2E 8 passed",
+            "HTTP time-off, audit, RLS, role and session checks passed",
+            "Direct SQL conflict rejected by deferred trigger",
+            "Full-stack browser E2E 1 passed"
+        ],
+        "deferred": [
+            "combine business hours, recurring availability, time off and service buffers into authoritative slots",
+            "DST ambiguous/nonexistent local-time handling",
+            "transactional appointment booking, overlap prevention, idempotency and state transitions"
+        ]
+    },
+    "v87": {
+        "implementation_commit": "2833e52aeddb063bfb85e16ead1c8f89fbb257ab",
+        "test_correction_commit": "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee",
+        "approval": "approved",
+        "ci_run": "44638633076",
+        "validated_head": "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee",
+        "scope": "authoritative tenant-aware service-start availability windows",
+        "api": [
+            "GET /api/v1/availability?from=YYYY-MM-DD&to=YYYY-MM-DD&serviceId={id}&professionalId={optional}"
+        ],
+        "configuration": {
+            "date_range": "Required inclusive local-date range, maximum 31 days",
+            "time_zone": "Persisted tenant time-zone ID; response start boundaries are UTC instants",
+            "precision": "Minute-aligned starts; earliest and latest boundaries are inclusive",
+            "working_time": "Intersection of tenant business hours and recurring professional availability",
+            "exclusions": "Date-specific full-day and partial-day time off",
+            "service": "Active service assigned to active professional; duration and before/after buffers included",
+            "dst": "UTC timeline traversal skips nonexistent local minutes and represents both ambiguous occurrences without guessing an offset",
+            "roles": {
+                "team_read": [
+                    "Owner",
+                    "Manager",
+                    "Receptionist"
+                ],
+                "professional_read": "Own profile only",
+                "write": false
+            }
+        },
+        "integrity": [
+            "Reads execute inside trusted tenant transaction and CPU-bound calculation occurs after commit",
+            "RLS and tenant-scoped stores remain the data boundary",
+            "Unknown/inactive service, invalid date range and unauthorized professional lookup are rejected",
+            "No appointment conflict exclusion yet; appointment booking is the next increment"
+        ],
+        "assertions": [
+            "Domain checks 69/69",
+            "Release build zero warnings and zero errors",
+            "PostgreSQL/RLS persistence checks 32/32",
+            "Identity/TOTP checks 49/49",
+            "Portal browser E2E 8 passed",
+            "HTTP availability integration and authorization checks passed",
+            "Full-stack browser E2E 1 passed"
+        ],
+        "ci": {
+            "run": "44638633076",
+            "status": "success",
+            "head": "8e0b70e66bf59833a7474fd6f9a8ef7b0476afee"
+        },
+        "deferred": [
+            "subtract active appointments from availability",
+            "transactional booking and database overlap prevention",
+            "idempotency, immutable snapshots and appointment lifecycle",
+            "rescheduling and cancellation policy"
+        ]
+    },
+    "v88": {
+        "implementation_commits": [
+            "cdc164100dc80f84706e57c95869d1dd8266223d",
+            "e7efdc40bc2d6c2e88dbb2e182add2379eeea370"
+        ],
+        "approval": "validated",
+        "ci_run": "44646121213",
+        "validated_head": "e7efdc40bc2d6c2e88dbb2e182add2379eeea370",
+        "assertions": [
+            "domain 79/79",
+            "PostgreSQL/RLS 43/43",
+            "Identity/TOTP 49/49",
+            "portal browser E2E 8/8",
+            "HTTP appointment and security integration passed",
+            "full-stack browser E2E 1/1",
+            "active appointment occupancy subtracted from availability",
+            "idempotency replay and mismatch conflict",
+            "overlap rejected by deferred PostgreSQL trigger",
+            "lifecycle and transactional event/audit/outbox assertions passed"
+        ],
+        "remaining": [
+            "distributed authentication rate limiting",
+            "dedicated reschedule semantics pending product policy",
+            "outbox dispatcher/handlers pending integration and delivery semantics",
+            "Data Protection key rotation plan",
+            "independent production security review and backup/restore"
+        ]
+    },
+    "v89": {
+        "implementation_commit": "90c2a2f",
+        "test_and_isolation_commits": [
+            "82dd5a5",
+            "87b321e",
+            "f08a180",
+            "09dcdca",
+            "92ea4d4",
+            "9d2ed24",
+            "95e4956",
+            "90a5bc6"
+        ],
+        "approval": "validated",
+        "ci_run": "44660361862",
+        "validated_head": "90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34",
+        "migration": "db/migrations/021_create_distributed_authentication_rate_limits.sql",
+        "scope": "atomic PostgreSQL-backed distributed authentication fixed-window rate limiting with HMAC-protected client IP partitions and fail-closed behavior",
+        "assertions": [
+            "two independent limiter instances, 40 concurrent acquisitions and exact seven-permit limit",
+            "persisted counter and 32-byte HMAC digest; no raw IP storage",
+            "independent IP partitions and IPv4-mapped IPv6 normalization",
+            "UTC fixed-window rollover",
+            "bounded opportunistic cleanup of expired buckets",
+            "database outage returns HTTP 503 and does not invoke protected endpoint",
+            "exhausted quota returns HTTP 429 with Retry-After",
+            "endpoint metadata and trusted-client partition behavior verified"
+        ],
+        "configuration": "AuthenticationRateLimiting:PartitionKeySecret must be base64 of at least 32 random bytes and identical on every API instance sharing the database; keep it in deployment secret management and rotate only with a coordinated plan",
+        "remaining": [
+            "appointment rescheduling/cancellation product policy",
+            "outbox dispatcher and handlers with idempotency/retry/dead-letter/observability and provider approvals",
+            "Data Protection coordinated key rotation",
+            "independent production security review and backup/restore validation"
+        ]
+    },
+    "v90": {
+        "implementation_commit": "399ead5e86aadde12eb7e06a03051aa839767e6e",
+        "approval": "validated",
+        "ci_run": "44663263477",
+        "ci_run_number": 251,
+        "validated_head": "399ead5e86aadde12eb7e06a03051aa839767e6e",
+        "scope": "anonymous GET /health/ready probing the shared identity data source and the tenant PostgreSQL database with SELECT 1 under a 2 second timeout",
+        "api": [
+            "GET /health/ready -> 200 {status:ready} or 503 {status:unavailable}, Cache-Control no-store"
+        ],
+        "assertions": [
+            "probe ready when both databases are reachable",
+            "probe not ready when the identity database is unreachable",
+            "probe not ready when the tenant database is unreachable",
+            "HTTP 200 minimal no-store body, anonymous, no antiforgery",
+            "HTTP 503 minimal no-store body without dependency details"
+        ],
+        "limits": [
+            "reachability only: no schema, migration, grant, secret or Data Protection verification",
+            "uses the process-local bootstrap-health limit (60 per minute per client IP)",
+            "orchestrator probe wiring is deployment-specific and was not done"
+        ],
+        "corrections": [
+            "V89 CI is run 44660361862 = run 248; CONTINUE_HERE.md previously said 238 by mistake"
+        ],
+        "remaining": [
+            "appointment rescheduling/cancellation product policy",
+            "outbox dispatcher and handlers with idempotency/retry/dead-letter/observability and provider approvals",
+            "Data Protection coordinated key rotation",
+            "Platform Admin approvals",
+            "WhatsApp Cloud API: Meta Business approval, provider, credentials and costs",
+            "independent production security review and backup/restore validation"
+        ]
+    },
+    "v91": {
+        "implementation_commit": "d495c65aacbd05c59c8934b3428a9cb1e5da86bb",
+        "approval": "validated",
+        "ci_run": "44665423258",
+        "ci_run_number": 253,
+        "validated_head": "d495c65aacbd05c59c8934b3428a9cb1e5da86bb",
+        "scope": "baseline API security response headers on every response",
+        "headers": [
+            "Content-Security-Policy: default-src none; base-uri none; form-action none; frame-ancestors none",
+            "Cross-Origin-Resource-Policy: same-origin",
+            "Cross-Origin-Opener-Policy: same-origin",
+            "X-Permitted-Cross-Domain-Policies: none"
+        ],
+        "assertions": [
+            "all baseline headers present on /health/live, /health/ready and unknown-route 404"
+        ],
+        "limits": [
+            "CI log not readable unauthenticated; success inferred from all job steps success and fail-fast Ensure checks",
+            "API assumed JSON-only; revisit CSP if HTML is ever served"
+        ],
+        "remaining": [
+            "appointment rescheduling/cancellation product policy",
+            "outbox dispatcher and handlers with provider approvals",
+            "Data Protection coordinated key rotation",
+            "Platform Admin approvals",
+            "WhatsApp Cloud API approvals",
+            "independent production security review and backup/restore validation"
+        ]
+    },
+    "v92": {
+        "implementation_commit": "98d8fc47009e67dfd691180261344ce260d41b9c",
+        "approval": "validated",
+        "ci_run": "44667879306",
+        "ci_run_number": 255,
+        "validated_head": "98d8fc47009e67dfd691180261344ce260d41b9c",
+        "scope": "bounded API request body size and Kestrel request limits",
+        "limits": [
+            "MaxRequestBodySize 1 MiB",
+            "MaxRequestHeadersTotalSize 32 KiB",
+            "MaxRequestHeaderCount 100",
+            "MaxRequestLineSize 8 KiB",
+            "RequestHeadersTimeout 15 s",
+            "HTTP 413 payload_too_large for Content-Length above 1 MiB before routing/authentication/antiforgery"
+        ],
+        "assertions": [
+            "configured Kestrel limits equal ApiRequestLimits constants",
+            "1 MiB + 1 byte body rejected with 413, minimal body, no-store and security headers",
+            "exactly 1 MiB body not rejected by the size limit"
+        ],
+        "notes": [
+            "TestServer does not enforce Kestrel socket limits; chunked-body and header-limit enforcement are covered by asserting configured values",
+            "CI log not readable unauthenticated; success inferred from all job steps success and fail-fast Ensure checks"
+        ],
+        "remaining": [
+            "appointment rescheduling/cancellation product policy",
+            "outbox dispatcher and handlers with provider approvals",
+            "Data Protection coordinated key rotation",
+            "Platform Admin approvals",
+            "WhatsApp Cloud API approvals",
+            "independent production security review and backup/restore validation"
+        ]
+    },
+    "v93": {
+        "implementation_commit": "e1fec9ade0b97652d94e3a9e7bb20cd56c7106ce",
+        "approval": "pending_ci",
+        "ci_run": "44671789665",
+        "ci_run_number": 259,
+        "scope": "test-only comprehensive HTTP checks for request body limit on unknown routes",
+        "assertions": [
+            "POST to unknown routes with oversized body (1 MiB + 1 byte) returns HTTP 413 with payload_too_large body and all baseline security headers",
+            "POST to unknown routes with body exactly at 1 MiB ceiling is not rejected by size limit",
+            "Health endpoints are GET-only in production; TestServer routes POST to 404 before pre-routing middleware"
+        ]
+    }
 }
