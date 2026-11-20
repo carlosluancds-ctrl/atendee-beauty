@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -1067,6 +1068,17 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
                Environment.GetEnvironmentVariable("AuthenticationRateLimiting__PartitionKeySecret"),
                StringComparison.Ordinal),
         "The MFA integration host uses an isolated rate-limit partition key.");
+    var mfaEndpoints = mfaFactory.Services.GetRequiredService<EndpointDataSource>()
+        .Endpoints.OfType<RouteEndpoint>().ToArray();
+    var antiforgeryLimit = mfaEndpoints
+        .Single(endpoint => endpoint.RoutePattern.RawText == "/api/v1/auth/antiforgery")
+        .Metadata.GetMetadata<DistributedAuthenticationRateLimitMetadata>();
+    var loginLimit = mfaEndpoints
+        .Single(endpoint => endpoint.RoutePattern.RawText == "/api/v1/auth/login")
+        .Metadata.GetMetadata<DistributedAuthenticationRateLimitMetadata>();
+    Ensure(antiforgeryLimit is { Policy: "auth-antiforgery", PermitLimit: 30 } &&
+           loginLimit is { Policy: "auth-login", PermitLimit: 5 },
+        "The routed antiforgery and login endpoints carry their preserved distributed rate-limit policies.");
     using var mfaClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
@@ -1120,7 +1132,7 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         Ensure(await mfaPartitionReader.ReadAsync() &&
                mfaPartitionReader.GetInt64(0) == 1 &&
                mfaPartitionReader.GetInt64(1) == 0,
-            "The MFA host stores its antiforgery request under the configured HMAC key and a fresh test IP partition.");
+            "The MFA host stores its antiforgery request under the configured HMAC key and fresh test IP partition.");
     }
     var ownerLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
     {
