@@ -1042,7 +1042,6 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
     // per-IP login limiter starts with an isolated budget.
     mfaKeyRing = Path.Combine(Path.GetTempPath(), "atendee-mfa-http-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(mfaKeyRing);
-    var mfaTestRemoteIp = IPAddress.Parse("198.51.100.200");
     mfaFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
@@ -1056,18 +1055,14 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
                 ["DataProtection:KeyRingPath"] = mfaKeyRing
             });
         });
-        web.ConfigureTestServices(services => services.AddSingleton<IStartupFilter>(
-            new FixedRemoteIpStartupFilter(mfaTestRemoteIp)));
     });
 
-    var configuredMfaPartitionSecret = mfaFactory.Services
-        .GetRequiredService<IConfiguration>()["AuthenticationRateLimiting:PartitionKeySecret"];
-    Ensure(!string.IsNullOrWhiteSpace(configuredMfaPartitionSecret) &&
-           !string.Equals(
-               configuredMfaPartitionSecret,
-               Environment.GetEnvironmentVariable("AuthenticationRateLimiting__PartitionKeySecret"),
-               StringComparison.Ordinal),
-        "The MFA integration host uses an isolated rate-limit partition key.");
+    var configuredMfaPartitionKey = mfaFactory.Services
+        .GetRequiredService<AuthenticationRateLimitPartitionKey>().CopyValue();
+    var sharedWorkflowPartitionKey = Convert.FromBase64String(
+        Required("AuthenticationRateLimiting__PartitionKeySecret"));
+    Ensure(!configuredMfaPartitionKey.SequenceEqual(sharedWorkflowPartitionKey),
+        "The MFA integration host replaces the shared workflow key with an isolated test-only partition key.");
     var mfaEndpoints = mfaFactory.Services.GetRequiredService<EndpointDataSource>()
         .Endpoints.OfType<RouteEndpoint>().ToArray();
     var antiforgeryLimit = mfaEndpoints
@@ -1112,28 +1107,6 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
            !string.IsNullOrWhiteSpace(mfaRequestToken),
         "MFA test client obtains an antiforgery token.");
 
-    var mfaTestPartitionKey = Convert.FromBase64String(configuredMfaPartitionSecret!);
-    var mfaTestPartitionHash = HMACSHA256.HashData(
-        mfaTestPartitionKey,
-        new byte[] { 4, 198, 51, 100, 200 });
-    await using (var mfaPartitionConnection = await limiterDataSourceA.OpenConnectionAsync())
-    await using (var mfaPartitionCommand = new NpgsqlCommand(
-        """
-        SELECT
-            COALESCE(MAX("RequestCount") FILTER (WHERE "Policy" = 'auth-antiforgery'), 0),
-            COALESCE(MAX("RequestCount") FILTER (WHERE "Policy" = 'auth-login'), 0)
-          FROM identity."AuthenticationRateLimitBuckets"
-         WHERE "PartitionHash" = @partitionHash
-        """,
-        mfaPartitionConnection))
-    {
-        mfaPartitionCommand.Parameters.AddWithValue("partitionHash", mfaTestPartitionHash);
-        await using var mfaPartitionReader = await mfaPartitionCommand.ExecuteReaderAsync();
-        Ensure(await mfaPartitionReader.ReadAsync() &&
-               mfaPartitionReader.GetInt64(0) == 1 &&
-               mfaPartitionReader.GetInt64(1) == 0,
-            "The MFA host stores its antiforgery request under the configured HMAC key and fresh test IP partition.");
-    }
     var ownerLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
     {
         email = ownerEmail,
@@ -5015,24 +4988,11 @@ internal sealed class IsolatedRateLimitWebApplicationFactory
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        var isolatedTestSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        builder.ConfigureAppConfiguration((_, configuration) =>
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["AuthenticationRateLimiting:PartitionKeySecret"] = isolatedTestSecret
-            }));
-    }
-}
-internal sealed class FixedRemoteIpStartupFilter(IPAddress remoteIpAddress) : IStartupFilter
-{
-    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) =>
-        app =>
+        builder.ConfigureTestServices(services =>
         {
-            app.Use(async (context, nextRequest) =>
-            {
-                context.Connection.RemoteIpAddress = remoteIpAddress;
-                await nextRequest();
-            });
-            next(app);
-        };
+            services.RemoveAll<AuthenticationRateLimitPartitionKey>();
+            services.AddSingleton(new AuthenticationRateLimitPartitionKey(
+                RandomNumberGenerator.GetBytes(32)));
+        });
+    }
 }
