@@ -20,7 +20,6 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
@@ -3327,7 +3326,8 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         });
         web.ConfigureTestServices(services =>
         {
-            services.RemoveAll<IUserStore<OperationalIdentityUser>>();
+            foreach (var descriptor in services.Where(descriptor => descriptor.ServiceType == typeof(IUserStore<OperationalIdentityUser>)).ToArray())
+                services.Remove(descriptor);
             services.AddScoped<IUserStore<OperationalIdentityUser>, FailureInjectingOperationalIdentityUserStore>();
         });
     });
@@ -4990,7 +4990,8 @@ internal sealed class IsolatedRateLimitWebApplicationFactory
     {
         builder.ConfigureTestServices(services =>
         {
-            services.RemoveAll<AuthenticationRateLimitPartitionKey>();
+            foreach (var descriptor in services.Where(descriptor => descriptor.ServiceType == typeof(AuthenticationRateLimitPartitionKey)).ToArray())
+                services.Remove(descriptor);
             services.AddSingleton(new AuthenticationRateLimitPartitionKey(
                 RandomNumberGenerator.GetBytes(32)));
         });
