@@ -822,6 +822,40 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         Ensure(getResp.StatusCode == HttpStatusCode.Unauthorized, "V96: GET /api/v1/tenant without token returns 401 (needs auth), not 400 antiforgery.");
     }
 
+    // V97: verify baseline security headers on authenticated endpoint responses.
+    // V91 verified headers on /health/live, /health/ready and unknown 404.
+    // Here we verify the same headers are present on 401/400/404 from authenticated endpoints.
+    {
+        // Helper to check all baseline headers
+        void CheckBaselineHeaders(HttpResponseMessage resp, string context)
+        {
+            Ensure(resp.Headers.CacheControl?.NoStore == true, $"V97: {context} Cache-Control: no-store");
+            Ensure(resp.Headers.TryGetValues("X-Content-Type-Options", out var nosniff) && nosniff.Contains("nosniff"), $"V97: {context} X-Content-Type-Options: nosniff");
+            Ensure(resp.Headers.TryGetValues("X-Frame-Options", out var frameDeny) && frameDeny.Contains("DENY"), $"V97: {context} X-Frame-Options: DENY");
+            Ensure(resp.Headers.TryGetValues("Content-Security-Policy", out var csp) && csp.Contains("default-src 'none'"), $"V97: {context} Content-Security-Policy: default-src 'none'");
+            Ensure(resp.Headers.TryGetValues("Cross-Origin-Resource-Policy", out var corp) && corp.Contains("same-origin"), $"V97: {context} Cross-Origin-Resource-Policy: same-origin");
+            Ensure(resp.Headers.TryGetValues("Cross-Origin-Opener-Policy", out var coop) && coop.Contains("same-origin"), $"V97: {context} Cross-Origin-Opener-Policy: same-origin");
+            Ensure(resp.Headers.TryGetValues("X-Permitted-Cross-Domain-Policies", out var xpcdp) && xpcdp.Contains("none"), $"V97: {context} X-Permitted-Cross-Domain-Policies: none");
+            Ensure(resp.Headers.TryGetValues("Referrer-Policy", out var referrer) && referrer.Contains("no-referrer"), $"V97: {context} Referrer-Policy: no-referrer");
+            Ensure(resp.Headers.TryGetValues("Permissions-Policy", out var perm) && perm.Contains("camera=()"), $"V97: {context} Permissions-Policy: camera=()");
+        }
+
+        // 401 on authenticated endpoint without token
+        var unauthResp = await client.GetAsync("/api/v1/tenant");
+        Ensure(unauthResp.StatusCode == HttpStatusCode.Unauthorized, "V97: GET /api/v1/tenant without auth returns 401.");
+        CheckBaselineHeaders(unauthResp, "401 /api/v1/tenant");
+
+        // 400 antiforgery on POST without token
+        var noCsrfResp = await client.PostAsync("/api/v1/customers", JsonContent.Create(new { fullName = "Test", phoneNumber = "+5511999999999" }));
+        Ensure(noCsrfResp.StatusCode == HttpStatusCode.BadRequest, "V97: POST /api/v1/customers without token returns 400.");
+        CheckBaselineHeaders(noCsrfResp, "400 antiforgery /api/v1/customers");
+
+        // 404 on unknown route
+        var notFoundResp = await client.GetAsync("/v97-unknown-route");
+        Ensure(notFoundResp.StatusCode == HttpStatusCode.NotFound, "V97: GET /v97-unknown-route returns 404.");
+        CheckBaselineHeaders(notFoundResp, "404 unknown route");
+    }
+
     var activationEmail = "activation-http-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     Guid activationUserId;
     await using (var scope = factory.Services.CreateAsyncScope())
