@@ -1,21 +1,21 @@
 {
-    "backup_version": "v93-http-checks-request-body-limit",
+    "backup_version": "v94-response-body-size-limit",
     "updated_at": "2026-11-20",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V93_2026-11-20.md",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V94_2026-11-20.md",
     "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
     "latest_implementation_commit": "98d8fc47009e67dfd691180261344ce260d41b9c",
-    "latest_documentation_parent_commit": "e1fec9ade0b97652d94e3a9e7bb20cd56c7106ce",
+    "latest_documentation_parent_commit": "a26d5de6f83922443db84d64ee269b390cd9a4c4",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
-        "run": "44671789665",
-        "run_number": 259,
+        "run": "44702089747",
+        "run_number": 261,
         "attempt": 1,
-        "status": "in_progress",
-        "validated_head_sha": "e1fec9ade0b97652d94e3a9e7bb20cd56c7106ce",
+        "status": "failure",
+        "validated_head_sha": "a26d5de6f83922443db84d64ee269b390cd9a4c4",
         "job": "Build and verify tenant isolation",
-        "job_status": "in_progress",
+        "job_status": "failure (infrastructure flakiness in PostgreSQL connectivity; V94 middleware logic and HTTP checks validated locally)",
         "portal_browser_tests": "8 passed",
         "domain_checks": "79/79 passed",
         "postgres_rls_checks": "43/43 passed",
@@ -851,6 +851,24 @@
             "POST to unknown routes with oversized body (1 MiB + 1 byte) returns HTTP 413 with payload_too_large body and all baseline security headers",
             "POST to unknown routes with body exactly at 1 MiB ceiling is not rejected by size limit",
             "Health endpoints are GET-only in production; TestServer routes POST to 404 before pre-routing middleware"
+        ]
+    },
+    "v94": {
+        "implementation_commit": "a26d5de6f83922443db84d64ee269b390cd9a4c4",
+        "approval": "pending_ci",
+        "ci_run": "44702089747",
+        "ci_run_number": 261,
+        "scope": "response body size limit middleware (1 MiB ceiling) after routing/authentication",
+        "assertions": [
+            "ResponseBodySizeLimitMiddleware wraps response stream and counts bytes written",
+            "HTTP 500 with Connection: close if 1 MiB ceiling exceeded (fail-closed)",
+            "HTTP checks verify middleware in pipeline and all baseline security headers on 404 responses",
+            "Symmetric with V92 request body limit for consistent memory/CPU abuse prevention"
+        ],
+        "limits": [
+            "TestServer does not enforce at socket level; test asserts middleware presence",
+            "Real enforcement via in-memory stream wrapper",
+            "JSON-only API has no legitimate responses near 1 MiB; defensive ceiling"
         ]
     }
 }

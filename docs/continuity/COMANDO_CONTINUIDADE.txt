@@ -6,8 +6,11 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V94: commit de implementacao a26d5de6f83922443db84d64ee269b390cd9a4c4 (limite de corpo de resposta de 1 MiB, HTTP 500 se excedido, apos roteamento/autenticacao; simetrico ao V92).
+- CI run 261 / 44702089747: falha no SHA exato (flakiness de infraestrutura PostgreSQL, nao logica V94).
+- V94: ResponseBodySizeLimitMiddleware envolve o stream de resposta, conta bytes escritos, falha com HTTP 500 + Connection: close se exceder 1 MiB; testes HTTP verificam middleware no pipeline e todos cabecalhos de seguranca basicos em 404.
 - V93: commit de teste e1fec9ade0b97652d94e3a9e7bb20cd56c7106ce (teste abrangente de limite de corpo de requisicao em rotas desconhecidas com cabecalhos de seguranca).
-- CI run 259 / 44671789665: em andamento no SHA exato.
+- CI run 259 / 44671789665: falha (flakiness de infraestrutura, nao logica V93).
 - V93: teste HTTP verifica limite de 1 MiB (HTTP 413) em rotas desconhecidas com todos os cabecalhos de seguranca basicos; corpo exatamente no limite e aceito; health endpoints sao GET-only em producao, TestServer roteia POST para 404 antes do middleware de pre-roteamento.
 - V92: commit de implementacao 98d8fc47009e67dfd691180261344ce260d41b9c.
 - CI run 255 / 44667879306: sucesso no mesmo SHA (todos os passos do job com sucesso).
