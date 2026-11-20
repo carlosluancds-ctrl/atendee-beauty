@@ -1,19 +1,19 @@
 {
-    "backup_version": "v95-kestrel-limits-verification-tests",
+    "backup_version": "v96-antiforgery-authenticated-endpoints-tests",
     "updated_at": "2026-11-20",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V95_2026-11-20.md",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V96_2026-11-20.md",
     "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
     "latest_implementation_commit": "98d8fc47009e67dfd691180261344ce260d41b9c",
-    "latest_documentation_parent_commit": "b2cadba",
+    "latest_documentation_parent_commit": "eb83b56",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
         "run": "pending",
         "run_number": "pending",
         "attempt": 1,
         "status": "pending",
-        "validated_head_sha": "b2cadba",
+        "validated_head_sha": "eb83b56",
         "job": "Build and verify tenant isolation",
         "job_status": "pending",
         "portal_browser_tests": "8 passed",
@@ -874,8 +874,8 @@
     "v95": {
         "implementation_commit": "b2cadba",
         "approval": "pending_ci",
-        "ci_run": "pending",
-        "ci_run_number": "pending",
+        "ci_run": "44703378166",
+        "ci_run_number": 263,
         "scope": "Kestrel request limits verification tests asserting configured values match ApiRequestLimits constants",
         "assertions": [
             "MaxRequestBodySize 1 MiB matches ApiRequestLimits.MaxRequestBodyBytes",
@@ -888,6 +888,25 @@
             "TestServer does not enforce Kestrel socket limits; test asserts configured values",
             "Real Kestrel enforcement via Apply() in Program.cs at startup",
             "Test-only verification; limits implemented in V92"
+        ]
+    },
+    "v96": {
+        "implementation_commit": "eb83b56",
+        "approval": "pending_ci",
+        "ci_run": "pending",
+        "ci_run_number": "pending",
+        "scope": "Antiforgery validation tests on authenticated endpoints",
+        "assertions": [
+            "POST to /api/v1/customers without X-CSRF-TOKEN returns 400 antiforgery_validation_failed",
+            "POST to /api/v1/customers with valid token returns 401 (needs auth), not 400 antiforgery",
+            "POST to /api/v1/customers with invalid token returns 400",
+            "Replayed token on /api/v1/tenant returns 400 antiforgery_validation_failed",
+            "GET /api/v1/tenant (safe method) returns 401 (needs auth), not 400 antiforgery"
+        ],
+        "limits": [
+            "Tests run against seeded test identity/tenant infrastructure",
+            "Antiforgery token is per-request (single-use); replay detection validated",
+            "Safe methods correctly bypass antiforgery per middleware in Program.cs"
         ]
     }
 }

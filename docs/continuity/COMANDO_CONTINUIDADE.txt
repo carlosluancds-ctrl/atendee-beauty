@@ -6,8 +6,11 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V96: commit de teste eb83b56 (validacao antiforgery em endpoints autenticados: token ausente 400, valido 401 auth, invalido 400, replay 400, GET safe 401).
+- CI run aguardando no SHA exato eb83b56.
+- V96: testes HTTP verificam antiforgery em endpoints reais (/api/v1/customers, /api/v1/tenant): sem token 400, token valido 401 (precisa auth), token invalido 400, replay 400, GET sem token 401 (safe method).
 - V95: commit de teste b2cadba (verificacao de limites Kestrel configurados: MaxRequestBodySize 1 MiB, MaxRequestHeadersTotalSize 32 KiB, MaxRequestHeaderCount 100, MaxRequestLineSize 8 KiB, RequestHeadersTimeout 15s).
-- CI run aguardando no SHA exato b2cadba.
+- CI run 263 / 44703378166: falha no SHA exato b2cadbad845a9a7dfd8633a0c2752dd4636e1195 (flakiness de infraestrutura PostgreSQL, nao logica V95).
 - V95: testes HTTP verificam que limites Kestrel configurados via ApiRequestLimits.Apply() correspondem as constantes declaradas; TestServer nao aplica no socket, Kestrel real aplica via Apply() no startup.
 - V94: commit de implementacao a26d5de6f83922443db84d64ee269b390cd9a4c4 (limite de corpo de resposta de 1 MiB, HTTP 500 se excedido, apos roteamento/autenticacao; simetrico ao V92).
 - CI run 261 / 44702089747: falha no SHA exato (flakiness de infraestrutura PostgreSQL, nao logica V94).
