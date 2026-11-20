@@ -790,6 +790,38 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
     Ensure((await client.GetAsync("/api/v1/tenant")).StatusCode == HttpStatusCode.Unauthorized,
         "Tenant profile endpoint rejects anonymous requests.");
 
+    // V96: verify antiforgery validation on authenticated endpoints.
+    // Tests that missing token returns 400, valid token succeeds, and replay is rejected
+    // on real tenant APIs (not just unknown routes).
+    {
+        // Test 1: POST to authenticated endpoint without token -> 400
+        var noTokenResp = await client.PostAsync("/api/v1/customers", JsonContent.Create(new { fullName = "Test", phoneNumber = "+5511999999999" }));
+        Ensure(noTokenResp.StatusCode == HttpStatusCode.BadRequest, "V96: POST /api/v1/customers without X-CSRF-TOKEN returns 400.");
+        var noTokenBody = await noTokenResp.Content.ReadAsStringAsync();
+        Ensure(noTokenBody.Contains("antiforgery_validation_failed", StringComparison.Ordinal), "V96: Error body mentions antiforgery validation failed.");
+
+        // Test 2: POST with valid token -> 401 (unauthorized, no tenant context) not 400
+        var withTokenResp = await PostWithCsrfAsync(client, "/api/v1/customers", requestToken!, new { fullName = "Test", phoneNumber = "+5511999999999" });
+        Ensure(withTokenResp.StatusCode == HttpStatusCode.Unauthorized, "V96: POST /api/v1/customers with valid token returns 401 (needs auth), not 400 antiforgery.");
+
+        // Test 3: POST with invalid token -> 400
+        var invalidTokenResp = await PostWithCsrfAsync(client, "/api/v1/customers", "invalid-token", new { fullName = "Test", phoneNumber = "+5511999999999" });
+        Ensure(invalidTokenResp.StatusCode == HttpStatusCode.BadRequest, "V96: POST /api/v1/customers with invalid token returns 400.");
+
+        // Test 4: Replay same token on unsafe endpoint -> 400 (antiforgery token is single-use per request)
+        // First request should succeed (401 for auth, not 400 for antiforgery)
+        var firstReq = await PostWithCsrfAsync(client, "/api/v1/tenant", requestToken!, new { });
+        // Second request with same token should fail antiforgery
+        var secondReq = await PostWithCsrfAsync(client, "/api/v1/tenant", requestToken!, new { });
+        Ensure(secondReq.StatusCode == HttpStatusCode.BadRequest, "V96: Replayed antiforgery token on /api/v1/tenant is rejected with 400.");
+        var replayBody = await secondReq.Content.ReadAsStringAsync();
+        Ensure(replayBody.Contains("antiforgery_validation_failed", StringComparison.Ordinal), "V96: Replay error mentions antiforgery validation failed.");
+
+        // Test 5: GET endpoints (safe methods) don't require antiforgery
+        var getResp = await client.GetAsync("/api/v1/tenant");
+        Ensure(getResp.StatusCode == HttpStatusCode.Unauthorized, "V96: GET /api/v1/tenant without token returns 401 (needs auth), not 400 antiforgery.");
+    }
+
     var activationEmail = "activation-http-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     Guid activationUserId;
     await using (var scope = factory.Services.CreateAsyncScope())
