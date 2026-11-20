@@ -101,6 +101,18 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             }));
 
+    options.AddPolicy("authenticated-api", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.User?.FindFirst("sub")?.Value
+                ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 120,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
     options.AddPolicy("platform-admin", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -503,6 +515,7 @@ app.MapGet("/health/ready", async (HttpContext context, CancellationToken cancel
 if (identityEnabled)
 {
     app.MapOperationalAuthentication();
+    app.MapTenantMemberEndpoints();
     app.MapTenantServices();
     app.MapTenantCustomers();
     app.MapTenantBusinessHours();
