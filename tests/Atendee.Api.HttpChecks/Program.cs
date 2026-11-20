@@ -1041,34 +1041,57 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
     // per-IP login limiter starts with an isolated budget.
     mfaKeyRing = Path.Combine(Path.GetTempPath(), "atendee-mfa-http-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(mfaKeyRing);
-    mfaFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
+    const string mfaTestClientIp = "198.51.100.200";
+    const string knownProxy0EnvironmentKey = "ForwardedHeaders__KnownProxies__0";
+    const string knownProxy1EnvironmentKey = "ForwardedHeaders__KnownProxies__1";
+    var previousKnownProxy0 = Environment.GetEnvironmentVariable(knownProxy0EnvironmentKey);
+    var previousKnownProxy1 = Environment.GetEnvironmentVariable(knownProxy1EnvironmentKey);
+    string? configuredMfaPartitionSecret;
+    try
     {
-        web.UseContentRoot(apiContentRoot);
-        web.UseEnvironment("Development");
-        web.ConfigureAppConfiguration((_, configuration) =>
+        // TestServer connects over loopback. Trust only those exact test proxy
+        // addresses so this scenario can use a deterministic, isolated client IP.
+        Environment.SetEnvironmentVariable(knownProxy0EnvironmentKey, "127.0.0.1");
+        Environment.SetEnvironmentVariable(knownProxy1EnvironmentKey, "::1");
+        mfaFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
         {
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            web.UseContentRoot(apiContentRoot);
+            web.UseEnvironment("Development");
+            web.ConfigureAppConfiguration((_, configuration) =>
             {
-                ["ConnectionStrings:Identity"] = identityConnectionString,
-                ["ConnectionStrings:Tenant"] = tenantConnectionString,
-                ["DataProtection:KeyRingPath"] = mfaKeyRing
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Identity"] = identityConnectionString,
+                    ["ConnectionStrings:Tenant"] = tenantConnectionString,
+                    ["DataProtection:KeyRingPath"] = mfaKeyRing
+                });
             });
         });
-    });
 
-    var configuredMfaPartitionSecret = mfaFactory.Services
-        .GetRequiredService<IConfiguration>()["AuthenticationRateLimiting:PartitionKeySecret"];
-    var sharedWorkflowPartitionSecret = Environment.GetEnvironmentVariable(
-        "AuthenticationRateLimiting__PartitionKeySecret");
-    Console.WriteLine(
-        "V89 diagnostic: MFA test host uses an isolated rate-limit partition key: " +
-        (!string.Equals(configuredMfaPartitionSecret, sharedWorkflowPartitionSecret, StringComparison.Ordinal)));
+        configuredMfaPartitionSecret = mfaFactory.Services
+            .GetRequiredService<IConfiguration>()["AuthenticationRateLimiting:PartitionKeySecret"];
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable(knownProxy0EnvironmentKey, previousKnownProxy0);
+        Environment.SetEnvironmentVariable(knownProxy1EnvironmentKey, previousKnownProxy1);
+    }
+
+    Ensure(!string.IsNullOrWhiteSpace(configuredMfaPartitionSecret) &&
+           !string.Equals(
+               configuredMfaPartitionSecret,
+               Environment.GetEnvironmentVariable("AuthenticationRateLimiting__PartitionKeySecret"),
+               StringComparison.Ordinal),
+        "The MFA integration host uses an isolated rate-limit partition key.");
     using var mfaClient = mfaFactory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
         HandleCookies = true,
         AllowAutoRedirect = false
     });
+
+    mfaClient.DefaultRequestHeaders.Add("X-Forwarded-For", mfaTestClientIp);
+    mfaClient.DefaultRequestHeaders.Add("X-Forwarded-Proto", "https");
 
     var ownerEmail = "http-mfa-owner-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string ownerPassword = "Atendee-MFA-HTTP-2026!";
@@ -1097,13 +1120,34 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
            !string.IsNullOrWhiteSpace(mfaRequestToken),
         "MFA test client obtains an antiforgery token.");
 
+    var mfaTestPartitionKey = Convert.FromBase64String(configuredMfaPartitionSecret!);
+    var mfaTestPartitionHash = HMACSHA256.HashData(
+        mfaTestPartitionKey,
+        new byte[] { 4, 198, 51, 100, 200 });
+    await using (var mfaPartitionConnection = await limiterDataSourceA.OpenConnectionAsync())
+    await using (var mfaPartitionCommand = new NpgsqlCommand(
+        """
+        SELECT
+            COALESCE(MAX("RequestCount") FILTER (WHERE "Policy" = 'auth-antiforgery'), 0),
+            COALESCE(MAX("RequestCount") FILTER (WHERE "Policy" = 'auth-login'), 0)
+          FROM identity."AuthenticationRateLimitBuckets"
+         WHERE "PartitionHash" = @partitionHash
+        """,
+        mfaPartitionConnection))
+    {
+        mfaPartitionCommand.Parameters.AddWithValue("partitionHash", mfaTestPartitionHash);
+        await using var mfaPartitionReader = await mfaPartitionCommand.ExecuteReaderAsync();
+        Ensure(await mfaPartitionReader.ReadAsync() &&
+               mfaPartitionReader.GetInt64(0) == 1 &&
+               mfaPartitionReader.GetInt64(1) == 0,
+            "Trusted forwarded headers map the MFA test host to its unique client-IP digest, with an unused login quota.");
+    }
     var ownerLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
     {
         email = ownerEmail,
         password = ownerPassword
     });
     var ownerLoginBodyText = await ownerLogin.Content.ReadAsStringAsync();
-    Console.WriteLine("V89 diagnostic: owner MFA-setup login returned HTTP " + (int)ownerLogin.StatusCode + "; body=" + ownerLoginBodyText);
     using var ownerLoginBodyDocument = JsonDocument.Parse(ownerLoginBodyText);
     var ownerLoginBody = ownerLoginBodyDocument.RootElement;
     Ensure(ownerLogin.StatusCode == HttpStatusCode.Accepted &&
