@@ -1,4 +1,4 @@
-﻿# Continuation status V89 - distributed authentication rate limiting
+# Continuation status V89 - distributed authentication rate limiting
 
 Date: 2026-11-19
 Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
@@ -55,4 +55,3 @@ CI URL: https://github.com/carlosluancds-ctrl/atendee-beauty/actions/runs/446603
 - Active worktree: `C:\Users\iaras\Downloads\atendee-beauty-v85-work`.
 - Preserve the older invalid clone `C:\Users\iaras\Downloads\atendee-beauty-git` untouched.
 - Read `CLAUDE.md`, `docs/continuity/CONTINUE_HERE.md`, this highest-numbered status and `docs/technical/DISTRIBUTED_AUTH_RATE_LIMITING_V1.md` before continuing.
-
