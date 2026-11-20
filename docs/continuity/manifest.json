@@ -1,19 +1,19 @@
 ﻿{
-    "backup_version":  "v89-distributed-auth-rate-limiting",
+    "backup_version":  "v90-database-readiness-endpoint",
     "updated_at":  "2026-11-19",
     "repository":  "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch":  "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V89_2026-11-19.md",
-    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V89_2026-11-19.md",
-    "latest_implementation_commit":  "90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34",
-    "latest_documentation_parent_commit":  "90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34",
+    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V90_2026-11-19.md",
+    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V90_2026-11-19.md",
+    "latest_implementation_commit":  "399ead5e86aadde12eb7e06a03051aa839767e6e",
+    "latest_documentation_parent_commit":  "399ead5e86aadde12eb7e06a03051aa839767e6e",
     "latest_ci":  {
                       "workflow":  "PostgreSQL 18 persistence integration",
-                      "run":  "44660361862",
-                      "run_number":  248,
+                      "run":  "44663263477",
+                      "run_number":  251,
                       "attempt":  1,
                       "status":  "success",
-                      "validated_head_sha":  "90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34",
+                      "validated_head_sha":  "399ead5e86aadde12eb7e06a03051aa839767e6e",
                       "job":  "Build and verify tenant isolation",
                       "job_status":  "success",
                       "portal_browser_tests":  "8 passed",
@@ -30,6 +30,8 @@
                                          "domain checks 79/79",
                                          "PostgreSQL 18.7 / EF Core / RLS persistence checks 43/43",
                                          "Identity/TOTP/tenant-context checks 49/49",
+                                         "V90: readiness probe reports ready when identity and tenant PostgreSQL are reachable and not ready when either is unreachable",
+                                         "V90: GET /health/ready returns 200 {status:ready} and 503 {status:unavailable} with no-store and no dependency details, anonymously and without antiforgery",
                                          "V89: two independent API limiter instances share atomic PostgreSQL fixed-window counter under 40 concurrent acquisitions, exactly 7 permits",
                                          "V89: HMAC-SHA256 partition digest, no plaintext IP storage, independent IP partitions and IPv4-mapped IPv6 normalization",
                                          "V89: UTC window rollover and bounded expired-bucket cleanup",
@@ -69,7 +71,7 @@
                                  "validation_head":  "0a06ab045691a336c6114bf173f1383e3aafb4ac",
                                  "note":  "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
                              },
-    "next_step":  "V90: obtain explicit product decisions for appointment rescheduling/cancellation before implementation. Outbox dispatcher remains blocked until real idempotent handlers, retry/backoff, dead-letter and observability plus provider/credential/cost approvals are defined. Data Protection key rotation, Platform Admin, external providers and production deployment remain blocked pending explicit security, product, credential and operational decisions.",
+    "next_step":  "V91: obtain explicit product decisions for appointment rescheduling/cancellation before implementation; if no decision is pending, choose only a single autonomous, safe and testable backend increment. Outbox dispatcher remains blocked until real idempotent handlers, retry/backoff, dead-letter and observability plus provider/credential/cost approvals are defined. Data Protection key rotation, Platform Admin, external providers and production deployment remain blocked pending explicit security, product, credential and operational decisions.",
     "safeguards":  {
                        "main_untouched":  true,
                        "production_deploy_authorized":  false,
@@ -737,6 +739,40 @@
                                   "appointment rescheduling/cancellation product policy",
                                   "outbox dispatcher and handlers with idempotency/retry/dead-letter/observability and provider approvals",
                                   "Data Protection coordinated key rotation",
+                                  "independent production security review and backup/restore validation"
+                              ]
+            },
+    "v90":  {
+                "implementation_commit":  "399ead5e86aadde12eb7e06a03051aa839767e6e",
+                "approval":  "validated",
+                "ci_run":  "44663263477",
+                "ci_run_number":  251,
+                "validated_head":  "399ead5e86aadde12eb7e06a03051aa839767e6e",
+                "scope":  "anonymous GET /health/ready probing the shared identity data source and the tenant PostgreSQL database with SELECT 1 under a 2 second timeout",
+                "api":  [
+                            "GET /health/ready -> 200 {status:ready} or 503 {status:unavailable}, Cache-Control no-store"
+                        ],
+                "assertions":  [
+                                   "probe ready when both databases are reachable",
+                                   "probe not ready when the identity database is unreachable",
+                                   "probe not ready when the tenant database is unreachable",
+                                   "HTTP 200 minimal no-store body, anonymous, no antiforgery",
+                                   "HTTP 503 minimal no-store body without dependency details"
+                               ],
+                "limits":  [
+                               "reachability only: no schema, migration, grant, secret or Data Protection verification",
+                               "uses the process-local bootstrap-health limit (60 per minute per client IP)",
+                               "orchestrator probe wiring is deployment-specific and was not done"
+                           ],
+                "corrections":  [
+                                    "V89 CI is run 44660361862 = run 248; CONTINUE_HERE.md previously said 238 by mistake"
+                                ],
+                "remaining":  [
+                                  "appointment rescheduling/cancellation product policy",
+                                  "outbox dispatcher and handlers with idempotency/retry/dead-letter/observability and provider approvals",
+                                  "Data Protection coordinated key rotation",
+                                  "Platform Admin approvals",
+                                  "WhatsApp Cloud API: Meta Business approval, provider, credentials and costs",
                                   "independent production security review and backup/restore validation"
                               ]
             }

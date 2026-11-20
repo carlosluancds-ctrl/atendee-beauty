@@ -4,11 +4,13 @@ Read `CLAUDE.md` and this file before editing. Then read the highest-numbered co
 
 - Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
 - Working branch: `security/csrf-webhook-antiforgery-v23`; never modify `main`.
-- Latest validated implementation head: `90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34` (V89 distributed PostgreSQL authentication rate limiting).
-- Latest full CI: run 238 (`44660361862`), success on that exact head. Frontend audit/tests/build, portal browser E2E 8/8, Release build zero warnings/errors, domain 79/79, PostgreSQL 18.7 / EF Core / RLS 43/43, Identity/TOTP 49/49 and HTTP security/integration checks all passed. CI log confirms V89 two-instance concurrency and fail-closed assertions. Disposable credentials cleared and PostgreSQL container removed.
+- Latest validated implementation head: `399ead5e86aadde12eb7e06a03051aa839767e6e` (V90 database readiness endpoint, on top of V89 distributed PostgreSQL authentication rate limiting at `90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34`).
+- Latest full CI: run 251 (`44663263477`), success on that exact head. Frontend audit/tests/build, portal browser E2E 8/8, Release build zero warnings/errors, domain 79/79, PostgreSQL 18.7 / EF Core / RLS 43/43, Identity/TOTP 49/49 and HTTP security/integration checks all passed. CI log confirms the five V90 readiness assertions. Disposable credentials cleared and PostgreSQL container removed.
+- V90 adds anonymous `GET /health/ready`: `SELECT 1` against the shared identity data source and the tenant database under a 2 second timeout; 200 `{"status":"ready"}` or 503 `{"status":"unavailable"}`, always `Cache-Control: no-store`, no dependency details. It checks reachability only (not schema, migrations or secrets) and uses the process-local `bootstrap-health` limit. Orchestrator wiring is deployment-specific and was not done.
+- Correction: the V89 CI run is 44660361862 = run 248 (an earlier version of this file said 238 by mistake).
 - V89 adds migration 021, atomic PostgreSQL fixed-window counters shared by API instances, HMAC-SHA256 IP partition digests, bounded cleanup and fail-closed 503/429 behavior. The partition secret must be the same across instances and supplied securely; do not rotate without an approved plan.
 - V88 appointment booking/lifecycle, immutable snapshots, idempotency, overlap prevention, transactional audit/events/outbox and availability occupancy remain validated on run 237 (`44646121213`).
-- Read `docs/continuity/CONTINUATION_STATUS_V89_2026-11-19.md` for full V89 scope and exact CI evidence; read `docs/technical/DISTRIBUTED_AUTH_RATE_LIMITING_V1.md` for operational configuration. The copyable handoff command is in `docs/continuity/COMANDO_CONTINUIDADE.txt`.
+- Read `docs/continuity/CONTINUATION_STATUS_V90_2026-11-19.md` for full V90 scope, limits and exact CI evidence, and `docs/continuity/CONTINUATION_STATUS_V89_2026-11-19.md` for V89; read `docs/technical/DISTRIBUTED_AUTH_RATE_LIMITING_V1.md` for operational configuration. The copyable handoff command is in `docs/continuity/COMANDO_CONTINUIDADE.txt`.
 
 ## Next backend increments
 

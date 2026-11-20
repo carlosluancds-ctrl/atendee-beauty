@@ -1,31 +1,39 @@
-﻿COMANDO DE CONTINUIDADE - ATENDEE BEAUTY
+COMANDO DE CONTINUIDADE - ATENDEE BEAUTY
 
-COMANDO SIMPLES
-CONTINUAR ATENDEE
+COMANDO SIMPLES: CONTINUAR ATENDEE
 
-INSTRUCAO COMPLETA PARA A PROXIMA CONVERSA
-Continue o repositorio https://github.com/carlosluancds-ctrl/atendee-beauty exclusivamente na branch security/csrf-webhook-antiforgery-v23. Antes de editar, leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, o arquivo docs/continuity/CONTINUATION_STATUS_V89_2026-11-19.md de maior versao, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante.
+Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
+Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
-- Implementacao V89: 90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34.
-- CI exato: run 248 / 44660361862, sucesso no mesmo SHA.
-- V89: rate limiting de autenticacao distribuido via PostgreSQL atomico, particoes HMAC-SHA256, migracao 021, quotas para antiforgery/login/ativacao/MFA, limpeza limitada e fail-closed 503/429.
-- CI: frontend e E2E 8/8; Release build sem warnings/erros; dominio 79/79; PostgreSQL/RLS 43/43; Identity/TOTP 49/49; HTTP security/integration aprovado. Os logs confirmam 40 requisicoes concorrentes entre duas instancias com exatamente 7 permissoes, protecao do IP, limpeza, 503 sem executar endpoint e 429 com Retry-After.
+- V90: commit de implementacao 399ead5e86aadde12eb7e06a03051aa839767e6e.
+- CI run 251 / 44663263477: sucesso no mesmo SHA.
+- Endpoint anonimo GET /health/ready: SELECT 1 no data source de identidade compartilhado e no banco de tenant, com timeout de 2 s; 200 {"status":"ready"} ou 503 {"status":"unavailable"}; Cache-Control no-store; sem detalhes de dependencia. Verifica apenas alcancabilidade (nao schema, migracoes nem segredos) e usa o limite local bootstrap-health.
+- CI confirmou 5 asserts novos: probe pronto, probe indisponivel com identidade fora, probe indisponivel com tenant fora, HTTP 200 minimo e HTTP 503 minimo sem vazar detalhes.
+- Build Release: zero avisos e zero erros. Portal E2E 8/8; Domain 79/79; PostgreSQL/RLS 43/43; Identity/TOTP 49/49; HTTP e full-stack aprovados.
+- V89 (rate limiting distribuido via PostgreSQL, migracao 021) permanece validado na run 248 / 44660361862, SHA 90a5bc6. Correcao: CONTINUE_HERE.md dizia run 238 por engano.
+
+ANTES DE QUALQUER ALTERACAO
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V90_2026-11-19.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
-Verifique novamente branch, HEAD local/remoto, worktree e CI. V90 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel.
+V91 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas (incluindo WhatsApp Cloud API) e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Ligar probes de orquestrador a /health/live e /health/ready e decisao de deploy. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel; ITenantNoteStore e apenas exemplo e nao e funcionalidade de produto.
 
 REGRAS PERMANENTES
 1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.
-2. Trabalhe apenas em security/csrf-webhook-antiforgery-v23.
-3. Antes de editar, leia os documentos de continuidade e inspecione git status, git log, HEAD remoto e CI.
-4. Implemente, teste, documente, faca diff --check, build Release, commit e push. Acompanhe CI do SHA exato ate sucesso; nunca declare concluido antes disso.
-5. Apos cada etapa validada, crie o proximo CONTINUATION_STATUS_V<n>, atualize CONTINUE_HERE.md, manifest.json e este comando, faca push e valide o CI do commit documental.
-6. Entregue um novo comando copiavel e um arquivo para download ao concluir cada etapa.
-7. Solicite aprovacao antes de alterar regra de negocio, usar provider pago, credenciais/servicos externos, assumir custo de infraestrutura, alterar producao, fazer deploy ou executar acao irreversivel/de alto risco.
-8. Nunca exponha nem grave tokens, senhas, cookies, recovery codes ou chaves. A chave HMAC do rate limiter deve ser igual em todas as instancias e permanecer em secret manager/ambiente; nao a rotacione sem plano coordenado.
-9. Preserve tenant isolation, RLS, auditoria obrigatoria, transaction runner, ordem authentication-before-antiforgery e protecoes MFA/TOTP existentes.
-10. Mantenha intocada a copia antiga invalida em C:\Users\iaras\Downloads\atendee-beauty-git. Checkout ativo conhecido: C:\Users\iaras\Downloads\atendee-beauty-v85-work.
+2. Trabalhe somente em security/csrf-webhook-antiforgery-v23.
+3. Implemente, teste, documente, execute diff --check e build Release, faca commit e push. Acompanhe o CI do SHA exato ate sucesso; nunca declare concluido antes disso.
+4. Apos cada etapa validada, crie o proximo CONTINUATION_STATUS_V<n>, atualize CONTINUE_HERE.md, manifest.json e este comando; faca push e valide o CI do commit documental.
+5. Entregue um novo comando copiavel e um arquivo para download ao concluir cada etapa.
+6. Solicite aprovacao antes de alterar regra de negocio, usar provider pago, credenciais/servicos externos, assumir custos de infraestrutura, alterar producao, fazer deploy ou executar acao irreversivel/de alto risco.
+7. Nunca exponha nem grave tokens, senhas, cookies, recovery codes ou chaves. A chave HMAC do rate limiter deve ser igual em todas as instancias e permanecer em secret manager/ambiente; nao a rotacione sem plano coordenado.
+8. Preserve tenant isolation, RLS, auditoria obrigatoria, transaction runner, ordem authentication-before-antiforgery e protecoes MFA/TOTP existentes.
+9. Mantenha intocada a copia antiga invalida em C:\Users\iaras\Downloads\atendee-beauty-git. Checkout ativo conhecido: C:\Users\iaras\Downloads\atendee-beauty-v85-work.
+
+NOTAS OPERACIONAIS
+- O computador do usuario tem .NET 10 e Docker; nao tem gh. O push funciona pelo credential manager do Git do proprio computador.
+- O ambiente web do Claude consegue clonar e consultar o CI, mas o push de la e recusado enquanto o app GitHub do Claude nao estiver instalado na organizacao.
+- Testes de integracao exigem PostgreSQL 18.7 descartavel e rodam no CI; localmente valide diff --check e build Release.
 
 CONTEXTO HISTORICO
-O produto Atendee Beauty e uma recepcionista IA multiempresa para saloes e clinicas de estetica. O usuario informou em 2026-11-17 que possui um numero WhatsApp Business para testes; o numero nao foi compartilhado. A integracao oficial WhatsApp Cloud API ainda nao foi implantada e depende da descoberta/aprovacao de conta Meta Business, provider, credenciais e custos.
+Atendee Beauty e uma recepcionista IA multiempresa para saloes e clinicas de estetica. O usuario informou em 2026-11-17 que possui um numero WhatsApp Business para testes; o numero nao foi compartilhado. A integracao oficial WhatsApp Cloud API ainda nao foi implantada e depende de aprovacao de conta Meta Business, provider, credenciais e custos.
