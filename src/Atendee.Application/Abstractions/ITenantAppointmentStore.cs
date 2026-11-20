@@ -19,6 +19,28 @@ public interface ITenantAppointmentStore
     Task<AppointmentModel?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<AppointmentModel?> TransitionAsync(Guid id, AppointmentStatus nextStatus, DateTimeOffset nowUtc, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Reschedules an appointment to a new time, preserving history.
+    /// Returns the new appointment (or null if original not found).
+    /// </summary>
+    Task<AppointmentModel?> RescheduleAsync(
+        Guid originalAppointmentId,
+        DateTimeOffset newStartAtUtc,
+        string newIdempotencyKey,
+        string newRequestHash,
+        Guid actorIdentityUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cancels an appointment (customer cancellation requires 24h notice enforced at API layer).
+    /// Returns the cancelled appointment or null if not found.
+    /// </summary>
+    Task<AppointmentModel?> CancelAsync(
+        Guid appointmentId,
+        bool isCustomerCancellation,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ProfessionalOccupancyInterval>> ListBlockingOccupancyAsync(
         Guid professionalId,
         DateTimeOffset fromUtc,

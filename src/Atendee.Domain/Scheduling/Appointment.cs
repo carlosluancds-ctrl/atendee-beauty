@@ -11,7 +11,8 @@ public enum AppointmentStatus
     InService = 4,
     Completed = 5,
     Cancelled = 6,
-    NoShow = 7
+    NoShow = 7,
+    Rescheduled = 8
 }
 
 /// <summary>
@@ -128,6 +129,88 @@ public sealed record Appointment(
             Status = nextStatus,
             UpdatedAtUtc = nowUtc,
             CancelledAtUtc = nextStatus == AppointmentStatus.Cancelled ? nowUtc : CancelledAtUtc
+        };
+    }
+
+    /// <summary>
+    /// Reschedules the appointment to a new time, preserving history via Rescheduled status.
+    /// Returns a new Appointment with the new time, linked to this one via the original's ID.
+    /// </summary>
+    public Appointment Reschedule(
+        DateTimeOffset newStartAtUtc,
+        string newIdempotencyKey,
+        string newRequestHash,
+        Guid createdByIdentityUserId,
+        DateTimeOffset nowUtc)
+    {
+        ValidateUtc(nowUtc, nameof(nowUtc));
+        ValidateUtc(newStartAtUtc, nameof(newStartAtUtc));
+        if (newStartAtUtc <= nowUtc)
+            throw new ArgumentOutOfRangeException(nameof(newStartAtUtc), "New appointment start must be in the future.");
+        if (newStartAtUtc.Second != 0 || newStartAtUtc.Millisecond != 0 ||
+            newStartAtUtc.Ticks % TimeSpan.TicksPerMinute != 0)
+            throw new ArgumentException("Appointment start must be aligned to a whole UTC minute.", nameof(newStartAtUtc));
+        if (Status != AppointmentStatus.Confirmed && Status != AppointmentStatus.PendingConfirmation)
+            throw new InvalidOperationException($"Cannot reschedule appointment in status {Status}.");
+        ValidateIdempotencyKey(newIdempotencyKey);
+        ValidateRequestHash(newRequestHash);
+        if (createdByIdentityUserId == Guid.Empty)
+            throw new ArgumentException("A trusted creator identity is required.", nameof(createdByIdentityUserId));
+
+        var newEndAtUtc = newStartAtUtc.AddMinutes(DurationMinutesSnapshot);
+        var newOccupancyStartAtUtc = newStartAtUtc.AddMinutes(-BufferBeforeMinutesSnapshot);
+        var newOccupancyEndAtUtc = newEndAtUtc.AddMinutes(BufferAfterMinutesSnapshot);
+
+        var rescheduled = new Appointment(
+            Guid.NewGuid(),
+            CustomerId,
+            ProfessionalId,
+            ServiceId,
+            CustomerNameSnapshot,
+            CustomerPhoneSnapshot,
+            ProfessionalNameSnapshot,
+            ServiceNameSnapshot,
+            DurationMinutesSnapshot,
+            PriceMinorUnitsSnapshot,
+            CurrencySnapshot,
+            BufferBeforeMinutesSnapshot,
+            BufferAfterMinutesSnapshot,
+            newStartAtUtc,
+            newEndAtUtc,
+            newOccupancyStartAtUtc,
+            newOccupancyEndAtUtc,
+            AppointmentStatus.Confirmed,
+            newIdempotencyKey,
+            newRequestHash,
+            createdByIdentityUserId,
+            nowUtc,
+            nowUtc,
+            null);
+
+        // Mark original as rescheduled
+        return this with
+        {
+            Status = AppointmentStatus.Rescheduled,
+            UpdatedAtUtc = nowUtc
+        };
+    }
+
+    /// <summary>
+    /// Cancels the appointment (customer cancellation with 24h policy enforced at API layer).
+    /// </summary>
+    public Appointment Cancel(DateTimeOffset nowUtc, bool isCustomerCancellation = false)
+    {
+        ValidateUtc(nowUtc, nameof(nowUtc));
+        if (Status != AppointmentStatus.Confirmed && Status != AppointmentStatus.PendingConfirmation)
+            throw new InvalidOperationException($"Cannot cancel appointment in status {Status}.");
+        if (isCustomerCancellation && StartAtUtc - nowUtc < TimeSpan.FromHours(24))
+            throw new InvalidOperationException("Customer cancellation requires at least 24 hours notice.");
+
+        return this with
+        {
+            Status = AppointmentStatus.Cancelled,
+            UpdatedAtUtc = nowUtc,
+            CancelledAtUtc = nowUtc
         };
     }
 

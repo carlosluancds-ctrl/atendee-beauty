@@ -31,11 +31,13 @@ internal sealed class TenantAppointmentRow
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
     public DateTimeOffset? CancelledAtUtc { get; private set; }
+    public string TenantTimeZoneId { get; private set; } = string.Empty;
 
-    public static TenantAppointmentRow FromDomain(Guid tenantId, Appointment appointment)
+    public static TenantAppointmentRow FromDomain(Guid tenantId, Appointment appointment, string timeZoneId)
     {
         if (tenantId == Guid.Empty)
             throw new ArgumentException("Tenant ID is required.", nameof(tenantId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(timeZoneId);
 
         return new TenantAppointmentRow
         {
@@ -63,7 +65,8 @@ internal sealed class TenantAppointmentRow
             CreatedByIdentityUserId = appointment.CreatedByIdentityUserId,
             CreatedAtUtc = appointment.CreatedAtUtc,
             UpdatedAtUtc = appointment.UpdatedAtUtc,
-            CancelledAtUtc = appointment.CancelledAtUtc
+            CancelledAtUtc = appointment.CancelledAtUtc,
+            TenantTimeZoneId = timeZoneId
         };
     }
     public void ApplyTransition(Appointment appointment)
@@ -80,6 +83,11 @@ internal sealed class TenantAppointmentRow
         Status = appointment.Status;
         UpdatedAtUtc = appointment.UpdatedAtUtc;
         CancelledAtUtc = appointment.CancelledAtUtc;
+    }
+
+    public void UpdateTimestamp(DateTimeOffset nowUtc)
+    {
+        UpdatedAtUtc = nowUtc;
     }
 
 public Appointment ToDomain() => new(

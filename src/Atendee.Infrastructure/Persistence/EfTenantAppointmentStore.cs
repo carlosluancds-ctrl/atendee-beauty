@@ -7,6 +7,7 @@ using Atendee.Domain.Professionals;
 using Atendee.Domain.Primitives;
 using Atendee.Domain.Scheduling;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Atendee.Infrastructure.Persistence;
 
@@ -126,7 +127,7 @@ internal sealed class EfTenantAppointmentStore : ITenantAppointmentStore
         var appointment = Appointment.Create(
             Guid.NewGuid(), customer, service, professionalId, professionalName,
             startAtUtc, idempotencyKey, requestHash, actorIdentityUserId, nowUtc);
-        var row = TenantAppointmentRow.FromDomain(_tenantId, appointment);
+        var row = TenantAppointmentRow.FromDomain(_tenantId, appointment, timeZoneId);
         _db.TenantAppointments.Add(row);
 
         // The database trigger writes immutable event history, audit and outbox
@@ -159,6 +160,130 @@ internal sealed class EfTenantAppointmentStore : ITenantAppointmentStore
         var transitioned = row.ToDomain().TransitionTo(nextStatus, nowUtc);
         row.ApplyTransition(transitioned);
         return ToModel(transitioned);
+    }
+
+    public async Task<AppointmentModel?> RescheduleAsync(
+        Guid originalAppointmentId,
+        DateTimeOffset newStartAtUtc,
+        string newIdempotencyKey,
+        string newRequestHash,
+        Guid actorIdentityUserId,
+        CancellationToken cancellationToken = default)
+    {
+        if (originalAppointmentId == Guid.Empty || newStartAtUtc.Offset != TimeSpan.Zero ||
+            newStartAtUtc.Second != 0 || newStartAtUtc.Millisecond != 0 ||
+            newStartAtUtc.Ticks % TimeSpan.TicksPerMinute != 0)
+            throw new ArgumentException("Appointment ID and valid UTC start time (whole minute) are required.");
+        if (actorIdentityUserId == Guid.Empty)
+            throw new ArgumentException("Trusted actor is required.");
+        ValidateIdempotencyKey(newIdempotencyKey);
+        ValidateRequestHash(newRequestHash);
+
+        var originalRow = await _db.TenantAppointments
+            .SingleOrDefaultAsync(item => item.Id == originalAppointmentId, cancellationToken);
+        if (originalRow is null)
+            return null;
+
+        var original = originalRow.ToDomain();
+        if (original.Status != AppointmentStatus.Confirmed && original.Status != AppointmentStatus.PendingConfirmation)
+            return null; // Can only reschedule confirmed/pending
+
+        // Lock idempotency key
+        var idempotencyLock = $"{_tenantId:N}:appointment-idempotency:{newIdempotencyKey}";
+        await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({idempotencyLock}, 0))",
+            cancellationToken);
+
+        var previous = await _db.TenantAppointments.AsNoTracking()
+            .SingleOrDefaultAsync(row => row.IdempotencyKey == newIdempotencyKey, cancellationToken);
+        if (previous is not null)
+        {
+            if (string.Equals(previous.RequestHash, newRequestHash, StringComparison.Ordinal))
+                return ToModel(previous);
+            throw new InvalidOperationException("Idempotency key reused with different request.");
+        }
+
+        // Lock professional for overlap check
+        var professionalLock = $"{_tenantId:D}:{original.ProfessionalId:D}";
+        await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({professionalLock}, 0))",
+            cancellationToken);
+
+        // Check availability at new time
+        var serviceRow = await _db.TenantServices
+            .SingleOrDefaultAsync(row => row.Id == original.ServiceId && row.IsActive, cancellationToken);
+        if (serviceRow is null)
+            return null;
+
+        var service = serviceRow.ToDomain();
+        var zone = TimeZoneInfo.FindSystemTimeZoneById(originalRow.TenantTimeZoneId);
+        var localStart = TimeZoneInfo.ConvertTime(newStartAtUtc, zone);
+        var localDate = DateOnly.FromDateTime(localStart.DateTime);
+
+        var businessHours = await _db.TenantBusinessHours.AsNoTracking()
+            .Where(row => row.IsActive)
+            .Select(row => new BusinessHoursInterval(row.IsoDayOfWeek, row.StartTime, row.EndTime))
+            .ToArrayAsync(cancellationToken);
+        var recurringAvailability = await _db.TenantProfessionalAvailability.AsNoTracking()
+            .Where(row => row.ProfessionalId == original.ProfessionalId && row.IsActive)
+            .Select(row => new ProfessionalAvailabilityInterval(row.IsoDayOfWeek, row.StartTime, row.EndTime))
+            .ToArrayAsync(cancellationToken);
+        var timeOff = await _db.TenantProfessionalTimeOff.AsNoTracking()
+            .Where(row => row.ProfessionalId == original.ProfessionalId && row.IsActive && row.Date == localDate)
+            .Select(row => new ProfessionalTimeOffInterval(row.Date, row.StartTime, row.EndTime))
+            .ToArrayAsync(cancellationToken);
+
+        var windows = ServiceAvailabilityCalculator.Calculate(
+            localDate, localDate, originalRow.TenantTimeZoneId, businessHours, recurringAvailability, timeOff, service);
+        if (!windows.Any(window => newStartAtUtc >= window.EarliestStartUtc &&
+                                   newStartAtUtc <= window.LatestStartUtc))
+            return null; // Outside availability
+
+        // Check overlap with existing appointments
+        var occupancy = await ListBlockingOccupancyAsync(original.ProfessionalId, newStartAtUtc, newStartAtUtc.AddMinutes(service.DurationMinutes), cancellationToken);
+        if (occupancy.Count > 0)
+            throw new InvalidOperationException("professional_appointment_overlap");
+
+        var nowUtc = DateTimeOffset.UtcNow;
+        var rescheduled = original.Reschedule(newStartAtUtc, newIdempotencyKey, newRequestHash, actorIdentityUserId, nowUtc);
+
+        // Update original row to Rescheduled status
+        originalRow.ApplyTransition(rescheduled);
+        originalRow.UpdateTimestamp(nowUtc);
+
+        // Add new appointment row with tenant time zone
+        var newRow = TenantAppointmentRow.FromDomain(_tenantId, rescheduled, originalRow.TenantTimeZoneId);
+        _db.TenantAppointments.Add(newRow);
+
+        return ToModel(rescheduled);
+    }
+
+    public async Task<AppointmentModel?> CancelAsync(
+        Guid appointmentId,
+        bool isCustomerCancellation,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (appointmentId == Guid.Empty || nowUtc.Offset != TimeSpan.Zero)
+            throw new ArgumentException("Appointment ID and UTC time are required.");
+
+        var row = await _db.TenantAppointments
+            .SingleOrDefaultAsync(item => item.Id == appointmentId, cancellationToken);
+        if (row is null)
+            return null;
+
+        var appointment = row.ToDomain();
+        if (appointment.Status != AppointmentStatus.Confirmed && appointment.Status != AppointmentStatus.PendingConfirmation)
+            return null;
+
+        if (isCustomerCancellation && appointment.StartAtUtc - nowUtc < TimeSpan.FromHours(24))
+            throw new InvalidOperationException("Customer cancellation requires at least 24 hours notice.");
+
+        var cancelled = appointment.Cancel(nowUtc, isCustomerCancellation);
+        row.ApplyTransition(cancelled);
+        row.UpdateTimestamp(nowUtc);
+
+        return ToModel(cancelled);
     }
 
 public async Task<IReadOnlyList<ProfessionalOccupancyInterval>> ListBlockingOccupancyAsync(

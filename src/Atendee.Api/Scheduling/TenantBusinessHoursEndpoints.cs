@@ -1,5 +1,6 @@
 using System.Globalization;
 using Atendee.Application.Abstractions;
+using Atendee.Application.Models;
 using Atendee.Domain.Scheduling;
 using Atendee.Domain.Tenants;
 using Atendee.Infrastructure.Web;
@@ -82,7 +83,7 @@ public static class TenantBusinessHoursEndpoints
 
     private static BusinessHoursResponse ToResponse(
         string timeZoneId,
-        IReadOnlyList<Atendee.Application.Models.BusinessHoursIntervalModel> intervals)
+        IReadOnlyList<BusinessHoursIntervalModel> intervals)
         => new(
             timeZoneId,
             intervals.Select(interval => new BusinessHoursIntervalResponse(

@@ -233,6 +233,106 @@ public static class TenantAppointmentEndpoints
             return Results.Ok(appointment);
         });
 
+        // Reschedule appointment (Owner/Manager/Receptionist only)
+        group.MapPost("/{id:guid}/reschedule", async (
+            Guid id,
+            RescheduleAppointmentRequest? request,
+            HttpContext context,
+            TrustedRequestContext current,
+            ITenantTransactionRunner transactionRunner,
+            ITenantAppointmentStore appointments,
+            [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey) =>
+        {
+            if (!CanWrite(current))
+                return Results.Forbid();
+            if (id == Guid.Empty || request is null ||
+                request.NewStartAtUtc.Offset != TimeSpan.Zero ||
+                request.NewStartAtUtc <= DateTimeOffset.UtcNow ||
+                string.IsNullOrWhiteSpace(current.TenantTimeZoneId) ||
+                current.ActorId is null ||
+                !IsValidIdempotencyKey(idempotencyKey))
+                return Results.BadRequest(new { error = "appointment_reschedule_validation_failed" });
+
+            var requestHash = ComputeRequestHash(id, request.NewStartAtUtc);
+            try
+            {
+                var rescheduled = await transactionRunner.ExecuteAsync(
+                    token => appointments.RescheduleAsync(
+                        id,
+                        request.NewStartAtUtc,
+                        idempotencyKey!,
+                        requestHash,
+                        current.ActorId.Value,
+                        token),
+                    context.RequestAborted);
+
+                if (rescheduled is null)
+                    return Results.NotFound();
+
+                return Results.Ok(rescheduled);
+            }
+            catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.ExclusionViolation)
+            {
+                return Results.Conflict(new { error = "professional_appointment_overlap" });
+            }
+            catch (InvalidOperationException)
+            {
+                return Results.Conflict(new { error = "appointment_reschedule_not_allowed" });
+            }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest(new { error = "appointment_reschedule_validation_failed" });
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                return Results.Conflict(new { error = "tenant_time_zone_unavailable" });
+            }
+            catch (InvalidTimeZoneException)
+            {
+                return Results.Conflict(new { error = "tenant_time_zone_unavailable" });
+            }
+        });
+
+        // Cancel appointment (Owner/Manager/Receptionist/Professional can cancel team appointments; customers cancel via separate flow)
+        group.MapPost("/{id:guid}/cancel", async (
+            Guid id,
+            CancelAppointmentRequest? request,
+            HttpContext context,
+            TrustedRequestContext current,
+            ITenantTransactionRunner transactionRunner,
+            ITenantAppointmentStore appointments) =>
+        {
+            if (!CanWrite(current) && !(CanReadOwn(current) && current.Role == TenantRole.Professional))
+                return Results.Forbid();
+            if (id == Guid.Empty || request is null)
+                return Results.BadRequest(new { error = "appointment_cancel_validation_failed" });
+
+            var isCustomerCancellation = request.IsCustomerCancellation && current.Role != TenantRole.Professional;
+            try
+            {
+                var cancelled = await transactionRunner.ExecuteAsync(
+                    token => appointments.CancelAsync(
+                        id,
+                        isCustomerCancellation,
+                        DateTimeOffset.UtcNow,
+                        token),
+                    context.RequestAborted);
+
+                if (cancelled is null)
+                    return Results.NotFound();
+
+                return Results.Ok(cancelled);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest(new { error = "appointment_cancel_validation_failed" });
+            }
+        });
+
         return endpoints;
     }
 
@@ -244,6 +344,15 @@ public static class TenantAppointmentEndpoints
             request.ProfessionalId.ToString("N"),
             request.ServiceId.ToString("N"),
             request.StartAtUtc.ToString("O", CultureInfo.InvariantCulture));
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
+    }
+
+    private static string ComputeRequestHash(Guid appointmentId, DateTimeOffset newStartAtUtc)
+    {
+        var canonical = string.Join('\n',
+            "appointment.reschedule.v1",
+            appointmentId.ToString("N"),
+            newStartAtUtc.ToString("O", CultureInfo.InvariantCulture));
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -276,3 +385,7 @@ public sealed record CreateAppointmentRequest(
     DateTimeOffset StartAtUtc);
 
 public sealed record AppointmentTransitionRequest(string Status);
+
+public sealed record RescheduleAppointmentRequest(DateTimeOffset NewStartAtUtc);
+
+public sealed record CancelAppointmentRequest(bool IsCustomerCancellation);
