@@ -6,6 +6,9 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V95: commit de teste b2cadba (verificacao de limites Kestrel configurados: MaxRequestBodySize 1 MiB, MaxRequestHeadersTotalSize 32 KiB, MaxRequestHeaderCount 100, MaxRequestLineSize 8 KiB, RequestHeadersTimeout 15s).
+- CI run aguardando no SHA exato b2cadba.
+- V95: testes HTTP verificam que limites Kestrel configurados via ApiRequestLimits.Apply() correspondem as constantes declaradas; TestServer nao aplica no socket, Kestrel real aplica via Apply() no startup.
 - V94: commit de implementacao a26d5de6f83922443db84d64ee269b390cd9a4c4 (limite de corpo de resposta de 1 MiB, HTTP 500 se excedido, apos roteamento/autenticacao; simetrico ao V92).
 - CI run 261 / 44702089747: falha no SHA exato (flakiness de infraestrutura PostgreSQL, nao logica V94).
 - V94: ResponseBodySizeLimitMiddleware envolve o stream de resposta, conta bytes escritos, falha com HTTP 500 + Connection: close se exceder 1 MiB; testes HTTP verificam middleware no pipeline e todos cabecalhos de seguranca basicos em 404.
