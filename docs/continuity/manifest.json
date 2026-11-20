@@ -1,19 +1,19 @@
 ﻿{
-    "backup_version":  "v91-api-security-headers",
+    "backup_version":  "v92-api-request-limits",
     "updated_at":  "2026-11-20",
     "repository":  "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch":  "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V91_2026-11-20.md",
-    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V91_2026-11-20.md",
-    "latest_implementation_commit":  "d495c65aacbd05c59c8934b3428a9cb1e5da86bb",
-    "latest_documentation_parent_commit":  "d495c65aacbd05c59c8934b3428a9cb1e5da86bb",
+    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
+    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
+    "latest_implementation_commit":  "98d8fc47009e67dfd691180261344ce260d41b9c",
+    "latest_documentation_parent_commit":  "98d8fc47009e67dfd691180261344ce260d41b9c",
     "latest_ci":  {
                       "workflow":  "PostgreSQL 18 persistence integration",
-                      "run":  "44665423258",
-                      "run_number":  253,
+                      "run":  "44667879306",
+                      "run_number":  255,
                       "attempt":  1,
                       "status":  "success",
-                      "validated_head_sha":  "d495c65aacbd05c59c8934b3428a9cb1e5da86bb",
+                      "validated_head_sha":  "98d8fc47009e67dfd691180261344ce260d41b9c",
                       "job":  "Build and verify tenant isolation",
                       "job_status":  "success",
                       "portal_browser_tests":  "8 passed",
@@ -22,7 +22,7 @@
                       "identity_checks":  "49/49 passed",
                       "http_checks":  "passed",
                       "fullstack_browser_result":  "passed",
-                      "key_checks":  [ "V91: baseline API security headers (CSP, CORP, COOP, X-Permitted-Cross-Domain-Policies) asserted on /health/live, /health/ready and 404; all CI job steps success",
+                      "key_checks":  [ "V92: request body ceiling 1 MiB (413 for larger Content-Length, boundary size accepted) and configured Kestrel body/header/request-line/timeout limits; all CI job steps success", "V91: baseline API security headers (CSP, CORP, COOP, X-Permitted-Cross-Domain-Policies) asserted on /health/live, /health/ready and 404; all CI job steps success",
                                          "frontend dependency audit, tests and build",
                                          "portal browser E2E 8/8",
                                          "locked dependency restore",
@@ -71,7 +71,7 @@
                                  "validation_head":  "0a06ab045691a336c6114bf173f1383e3aafb4ac",
                                  "note":  "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
                              },
-    "next_step":  "V92: obtain explicit product decisions for appointment rescheduling/cancellation before implementation; if no decision is pending, choose only a single autonomous, safe and testable backend increment. Outbox dispatcher remains blocked until real idempotent handlers, retry/backoff, dead-letter and observability plus provider/credential/cost approvals are defined. Data Protection key rotation, Platform Admin, external providers and production deployment remain blocked pending explicit security, product, credential and operational decisions.",
+    "next_step":  "V93: obtain explicit product decisions for appointment rescheduling/cancellation before implementation; if no decision is pending, choose only a single autonomous, safe and testable backend increment. Outbox dispatcher remains blocked until real idempotent handlers, retry/backoff, dead-letter and observability plus provider/credential/cost approvals are defined. Data Protection key rotation, Platform Admin, external providers and production deployment remain blocked pending explicit security, product, credential and operational decisions.",
     "safeguards":  {
                        "main_untouched":  true,
                        "production_deploy_authorized":  false,
@@ -786,6 +786,18 @@
                 "headers":  [ "Content-Security-Policy: default-src none; base-uri none; form-action none; frame-ancestors none", "Cross-Origin-Resource-Policy: same-origin", "Cross-Origin-Opener-Policy: same-origin", "X-Permitted-Cross-Domain-Policies: none" ],
                 "assertions":  [ "all baseline headers present on /health/live, /health/ready and unknown-route 404" ],
                 "limits":  [ "CI log not readable unauthenticated; success inferred from all job steps success and fail-fast Ensure checks", "API assumed JSON-only; revisit CSP if HTML is ever served" ],
+                "remaining":  [ "appointment rescheduling/cancellation product policy", "outbox dispatcher and handlers with provider approvals", "Data Protection coordinated key rotation", "Platform Admin approvals", "WhatsApp Cloud API approvals", "independent production security review and backup/restore validation" ]
+            },
+    "v92":  {
+                "implementation_commit":  "98d8fc47009e67dfd691180261344ce260d41b9c",
+                "approval":  "validated",
+                "ci_run":  "44667879306",
+                "ci_run_number":  255,
+                "validated_head":  "98d8fc47009e67dfd691180261344ce260d41b9c",
+                "scope":  "bounded API request body size and Kestrel request limits",
+                "limits":  [ "MaxRequestBodySize 1 MiB", "MaxRequestHeadersTotalSize 32 KiB", "MaxRequestHeaderCount 100", "MaxRequestLineSize 8 KiB", "RequestHeadersTimeout 15 s", "HTTP 413 payload_too_large for Content-Length above 1 MiB before routing/authentication/antiforgery" ],
+                "assertions":  [ "configured Kestrel limits equal ApiRequestLimits constants", "1 MiB + 1 byte body rejected with 413, minimal body, no-store and security headers", "exactly 1 MiB body not rejected by the size limit" ],
+                "notes":  [ "TestServer does not enforce Kestrel socket limits; chunked-body and header-limit enforcement are covered by asserting configured values", "CI log not readable unauthenticated; success inferred from all job steps success and fail-fast Ensure checks" ],
                 "remaining":  [ "appointment rescheduling/cancellation product policy", "outbox dispatcher and handlers with provider approvals", "Data Protection coordinated key rotation", "Platform Admin approvals", "WhatsApp Cloud API approvals", "independent production security review and backup/restore validation" ]
             }
 }

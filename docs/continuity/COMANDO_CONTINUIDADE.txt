@@ -6,15 +6,16 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
-- V91: commit de implementacao d495c65aacbd05c59c8934b3428a9cb1e5da86bb.
-- CI run 253 / 44665423258: sucesso no mesmo SHA (todos os passos do job com sucesso).
-- Todas as respostas da API agora enviam Content-Security-Policy (default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'), Cross-Origin-Resource-Policy same-origin, Cross-Origin-Opener-Policy same-origin e X-Permitted-Cross-Domain-Policies none, alem dos cabecalhos anteriores; novo teste cobre /health/live, /health/ready e rota 404.
+- V92: commit de implementacao 98d8fc47009e67dfd691180261344ce260d41b9c.
+- CI run 255 / 44667879306: sucesso no mesmo SHA (todos os passos do job com sucesso).
+- V92: limite de corpo de requisicao de 1 MiB (HTTP 413 antes de roteamento/autenticacao/antiforgery; Kestrel MaxRequestBodySize), cabecalhos ate 32 KiB/100 itens, linha de requisicao 8 KiB e timeout de cabecalhos de 15 s; novo teste cobre limites configurados, 413 acima do limite e corpo exatamente no limite.
+- V91 (run 253 / 44665423258, SHA d495c65): todas as respostas da API enviam Content-Security-Policy (default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'), Cross-Origin-Resource-Policy same-origin, Cross-Origin-Opener-Policy same-origin e X-Permitted-Cross-Domain-Policies none, alem dos cabecalhos anteriores; novo teste cobre /health/live, /health/ready e rota 404.
 - Build Release: zero avisos e zero erros localmente e no CI.
 - V90 (GET /health/ready) validado na run 251 / 44663263477, SHA 399ead5. V89 (rate limiting distribuido, migracao 021) na run 248 / 44660361862, SHA 90a5bc6.
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
 ANTES DE QUALQUER ALTERACAO
-Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V91_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
 V92 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas (incluindo WhatsApp Cloud API) e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Ligar probes de orquestrador a /health/live e /health/ready e decisao de deploy. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel; ITenantNoteStore e apenas exemplo e nao e funcionalidade de produto.
