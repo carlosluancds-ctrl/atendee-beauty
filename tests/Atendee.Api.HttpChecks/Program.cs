@@ -564,6 +564,27 @@ try
             "GET /health/ready returns 200 with a minimal no-store body, anonymously and without antiforgery.");
     }
 
+    // V91: baseline API security headers on success, unknown-route and error paths.
+    using (var headerClient = factory.CreateClient())
+    {
+        foreach (var headerPath in new[] { "/health/live", "/health/ready", "/v91-unknown-route" })
+        {
+            var headerResponse = await headerClient.GetAsync(headerPath);
+            string HeaderValue(string name) =>
+                headerResponse.Headers.TryGetValues(name, out var values) ? string.Join(",", values) : string.Empty;
+            Ensure(HeaderValue("Content-Security-Policy") ==
+                       "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" &&
+                   HeaderValue("Cross-Origin-Resource-Policy") == "same-origin" &&
+                   HeaderValue("Cross-Origin-Opener-Policy") == "same-origin" &&
+                   HeaderValue("X-Permitted-Cross-Domain-Policies") == "none" &&
+                   HeaderValue("X-Content-Type-Options") == "nosniff" &&
+                   HeaderValue("X-Frame-Options") == "DENY" &&
+                   HeaderValue("Referrer-Policy") == "no-referrer" &&
+                   headerResponse.Headers.CacheControl?.NoStore == true,
+                $"{headerPath} returns the baseline API security headers (CSP, CORP, COOP, nosniff, frame deny, no-referrer, no-store).");
+        }
+    }
+
     using (var unavailableReadyFactory = factory.WithWebHostBuilder(web =>
                web.ConfigureTestServices(services =>
                    services.AddSingleton<IDatabaseReadinessProbe>(identityDownProbe))))
