@@ -1,18 +1,19 @@
-{
-    "backup_version":  "v88-tenant-appointments",
+﻿{
+    "backup_version":  "v89-distributed-auth-rate-limiting",
     "updated_at":  "2026-11-19",
     "repository":  "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch":  "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V88_2026-11-19.md",
-    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V88_2026-11-19.md",
-    "latest_implementation_commit":  "e7efdc40bc2d6c2e88dbb2e182add2379eeea370",
-    "latest_documentation_parent_commit":  "e7efdc40bc2d6c2e88dbb2e182add2379eeea370",
+    "latest_continuity_status":  "docs/continuity/CONTINUATION_STATUS_V89_2026-11-19.md",
+    "latest_approved_implementation_status":  "docs/continuity/CONTINUATION_STATUS_V89_2026-11-19.md",
+    "latest_implementation_commit":  "90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34",
+    "latest_documentation_parent_commit":  "90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34",
     "latest_ci":  {
                       "workflow":  "PostgreSQL 18 persistence integration",
-                      "run":  "44646121213",
+                      "run":  "44660361862",
+                      "run_number":  248,
                       "attempt":  1,
                       "status":  "success",
-                      "validated_head_sha":  "e7efdc40bc2d6c2e88dbb2e182add2379eeea370",
+                      "validated_head_sha":  "90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34",
                       "job":  "Build and verify tenant isolation",
                       "job_status":  "success",
                       "portal_browser_tests":  "8 passed",
@@ -20,7 +21,7 @@
                       "postgres_rls_checks":  "43/43 passed",
                       "identity_checks":  "49/49 passed",
                       "http_checks":  "passed",
-                      "fullstack_browser_result":  "1 passed",
+                      "fullstack_browser_result":  "passed",
                       "key_checks":  [
                                          "frontend dependency audit, tests and build",
                                          "portal browser E2E 8/8",
@@ -29,12 +30,12 @@
                                          "domain checks 79/79",
                                          "PostgreSQL 18.7 / EF Core / RLS persistence checks 43/43",
                                          "Identity/TOTP/tenant-context checks 49/49",
-                                         "tenant appointments with immutable snapshots and idempotency",
-                                         "PostgreSQL advisory-lock and deferred overlap protection",
-                                         "appointment lifecycle, append-only events, tenant audit and transactional outbox",
-                                         "authoritative availability subtracts active appointment occupancy and buffers",
-                                         "HTTP authentication, antiforgery, session revocation, MFA, role and tenant-status checks",
-                                         "real Kestrel + disposable PostgreSQL full-stack browser E2E 1/1",
+                                         "V89: two independent API limiter instances share atomic PostgreSQL fixed-window counter under 40 concurrent acquisitions, exactly 7 permits",
+                                         "V89: HMAC-SHA256 partition digest, no plaintext IP storage, independent IP partitions and IPv4-mapped IPv6 normalization",
+                                         "V89: UTC window rollover and bounded expired-bucket cleanup",
+                                         "V89: PostgreSQL outage returns fail-closed HTTP 503 without invoking protected endpoint",
+                                         "V89: exhausted quota returns HTTP 429 with Retry-After",
+                                         "HTTP authentication, session-security and integration checks passed",
                                          "disposable credentials cleared and PostgreSQL container removed"
                                      ]
                   },
@@ -68,7 +69,7 @@
                                  "validation_head":  "0a06ab045691a336c6114bf173f1383e3aafb4ac",
                                  "note":  "Historical V64 status document remains unchanged; its two antiforgery assertions passed in the V65 full-stack browser run."
                              },
-    "next_step":  "V89: implement shared/distributed authentication rate limiting with an atomic backend and multi-instance concurrency tests. Then define approved appointment rescheduling/cancellation policy before implementing a dedicated reschedule workflow. Build an outbox dispatcher only alongside real idempotent handlers, retry/backoff and dead-letter semantics. Data Protection key rotation, Platform Admin, external providers and production deployment remain blocked pending their explicit security, product, credential and operational decisions.",
+    "next_step":  "V90: obtain explicit product decisions for appointment rescheduling/cancellation before implementation. Outbox dispatcher remains blocked until real idempotent handlers, retry/backoff, dead-letter and observability plus provider/credential/cost approvals are defined. Data Protection key rotation, Platform Admin, external providers and production deployment remain blocked pending explicit security, product, credential and operational decisions.",
     "safeguards":  {
                        "main_untouched":  true,
                        "production_deploy_authorized":  false,
@@ -702,6 +703,41 @@
                                   "outbox dispatcher/handlers pending integration and delivery semantics",
                                   "Data Protection key rotation plan",
                                   "independent production security review and backup/restore"
+                              ]
+            },
+    "v89":  {
+                "implementation_commit":  "90c2a2f",
+                "test_and_isolation_commits":  [
+                                                   "82dd5a5",
+                                                   "87b321e",
+                                                   "f08a180",
+                                                   "09dcdca",
+                                                   "92ea4d4",
+                                                   "9d2ed24",
+                                                   "95e4956",
+                                                   "90a5bc6"
+                                               ],
+                "approval":  "validated",
+                "ci_run":  "44660361862",
+                "validated_head":  "90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34",
+                "migration":  "db/migrations/021_create_distributed_authentication_rate_limits.sql",
+                "scope":  "atomic PostgreSQL-backed distributed authentication fixed-window rate limiting with HMAC-protected client IP partitions and fail-closed behavior",
+                "assertions":  [
+                                   "two independent limiter instances, 40 concurrent acquisitions and exact seven-permit limit",
+                                   "persisted counter and 32-byte HMAC digest; no raw IP storage",
+                                   "independent IP partitions and IPv4-mapped IPv6 normalization",
+                                   "UTC fixed-window rollover",
+                                   "bounded opportunistic cleanup of expired buckets",
+                                   "database outage returns HTTP 503 and does not invoke protected endpoint",
+                                   "exhausted quota returns HTTP 429 with Retry-After",
+                                   "endpoint metadata and trusted-client partition behavior verified"
+                               ],
+                "configuration":  "AuthenticationRateLimiting:PartitionKeySecret must be base64 of at least 32 random bytes and identical on every API instance sharing the database; keep it in deployment secret management and rotate only with a coordinated plan",
+                "remaining":  [
+                                  "appointment rescheduling/cancellation product policy",
+                                  "outbox dispatcher and handlers with idempotency/retry/dead-letter/observability and provider approvals",
+                                  "Data Protection coordinated key rotation",
+                                  "independent production security review and backup/restore validation"
                               ]
             }
 }

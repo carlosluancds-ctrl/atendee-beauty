@@ -1,33 +1,31 @@
-COMANDO DE CONTINUIDADE — ATENDEE BEAUTY
+﻿COMANDO DE CONTINUIDADE - ATENDEE BEAUTY
 
 COMANDO SIMPLES
 CONTINUAR ATENDEE
 
-COMO USAR EM OUTRA CONTA OU EM OUTRA VPS
-1. Anexe este arquivo ZIP à nova conversa.
-2. Envie apenas o comando: CONTINUAR ATENDEE
-3. O assistente deverá ler primeiro este arquivo e os demais documentos do ZIP, recuperar as decisões e o estado do projeto e então confirmar o último ponto registrado antes de propor o próximo passo.
+INSTRUCAO COMPLETA PARA A PROXIMA CONVERSA
+Continue o repositorio https://github.com/carlosluancds-ctrl/atendee-beauty exclusivamente na branch security/csrf-webhook-antiforgery-v23. Antes de editar, leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, o arquivo docs/continuity/CONTINUATION_STATUS_V89_2026-11-19.md de maior versao, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante.
 
-INSTRUÇÃO COMPLETA PARA A NOVA CONVERSA
-Estou anexando o backup de continuidade do projeto Atendee Beauty.
-Leia e analise todos os arquivos deste ZIP antes de prosseguir. Use as decisões comerciais, técnicas e o histórico registrados nele como referência.
-Quero continuar exatamente de onde paramos, sem refazer etapas já concluídas e sem perder decisões anteriores.
+PONTO VALIDADO
+- Implementacao V89: 90a5bc6c79fa53a91471b3ec0204c8e9b17b3e34.
+- CI exato: run 248 / 44660361862, sucesso no mesmo SHA.
+- V89: rate limiting de autenticacao distribuido via PostgreSQL atomico, particoes HMAC-SHA256, migracao 021, quotas para antiforgery/login/ativacao/MFA, limpeza limitada e fail-closed 503/429.
+- CI: frontend e E2E 8/8; Release build sem warnings/erros; dominio 79/79; PostgreSQL/RLS 43/43; Identity/TOTP 49/49; HTTP security/integration aprovado. Os logs confirmam 40 requisicoes concorrentes entre duas instancias com exatamente 7 permissoes, protecao do IP, limpeza, 503 sem executar endpoint e 429 com Retry-After.
 
-Regras de trabalho:
-1. Trabalhe passo a passo e explique cada etapa em linguagem simples.
-2. Antes de alterar o servidor, verifique o ambiente e o estado atual.
-3. Preserve configurações, dados, volumes, credenciais e instalações existentes.
-4. Não reinstale componentes que já estejam funcionando.
-5. Não reinicie o servidor nem faça alterações destrutivas sem minha autorização.
-6. Considere os recursos disponíveis da VPS antes de instalar qualquer componente.
-7. Registre decisões e mudanças para o próximo backup ZIP.
-8. Nunca inclua senhas, tokens ou chaves secretas no ZIP.
+PROXIMO PASSO
+Verifique novamente branch, HEAD local/remoto, worktree e CI. V90 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel.
 
-Primeiro, confirme o que foi recuperado do backup, identifique o último ponto do projeto e informe o próximo passo recomendado.
+REGRAS PERMANENTES
+1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.
+2. Trabalhe apenas em security/csrf-webhook-antiforgery-v23.
+3. Antes de editar, leia os documentos de continuidade e inspecione git status, git log, HEAD remoto e CI.
+4. Implemente, teste, documente, faca diff --check, build Release, commit e push. Acompanhe CI do SHA exato ate sucesso; nunca declare concluido antes disso.
+5. Apos cada etapa validada, crie o proximo CONTINUATION_STATUS_V<n>, atualize CONTINUE_HERE.md, manifest.json e este comando, faca push e valide o CI do commit documental.
+6. Entregue um novo comando copiavel e um arquivo para download ao concluir cada etapa.
+7. Solicite aprovacao antes de alterar regra de negocio, usar provider pago, credenciais/servicos externos, assumir custo de infraestrutura, alterar producao, fazer deploy ou executar acao irreversivel/de alto risco.
+8. Nunca exponha nem grave tokens, senhas, cookies, recovery codes ou chaves. A chave HMAC do rate limiter deve ser igual em todas as instancias e permanecer em secret manager/ambiente; nao a rotacione sem plano coordenado.
+9. Preserve tenant isolation, RLS, auditoria obrigatoria, transaction runner, ordem authentication-before-antiforgery e protecoes MFA/TOTP existentes.
+10. Mantenha intocada a copia antiga invalida em C:\Users\iaras\Downloads\atendee-beauty-git. Checkout ativo conhecido: C:\Users\iaras\Downloads\atendee-beauty-v85-work.
 
-CONTEXTO DO PRODUTO
-Atendee Beauty é uma recepcionista IA para salões e clínicas de estética, com WhatsApp, atendimento e agendamentos, em arquitetura multiempresa.
-
-ATUALIZAÇÃO DE CONTEXTO DE 2026-11-17
-O usuário informou que já possui um número WhatsApp Business para testes. Não foi informado o número em si; não solicitar nem incluir dados sensíveis desnecessários.
-A integração ainda não foi implantada. A próxima etapa de descoberta deve continuar pela configuração/conta Meta Business e validação da estratégia oficial WhatsApp Cloud API, conforme o histórico do projeto.
+CONTEXTO HISTORICO
+O produto Atendee Beauty e uma recepcionista IA multiempresa para saloes e clinicas de estetica. O usuario informou em 2026-11-17 que possui um numero WhatsApp Business para testes; o numero nao foi compartilhado. A integracao oficial WhatsApp Cloud API ainda nao foi implantada e depende da descoberta/aprovacao de conta Meta Business, provider, credenciais e custos.
