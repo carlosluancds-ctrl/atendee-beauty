@@ -83,6 +83,7 @@ public static class DependencyInjection
         services.AddScoped<ITenantBusinessHoursStore, EfTenantBusinessHoursStore>();
         services.AddScoped<ITenantProfessionalAvailabilityStore, EfTenantProfessionalAvailabilityStore>();
         services.AddScoped<ITenantProfessionalTimeOffStore, EfTenantProfessionalTimeOffStore>();
+        services.AddScoped<ITenantAppointmentStore, EfTenantAppointmentStore>();
         services.AddScoped<ITenantProfessionalStore, EfTenantProfessionalStore>();
         return services;
     }

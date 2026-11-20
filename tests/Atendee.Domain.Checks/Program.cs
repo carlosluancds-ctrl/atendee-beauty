@@ -139,7 +139,125 @@ var checks = new (string Name, Action Run)[]
             Array.Empty<BusinessHoursInterval>(), Array.Empty<ProfessionalAvailabilityInterval>(),
             Array.Empty<ProfessionalTimeOffInterval>(), active));
     }),
-    ("business-hours schedule sorts intervals by ISO weekday and local start time", () =>
+    ("appointment snapshots immutable service, customer and professional facts and computes buffered occupancy", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria Silva", "+5511999999999", null, nowUtc);
+        var service = SalonService.Create(Guid.NewGuid(), "Coloração", 60, 15000, "BRL", 5, 10, true, nowUtc);
+        var start = new DateTimeOffset(2026, 11, 18, 15, 0, 0, TimeSpan.Zero);
+        var appointment = Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            " Ana Souza ", start, Guid.NewGuid().ToString("N"), new string('a', 64), Guid.NewGuid(), nowUtc);
+        Assert(appointment.Status == AppointmentStatus.Confirmed &&
+               appointment.CustomerNameSnapshot == "Maria Silva" &&
+               appointment.ProfessionalNameSnapshot == "Ana Souza" &&
+               appointment.ServiceNameSnapshot == "Coloração" &&
+               appointment.PriceMinorUnitsSnapshot == 15000 &&
+               appointment.CurrencySnapshot == "BRL" &&
+               appointment.EndAtUtc == start.AddMinutes(60) &&
+               appointment.OccupancyStartAtUtc == start.AddMinutes(-5) &&
+               appointment.OccupancyEndAtUtc == start.AddMinutes(70) &&
+               appointment.BlocksProfessionalTime);
+    }),
+    ("appointment rejects archived customer and inactive service", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        var archived = customer.Archive(nowUtc.AddMinutes(1));
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var start = nowUtc.AddDays(1);
+        Throws<ArgumentException>(() => Appointment.Create(Guid.NewGuid(), archived, service, Guid.NewGuid(),
+            "Ana", start, Guid.NewGuid().ToString("N"), new string('a', 64), Guid.NewGuid(), nowUtc.AddMinutes(2)));
+        Throws<ArgumentException>(() => Appointment.Create(Guid.NewGuid(), customer, service with { IsActive = false },
+            Guid.NewGuid(), "Ana", start, Guid.NewGuid().ToString("N"), new string('a', 64), Guid.NewGuid(), nowUtc));
+    }),
+    ("appointment requires UTC minute-aligned future start and trusted creator", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var start = nowUtc.AddDays(1);
+        var key = Guid.NewGuid().ToString("N");
+        var hash = new string('a', 64);
+        Throws<ArgumentException>(() => Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", start.ToOffset(TimeSpan.FromHours(-3)), key, hash, Guid.NewGuid(), nowUtc));
+        Throws<ArgumentException>(() => Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", start.AddSeconds(1), key, hash, Guid.NewGuid(), nowUtc));
+        Throws<ArgumentOutOfRangeException>(() => Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", nowUtc, key, hash, Guid.NewGuid(), nowUtc));
+        Throws<ArgumentException>(() => Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", start, key, hash, Guid.Empty, nowUtc));
+    }),
+    ("appointment validates idempotency key and canonical request hash", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var start = nowUtc.AddDays(1);
+        Throws<ArgumentException>(() => Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", start, "short", new string('a', 64), Guid.NewGuid(), nowUtc));
+        Throws<ArgumentException>(() => Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", start, Guid.NewGuid().ToString("N"), "not-a-sha256", Guid.NewGuid(), nowUtc));
+    }),
+    ("appointment lifecycle permits check-in service and completion but never reopens terminal states", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var appointment = Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", nowUtc.AddDays(1), Guid.NewGuid().ToString("N"), new string('a', 64), Guid.NewGuid(), nowUtc);
+        var checkedIn = appointment.TransitionTo(AppointmentStatus.CheckedIn, nowUtc.AddMinutes(1));
+        var inService = checkedIn.TransitionTo(AppointmentStatus.InService, nowUtc.AddMinutes(2));
+        var completed = inService.TransitionTo(AppointmentStatus.Completed, nowUtc.AddMinutes(3));
+        Assert(completed.Status == AppointmentStatus.Completed && completed.UpdatedAtUtc == nowUtc.AddMinutes(3));
+        Assert(!completed.BlocksProfessionalTime);
+        Throws<InvalidOperationException>(() => completed.TransitionTo(AppointmentStatus.Confirmed, nowUtc.AddMinutes(4)));
+    }),
+    ("appointment cancellation is terminal and releases professional occupancy", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var appointment = Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", nowUtc.AddDays(1), Guid.NewGuid().ToString("N"), new string('a', 64), Guid.NewGuid(), nowUtc);
+        var cancelled = appointment.TransitionTo(AppointmentStatus.Cancelled, nowUtc.AddMinutes(1));
+        Assert(cancelled.CancelledAtUtc == nowUtc.AddMinutes(1) && !cancelled.BlocksProfessionalTime);
+        Throws<InvalidOperationException>(() => cancelled.TransitionTo(AppointmentStatus.Confirmed, nowUtc.AddMinutes(2)));
+    }),
+    ("appointment no-show is terminal and releases future professional occupancy", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var appointment = Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", nowUtc.AddDays(1), Guid.NewGuid().ToString("N"), new string('a', 64), Guid.NewGuid(), nowUtc);
+        var noShow = appointment.TransitionTo(AppointmentStatus.NoShow, nowUtc.AddMinutes(1));
+        Assert(noShow.Status == AppointmentStatus.NoShow && !noShow.BlocksProfessionalTime);
+        Throws<InvalidOperationException>(() => noShow.TransitionTo(AppointmentStatus.Confirmed, nowUtc.AddMinutes(2)));
+    }),
+    ("appointment rejects illegal state transitions and backwards timestamps", () =>
+    {
+        var customer = Customer.Create(Guid.NewGuid(), "Maria", "+5511999999999", null, nowUtc);
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var appointment = Appointment.Create(Guid.NewGuid(), customer, service, Guid.NewGuid(),
+            "Ana", nowUtc.AddDays(1), Guid.NewGuid().ToString("N"), new string('a', 64), Guid.NewGuid(), nowUtc);
+        Throws<InvalidOperationException>(() => appointment.TransitionTo(AppointmentStatus.Completed, nowUtc.AddMinutes(1)));
+        Throws<ArgumentException>(() => appointment.TransitionTo(AppointmentStatus.CheckedIn, nowUtc.AddMinutes(-1)));
+    }),    ("appointment occupancy subtraction excludes overlapping service and buffers while preserving inclusive minute boundaries", () =>
+    {
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 5, 10, true, nowUtc);
+        var windowStart = new DateTimeOffset(2026, 11, 19, 9, 0, 0, TimeSpan.Zero);
+        var windows = new[] { new ServiceAvailabilityWindow(windowStart, windowStart.AddHours(3)) };
+        var occupied = new[] { ProfessionalOccupancyInterval.Create(
+            windowStart.AddHours(1), windowStart.AddHours(2)) };
+        var available = ServiceAvailabilityCalculator.SubtractOccupiedWindows(windows, occupied, service);
+        Assert(available.Count == 2 &&
+               available[0].EarliestStartUtc == windowStart &&
+               available[0].LatestStartUtc == windowStart.AddMinutes(20) &&
+               available[1].EarliestStartUtc == windowStart.AddHours(2).AddMinutes(5) &&
+               available[1].LatestStartUtc == windowStart.AddHours(3));
+    }),
+    ("appointment occupancy subtraction treats adjacent half-open intervals as non-overlapping", () =>
+    {
+        var service = SalonService.Create(Guid.NewGuid(), "Corte", 30, 5000, "BRL", 0, 0, true, nowUtc);
+        var start = new DateTimeOffset(2026, 11, 19, 9, 0, 0, TimeSpan.Zero);
+        var windows = new[] { new ServiceAvailabilityWindow(start, start.AddMinutes(30)) };
+        var occupied = new[] { ProfessionalOccupancyInterval.Create(start.AddMinutes(30), start.AddMinutes(60)) };
+        var available = ServiceAvailabilityCalculator.SubtractOccupiedWindows(windows, occupied, service);
+        Assert(available.Count == 1 && available[0].EarliestStartUtc == start && available[0].LatestStartUtc == start);
+    }),    ("business-hours schedule sorts intervals by ISO weekday and local start time", () =>
     {
         var schedule = BusinessHoursSchedule.Create(new[]
         {

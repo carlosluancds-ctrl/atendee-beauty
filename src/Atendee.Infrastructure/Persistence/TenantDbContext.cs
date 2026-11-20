@@ -1,5 +1,6 @@
 using Atendee.Application.Abstractions;
 using Atendee.Domain.Primitives;
+using Atendee.Domain.Scheduling;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
@@ -32,6 +33,7 @@ public sealed class TenantDbContext : DbContext
     internal DbSet<TenantBusinessHoursRow> TenantBusinessHours => Set<TenantBusinessHoursRow>();
     internal DbSet<TenantProfessionalAvailabilityRow> TenantProfessionalAvailability => Set<TenantProfessionalAvailabilityRow>();
     internal DbSet<TenantProfessionalTimeOffRow> TenantProfessionalTimeOff => Set<TenantProfessionalTimeOffRow>();
+    internal DbSet<TenantAppointmentRow> TenantAppointments => Set<TenantAppointmentRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -99,6 +101,42 @@ public sealed class TenantDbContext : DbContext
         customers.HasIndex(row => new { row.TenantId, row.EmailAddress });
         customers.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
 
+        var appointments = modelBuilder.Entity<TenantAppointmentRow>();
+        appointments.ToTable("appointments", "atendee");
+        appointments.HasKey(row => new { row.TenantId, row.Id });
+        appointments.Property(row => row.TenantId).HasColumnName("tenant_id").IsRequired();
+        appointments.Property(row => row.Id).HasColumnName("appointment_id").IsRequired();
+        appointments.Property(row => row.CustomerId).HasColumnName("customer_id").IsRequired();
+        appointments.Property(row => row.ProfessionalId).HasColumnName("professional_id").IsRequired();
+        appointments.Property(row => row.ServiceId).HasColumnName("service_id").IsRequired();
+        appointments.Property(row => row.CustomerNameSnapshot).HasColumnName("customer_name_snapshot").HasMaxLength(120).IsRequired();
+        appointments.Property(row => row.CustomerPhoneSnapshot).HasColumnName("customer_phone_snapshot").HasMaxLength(16);
+        appointments.Property(row => row.ProfessionalNameSnapshot).HasColumnName("professional_name_snapshot").HasMaxLength(120).IsRequired();
+        appointments.Property(row => row.ServiceNameSnapshot).HasColumnName("service_name_snapshot").HasMaxLength(120).IsRequired();
+        appointments.Property(row => row.DurationMinutesSnapshot).HasColumnName("duration_minutes_snapshot").IsRequired();
+        appointments.Property(row => row.PriceMinorUnitsSnapshot).HasColumnName("price_minor_units_snapshot").IsRequired();
+        appointments.Property(row => row.CurrencySnapshot).HasColumnName("currency_snapshot").HasMaxLength(3).IsFixedLength().IsRequired();
+        appointments.Property(row => row.BufferBeforeMinutesSnapshot).HasColumnName("buffer_before_minutes_snapshot").IsRequired();
+        appointments.Property(row => row.BufferAfterMinutesSnapshot).HasColumnName("buffer_after_minutes_snapshot").IsRequired();
+        appointments.Property(row => row.StartAtUtc).HasColumnName("start_at_utc").IsRequired();
+        appointments.Property(row => row.EndAtUtc).HasColumnName("end_at_utc").IsRequired();
+        appointments.Property(row => row.OccupancyStartAtUtc).HasColumnName("occupancy_start_at_utc").IsRequired();
+        appointments.Property(row => row.OccupancyEndAtUtc).HasColumnName("occupancy_end_at_utc").IsRequired();
+        appointments.Property(row => row.Status).HasColumnName("status").HasConversion<short>().IsConcurrencyToken().IsRequired();
+        appointments.Property(row => row.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(128).IsRequired();
+        appointments.Property(row => row.RequestHash).HasColumnName("request_hash").HasMaxLength(64).IsFixedLength().IsRequired();
+        appointments.Property(row => row.CreatedByIdentityUserId).HasColumnName("created_by_identity_user_id").IsRequired();
+        appointments.Property(row => row.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        appointments.Property(row => row.UpdatedAtUtc).HasColumnName("updated_at_utc").IsConcurrencyToken().IsRequired();
+        appointments.Property(row => row.CancelledAtUtc).HasColumnName("cancelled_at_utc");
+        appointments.HasOne<TenantCustomerRow>().WithMany().HasForeignKey(row => new { row.TenantId, row.CustomerId }).HasPrincipalKey(row => new { row.TenantId, row.Id }).OnDelete(DeleteBehavior.Restrict);
+        appointments.HasOne<TenantProfessionalRow>().WithMany().HasForeignKey(row => new { row.TenantId, row.ProfessionalId }).HasPrincipalKey(row => new { row.TenantId, row.Id }).OnDelete(DeleteBehavior.Restrict);
+        appointments.HasOne<TenantServiceRow>().WithMany().HasForeignKey(row => new { row.TenantId, row.ServiceId }).HasPrincipalKey(row => new { row.TenantId, row.Id }).OnDelete(DeleteBehavior.Restrict);
+        appointments.HasIndex(row => new { row.TenantId, row.StartAtUtc, row.Id });
+        appointments.HasIndex(row => new { row.TenantId, row.ProfessionalId, row.OccupancyStartAtUtc });
+        appointments.HasIndex(row => new { row.TenantId, row.CustomerId, row.StartAtUtc });
+        appointments.HasIndex(row => new { row.TenantId, row.IdempotencyKey }).IsUnique();
+        appointments.HasQueryFilter(row => row.TenantId == _boundTenantId.Value);
         var businessHours = modelBuilder.Entity<TenantBusinessHoursRow>();
         businessHours.ToTable("business_hours", "atendee");
         businessHours.HasKey(row => new { row.TenantId, row.Id });
@@ -226,6 +264,11 @@ public sealed class TenantDbContext : DbContext
                 throw new InvalidOperationException("Business hours do not belong to this DbContext tenant.");
         }
 
+        foreach (EntityEntry<TenantAppointmentRow> entry in ChangeTracker.Entries<TenantAppointmentRow>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted && entry.Entity.TenantId != _boundTenantId.Value)
+                throw new InvalidOperationException("An appointment does not belong to this DbContext tenant.");
+        }
         foreach (EntityEntry<TenantNoteRow> entry in ChangeTracker.Entries<TenantNoteRow>())
         {
             if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted &&

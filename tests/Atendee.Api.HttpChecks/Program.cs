@@ -1392,6 +1392,204 @@ try
            TimeZoneInfo.ConvertTime(thirdAvailabilityStart, saoPaulo).TimeOfDay == new TimeSpan(13, 5, 0) &&
            TimeZoneInfo.ConvertTime(thirdAvailabilityLatest, saoPaulo).TimeOfDay == new TimeSpan(17, 5, 0),
         "Authoritative availability subtracts partial time off, preserves an exact-fit buffered slot and applies service duration and before/after buffers.");
+    var bookingCustomerResponse = await PostWithCsrfAsync(mfaClient, "/api/v1/customers", ownerAuthenticatedToken, new
+    {
+        fullName = "Cliente de Agendamento",
+        phoneNumber = "+55 (11) 98888-7777",
+        emailAddress = "booking.customer@example.invalid"
+    });
+    Ensure(bookingCustomerResponse.StatusCode == HttpStatusCode.Created,
+        "Booking fixture customer is created through the tenant-scoped customer API.");
+    var bookingCustomer = await bookingCustomerResponse.Content.ReadFromJsonAsync<JsonElement>();
+    var bookingCustomerId = bookingCustomer.GetProperty("id").GetGuid();
+    var bookingStartUtc = new DateTimeOffset(2026, 12, 7, 12, 5, 0, TimeSpan.Zero);
+    var bookingIdempotencyKey = Guid.NewGuid().ToString("N");
+
+    async Task<HttpResponseMessage> SendBookingAsync(DateTimeOffset startAtUtc)
+    {
+        var bookingRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/appointments");
+        bookingRequest.Headers.Add("X-CSRF-TOKEN", ownerAuthenticatedToken);
+        bookingRequest.Headers.Add("Idempotency-Key", bookingIdempotencyKey);
+        bookingRequest.Content = JsonContent.Create(new
+        {
+            customerId = bookingCustomerId,
+            professionalId = assignedAssignedProfessionalProfileId,
+            serviceId = salonServiceId,
+            startAtUtc
+        });
+        return await mfaClient.SendAsync(bookingRequest);
+    }
+
+    using (var createdBookingResponse = await SendBookingAsync(bookingStartUtc))
+    {
+        Ensure(createdBookingResponse.StatusCode == HttpStatusCode.Created,
+            "Owner can create a tenant appointment inside authoritative service availability.");
+        var createdBooking = await createdBookingResponse.Content.ReadFromJsonAsync<JsonElement>();
+        var appointmentId = createdBooking.GetProperty("id").GetGuid();
+        Ensure(createdBooking.GetProperty("customerNameSnapshot").GetString() == "Cliente de Agendamento" &&
+               createdBooking.GetProperty("professionalNameSnapshot").GetString() == "HTTP Synthetic Audit Target" &&
+               createdBooking.GetProperty("serviceNameSnapshot").GetString() == "Corte de cabelo" &&
+               createdBooking.GetProperty("priceMinorUnitsSnapshot").GetInt64() == 7500 &&
+               createdBooking.GetProperty("durationMinutesSnapshot").GetInt32() == 45 &&
+               createdBooking.GetProperty("bufferBeforeMinutesSnapshot").GetInt32() == 5 &&
+               createdBooking.GetProperty("bufferAfterMinutesSnapshot").GetInt32() == 10 &&
+               createdBooking.GetProperty("status").GetString() == "Confirmed",
+            "Appointment persists immutable customer, professional, service, price, duration and buffer snapshots.");
+
+        using (var replayResponse = await SendBookingAsync(bookingStartUtc))
+        {
+            var replay = await replayResponse.Content.ReadFromJsonAsync<JsonElement>();
+            Ensure(replayResponse.StatusCode == HttpStatusCode.OK &&
+                   replay.GetProperty("id").GetGuid() == appointmentId,
+                "Same idempotency key and request replay the original appointment.");
+        }
+        using (var conflictingReplay = await SendBookingAsync(bookingStartUtc.AddMinutes(1)))
+            Ensure(conflictingReplay.StatusCode == HttpStatusCode.Conflict,
+                "Reusing an idempotency key with a different request hash is rejected.");
+
+        using (var getBooking = await mfaClient.GetAsync($"/api/v1/appointments/{appointmentId:D}"))
+        {
+            var fetched = await getBooking.Content.ReadFromJsonAsync<JsonElement>();
+            Ensure(getBooking.StatusCode == HttpStatusCode.OK &&
+                   fetched.GetProperty("id").GetGuid() == appointmentId,
+                "Owner can retrieve the persisted appointment by tenant-scoped ID.");
+        }
+        using (var listBookings = await mfaClient.GetAsync(
+            "/api/v1/appointments?fromUtc=2026-12-07T00:00:00Z&toUtc=2026-12-08T00:00:00Z"))
+        {
+            var listed = await listBookings.Content.ReadFromJsonAsync<JsonElement>();
+            Ensure(listBookings.StatusCode == HttpStatusCode.OK &&
+                   listed.GetProperty("totalCount").GetInt32() == 1 &&
+                   listed.GetProperty("items")[0].GetProperty("id").GetGuid() == appointmentId,
+                "Owner can list tenant appointments within a bounded UTC range.");
+        }
+
+        var availabilityAfterBooking = await mfaClient.GetAsync(
+            $"/api/v1/availability?from=2026-12-07&to=2026-12-07&serviceId={salonServiceId:D}&professionalId={assignedAssignedProfessionalProfileId:D}");
+        var availabilityAfterBookingBody = await availabilityAfterBooking.Content.ReadFromJsonAsync<JsonElement>();
+        Ensure(availabilityAfterBooking.StatusCode == HttpStatusCode.OK &&
+               availabilityAfterBookingBody.GetProperty("professionals")[0].GetProperty("windows").GetArrayLength() == 2,
+            "Authoritative availability subtracts the committed appointment and its occupancy buffers.");
+
+        await using var auditConnection = new NpgsqlConnection(migratorConnectionString);
+        await auditConnection.OpenAsync();
+        await using var auditCommand = new NpgsqlCommand(
+            """
+            SELECT
+                (SELECT count(*) FROM atendee.appointment_events
+                 WHERE tenant_id = @tenant AND appointment_id = @appointment AND event_type = 'appointment.created') +
+                (SELECT count(*) FROM atendee.tenant_audit_events
+                 WHERE tenant_id = @tenant AND resource_id = @appointment AND event_type = 'appointment.created') +
+                (SELECT count(*) FROM atendee.transactional_outbox
+                 WHERE tenant_id = @tenant AND aggregate_id = @appointment AND event_type = 'appointment.created')
+            """, auditConnection);
+        auditCommand.Parameters.AddWithValue("tenant", ownerTenantId);
+        auditCommand.Parameters.AddWithValue("appointment", appointmentId);
+        Ensure(Convert.ToInt32(await auditCommand.ExecuteScalarAsync()) == 3,
+            "Appointment, immutable event, tenant audit and transactional outbox commit atomically.");
+
+        var overlapRejected = false;
+        await using (var overlapConnection = new NpgsqlConnection(migratorConnectionString))
+        {
+            await overlapConnection.OpenAsync();
+            await using var tx = await overlapConnection.BeginTransactionAsync();
+            await using (var role = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", overlapConnection, tx))
+                await role.ExecuteNonQueryAsync();
+            await using (var actor = new NpgsqlCommand(
+                "SELECT set_config('app.actor_id', @actor, true)", overlapConnection, tx))
+            {
+                actor.Parameters.AddWithValue("actor", ownerUserId.ToString("D"));
+                await actor.ExecuteScalarAsync();
+            }
+            await using var insert = new NpgsqlCommand(
+                """
+                INSERT INTO atendee.appointments
+                (
+                    tenant_id, appointment_id, customer_id, professional_id, service_id,
+                    customer_name_snapshot, customer_phone_snapshot, professional_name_snapshot,
+                    service_name_snapshot, duration_minutes_snapshot, price_minor_units_snapshot,
+                    currency_snapshot, buffer_before_minutes_snapshot, buffer_after_minutes_snapshot,
+                    start_at_utc, end_at_utc, occupancy_start_at_utc, occupancy_end_at_utc,
+                    status, idempotency_key, request_hash, created_by_identity_user_id,
+                    created_at_utc, updated_at_utc, cancelled_at_utc
+                )
+                SELECT tenant_id, gen_random_uuid(), customer_id, professional_id, service_id,
+                    customer_name_snapshot, customer_phone_snapshot, professional_name_snapshot,
+                    service_name_snapshot, duration_minutes_snapshot, price_minor_units_snapshot,
+                    currency_snapshot, buffer_before_minutes_snapshot, buffer_after_minutes_snapshot,
+                    start_at_utc, end_at_utc, occupancy_start_at_utc, occupancy_end_at_utc,
+                    status, @key, repeat('b', 64), created_by_identity_user_id, now(), now(), NULL
+                FROM atendee.appointments
+                WHERE tenant_id = @tenant AND appointment_id = @appointment
+                """, overlapConnection, tx);
+            insert.Parameters.AddWithValue("key", Guid.NewGuid().ToString("N"));
+            insert.Parameters.AddWithValue("tenant", ownerTenantId);
+            insert.Parameters.AddWithValue("appointment", appointmentId);
+            await insert.ExecuteNonQueryAsync();
+            try { await tx.CommitAsync(); }
+            catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.ExclusionViolation)
+            { overlapRejected = true; }
+        }
+        Ensure(overlapRejected,
+            "Deferred PostgreSQL constraint trigger rejects overlapping occupancy even when a writer bypasses the availability API.");
+        using (var illegalTransition = await PostWithCsrfAsync(
+            mfaClient, $"/api/v1/appointments/{appointmentId:D}/transitions",
+            ownerAuthenticatedToken, new { status = "Completed" }))
+            Ensure(illegalTransition.StatusCode == HttpStatusCode.Conflict,
+                "Appointment lifecycle rejects skipping directly from Confirmed to Completed.");
+
+        using (var checkedIn = await PostWithCsrfAsync(
+            mfaClient, $"/api/v1/appointments/{appointmentId:D}/transitions",
+            ownerAuthenticatedToken, new { status = "CheckedIn" }))
+        {
+            var result = await checkedIn.Content.ReadFromJsonAsync<JsonElement>();
+            Ensure(checkedIn.StatusCode == HttpStatusCode.OK &&
+                   result.GetProperty("status").GetString() == "CheckedIn",
+                "Owner can check in a confirmed appointment through the legal lifecycle.");
+        }
+        using (var inService = await PostWithCsrfAsync(
+            mfaClient, $"/api/v1/appointments/{appointmentId:D}/transitions",
+            ownerAuthenticatedToken, new { status = "InService" }))
+        {
+            var result = await inService.Content.ReadFromJsonAsync<JsonElement>();
+            Ensure(inService.StatusCode == HttpStatusCode.OK &&
+                   result.GetProperty("status").GetString() == "InService",
+                "Appointment can transition from CheckedIn to InService.");
+        }
+        using (var completed = await PostWithCsrfAsync(
+            mfaClient, $"/api/v1/appointments/{appointmentId:D}/transitions",
+            ownerAuthenticatedToken, new { status = "Completed" }))
+        {
+            var result = await completed.Content.ReadFromJsonAsync<JsonElement>();
+            Ensure(completed.StatusCode == HttpStatusCode.OK &&
+                   result.GetProperty("status").GetString() == "Completed",
+                "Appointment can complete only after entering service.");
+        }
+
+        var availabilityAfterCompletion = await mfaClient.GetAsync(
+            $"/api/v1/availability?from=2026-12-07&to=2026-12-07&serviceId={salonServiceId:D}&professionalId={assignedAssignedProfessionalProfileId:D}");
+        var availabilityAfterCompletionBody = await availabilityAfterCompletion.Content.ReadFromJsonAsync<JsonElement>();
+        Ensure(availabilityAfterCompletion.StatusCode == HttpStatusCode.OK &&
+               availabilityAfterCompletionBody.GetProperty("professionals")[0].GetProperty("windows").GetArrayLength() == 3,
+            "Completed appointments remain in history but no longer block future availability.");
+
+        await using var lifecycleAuditConnection = new NpgsqlConnection(migratorConnectionString);
+        await lifecycleAuditConnection.OpenAsync();
+        await using var lifecycleAuditCommand = new NpgsqlCommand(
+            """
+            SELECT
+                (SELECT count(*) FROM atendee.appointment_events
+                 WHERE tenant_id = @tenant AND appointment_id = @appointment) +
+                (SELECT count(*) FROM atendee.tenant_audit_events
+                 WHERE tenant_id = @tenant AND resource_id = @appointment) +
+                (SELECT count(*) FROM atendee.transactional_outbox
+                 WHERE tenant_id = @tenant AND aggregate_id = @appointment)
+            """, lifecycleAuditConnection);
+        lifecycleAuditCommand.Parameters.AddWithValue("tenant", ownerTenantId);
+        lifecycleAuditCommand.Parameters.AddWithValue("appointment", appointmentId);
+        Ensure(Convert.ToInt32(await lifecycleAuditCommand.ExecuteScalarAsync()) == 12,
+            "Every legal lifecycle transition appends one immutable event, audit record and outbox message atomically.");
+    }
 
     var unassignedProfessionalAvailability = await mfaClient.GetAsync(
         $"/api/v1/availability?from=2026-12-07&to=2026-12-07&serviceId={Guid.NewGuid():D}&professionalId={assignedAssignedProfessionalProfileId:D}");

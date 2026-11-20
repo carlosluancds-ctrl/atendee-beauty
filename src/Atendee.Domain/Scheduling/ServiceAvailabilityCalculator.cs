@@ -20,8 +20,52 @@ public sealed record ServiceAvailabilityWindow(
 public static class ServiceAvailabilityCalculator
 {
     public const int MaximumDateRangeDays = 31;
+    /// <summary>
+    /// Removes starts whose complete service-plus-buffer occupancy intersects
+    /// an existing blocking appointment. Minute boundaries remain inclusive.
+    /// </summary>
+    public static IReadOnlyList<ServiceAvailabilityWindow> SubtractOccupiedWindows(
+        IReadOnlyList<ServiceAvailabilityWindow> windows,
+        IReadOnlyList<ProfessionalOccupancyInterval> occupiedIntervals,
+        SalonService service)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+        ArgumentNullException.ThrowIfNull(occupiedIntervals);
+        ArgumentNullException.ThrowIfNull(service);
 
-    public static IReadOnlyList<ServiceAvailabilityWindow> Calculate(
+        if (occupiedIntervals.Count == 0)
+            return windows;
+        var occupied = occupiedIntervals.OrderBy(interval => interval.StartAtUtc).ToArray();
+        var result = new List<ServiceAvailabilityWindow>();
+        foreach (var window in windows)
+        {
+            DateTimeOffset? openStart = null;
+            for (var candidate = window.EarliestStartUtc;
+                 candidate <= window.LatestStartUtc;
+                 candidate = candidate.AddMinutes(1))
+            {
+                var occupancyStart = candidate.AddMinutes(-service.BufferBeforeMinutes);
+                var occupancyEnd = candidate.AddMinutes(service.DurationMinutes + service.BufferAfterMinutes);
+                var blocked = occupied.Any(interval =>
+                    occupancyStart < interval.EndAtUtc && interval.StartAtUtc < occupancyEnd);
+
+                if (!blocked)
+                    openStart ??= candidate;
+                else if (openStart is { } start)
+                {
+                    result.Add(new ServiceAvailabilityWindow(start, candidate.AddMinutes(-1)));
+                    openStart = null;
+                }
+            }
+
+            if (openStart is { } finalStart)
+                result.Add(new ServiceAvailabilityWindow(finalStart, window.LatestStartUtc));
+        }
+        return result;
+    }
+
+    /// <summary>
+public static IReadOnlyList<ServiceAvailabilityWindow> Calculate(
         DateOnly from,
         DateOnly to,
         string timeZoneId,

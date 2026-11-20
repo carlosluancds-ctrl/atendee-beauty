@@ -50,11 +50,36 @@ await using (var scopeA = provider.CreateAsyncScope())
     var store = scopeA.ServiceProvider.GetRequiredService<ITenantNoteStore>();
     var customerStore = scopeA.ServiceProvider.GetRequiredService<ITenantCustomerStore>();
     var businessHoursStore = scopeA.ServiceProvider.GetRequiredService<ITenantBusinessHoursStore>();
+    var appointmentStore = scopeA.ServiceProvider.GetRequiredService<ITenantAppointmentStore>();
     var db = scopeA.ServiceProvider.GetRequiredService<TenantDbContext>();
 
     _ = await db.Database.SqlQueryRaw<string>(
         "SELECT set_config('app.actor_id', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', false) AS \"Value\"")
         .SingleAsync();
+    var appointmentRls = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<bool>("SELECT (relrowsecurity AND relforcerowsecurity) AS \"Value\" FROM pg_class WHERE oid = 'atendee.appointments'::regclass").SingleAsync(ct));
+    Check(appointmentRls, "appointment table has forced PostgreSQL row-level security");
+
+    var overlapTrigger = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<bool>("SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'ct_appointments_no_overlap' AND tgdeferrable AND tginitdeferred) AS \"Value\"").SingleAsync(ct));
+    Check(overlapTrigger, "appointment overlap enforcement is a deferred database constraint trigger");
+    var appointmentGuards = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<bool>(
+        "SELECT count(*) = 3 AS \"Value\" FROM pg_trigger WHERE tgname IN ('tr_appointments_validate_transition', 'tr_appointments_no_delete', 'tr_appointments_no_truncate')").SingleAsync(ct));
+    Check(appointmentGuards, "database enforces legal state transitions and no physical appointment deletion");
+
+    var appointmentHistoryGuards = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<bool>(
+        "SELECT count(*) = 2 AS \"Value\" FROM pg_trigger WHERE tgname IN ('tr_appointment_events_append_only', 'tr_appointment_events_no_truncate')").SingleAsync(ct));
+    Check(appointmentHistoryGuards, "appointment event history is append-only and cannot be truncated");
+
+    var noPhysicalMutationPrivileges = await runner.ExecuteAsync(ct => db.Database.SqlQueryRaw<bool>(
+        "SELECT NOT has_table_privilege('atendee_runtime', 'atendee.appointments', 'DELETE') AND NOT has_table_privilege('atendee_runtime', 'atendee.appointments', 'TRUNCATE') AND NOT has_table_privilege('atendee_runtime', 'atendee.transactional_outbox', 'INSERT') AS \"Value\"").SingleAsync(ct));
+    Check(noPhysicalMutationPrivileges, "runtime role cannot delete appointments or directly write transactional outbox messages");
+
+    var emptyAppointments = await runner.ExecuteAsync(ct => appointmentStore.ListAsync(
+        DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1), null, 1, 50, ct));
+    Check(emptyAppointments.TotalCount == 0, "tenant appointment store starts with an empty tenant-scoped booking list");
+
+    var emptyOccupancy = await runner.ExecuteAsync(ct => appointmentStore.ListBlockingOccupancyAsync(
+        Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1), ct));
+    Check(emptyOccupancy.Count == 0, "appointment occupancy query returns no records for an unknown professional");
     var trustedActorSetting = await runner.ExecuteAsync(ct =>
         db.Database.SqlQueryRaw<string>("SELECT current_setting('app.actor_id', true) AS \"Value\"")
             .SingleAsync(ct));
@@ -118,6 +143,9 @@ await using (var scopeB = provider.CreateAsyncScope())
 
     var hidden = await runner.ExecuteAsync(ct => store.GetByIdAsync(noteA, ct));
     Check(hidden is null, "tenant B cannot read tenant A note by known UUID");
+    var appointmentStore = scopeB.ServiceProvider.GetRequiredService<ITenantAppointmentStore>();
+    var tenantBAppointments = await runner.ExecuteAsync(ct => appointmentStore.ListAsync(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1), null, 1, 50, ct));
+    Check(tenantBAppointments.TotalCount == 0, "tenant B cannot list tenant A appointments");
     var hiddenCustomer = await runner.ExecuteAsync(ct => customerStore.GetByIdAsync(customerAId, ct));
     var tenantBCustomers = await runner.ExecuteAsync(ct => customerStore.ListAsync(1, 50, ct));
     Check(hiddenCustomer is null && tenantBCustomers.TotalCount == 0 && tenantBCustomers.Items.Count == 0,
@@ -166,6 +194,23 @@ await using (var scopeB = provider.CreateAsyncScope())
         await db.Database.ExecuteSqlRawAsync("SELECT note_id FROM atendee.tenant_notes");
     });
     Check(true, "app login has no direct table access outside transaction runner");
+    await ExpectDbFailureAsync(async () =>
+    {
+        await db.Database.ExecuteSqlRawAsync("SELECT appointment_id FROM atendee.appointments");
+    });
+    Check(true, "runtime login cannot directly read appointment PII outside the tenant transaction runner");
+
+    await ExpectDbFailureAsync(async () =>
+    {
+        await db.Database.ExecuteSqlRawAsync("SELECT event_id FROM atendee.appointment_events");
+    });
+    Check(true, "runtime login cannot read append-only appointment history outside the tenant transaction runner");
+
+    await ExpectDbFailureAsync(async () =>
+    {
+        await db.Database.ExecuteSqlRawAsync("SELECT message_id FROM atendee.transactional_outbox");
+    });
+    Check(true, "runtime login cannot read transactional outbox messages");
     await ExpectDbFailureAsync(async () =>
     {
         await db.Database.ExecuteSqlRawAsync("SELECT customer_id FROM atendee.customers");

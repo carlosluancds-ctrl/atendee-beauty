@@ -454,6 +454,7 @@ if (identityEnabled)
     app.MapTenantProfessionalAvailability();
     app.MapTenantProfessionalTimeOff();
     app.MapTenantAvailability();
+    app.MapTenantAppointments();
 }
 
 app.Run();

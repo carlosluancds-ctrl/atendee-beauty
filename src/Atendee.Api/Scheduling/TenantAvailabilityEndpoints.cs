@@ -26,7 +26,8 @@ public static class TenantAvailabilityEndpoints
             ITenantProfessionalStore professionals,
             ITenantProfessionalAvailabilityStore availability,
             ITenantProfessionalTimeOffStore timeOff,
-            ITenantServiceStore services) =>
+            ITenantServiceStore services,
+            ITenantAppointmentStore appointments) =>
         {
             if (!CanReadTeam(current) && !CanReadOwn(current))
                 return Results.Forbid();
@@ -101,7 +102,11 @@ public static class TenantAvailabilityEndpoints
                         .Select(interval => new ProfessionalTimeOffInterval(
                             interval.Date, interval.StartTime, interval.EndTime))
                         .ToArray();
-                    profileInputs.Add(new AvailabilityProfileInputs(profile.Id, recurring, exceptions));
+                    var occupancyFromUtc = new DateTimeOffset(fromDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)).AddHours(-14);
+                    var occupancyToUtc = new DateTimeOffset(toDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)).AddHours(14);
+                    var occupied = await appointments.ListBlockingOccupancyAsync(
+                        profile.Id, occupancyFromUtc, occupancyToUtc, token);
+                    profileInputs.Add(new AvailabilityProfileInputs(profile.Id, recurring, exceptions, occupied));
                 }
 
                 return AvailabilityQueryResult.Success(service, openingIntervals, profileInputs);
@@ -116,12 +121,15 @@ public static class TenantAvailabilityEndpoints
             var results = inputs.Profiles.Select(profile =>
                 new ProfessionalServiceAvailabilityResponse(
                     profile.ProfessionalId,
+                    ServiceAvailabilityCalculator.SubtractOccupiedWindows(
                     ServiceAvailabilityCalculator.Calculate(
                         fromDate, toDate, timeZoneId,
                         inputs.BusinessHours,
                         profile.RecurringAvailability,
                         profile.TimeOff,
-                        serviceDefinition)
+                        serviceDefinition),
+                    profile.OccupiedIntervals,
+                    serviceDefinition)
                     .Select(window => new ServiceAvailabilityWindowResponse(
                         window.EarliestStartUtc,
                         window.LatestStartUtc))
@@ -152,7 +160,8 @@ public static class TenantAvailabilityEndpoints
 internal sealed record AvailabilityProfileInputs(
     Guid ProfessionalId,
     IReadOnlyList<ProfessionalAvailabilityInterval> RecurringAvailability,
-    IReadOnlyList<ProfessionalTimeOffInterval> TimeOff);
+    IReadOnlyList<ProfessionalTimeOffInterval> TimeOff,
+    IReadOnlyList<ProfessionalOccupancyInterval> OccupiedIntervals);
 
 internal enum AvailabilityQueryResultKind
 {
