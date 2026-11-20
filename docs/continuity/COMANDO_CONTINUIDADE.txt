@@ -6,18 +6,18 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
-- V90: commit de implementacao 399ead5e86aadde12eb7e06a03051aa839767e6e.
-- CI run 251 / 44663263477: sucesso no mesmo SHA.
-- Endpoint anonimo GET /health/ready: SELECT 1 no data source de identidade compartilhado e no banco de tenant, com timeout de 2 s; 200 {"status":"ready"} ou 503 {"status":"unavailable"}; Cache-Control no-store; sem detalhes de dependencia. Verifica apenas alcancabilidade (nao schema, migracoes nem segredos) e usa o limite local bootstrap-health.
-- CI confirmou 5 asserts novos: probe pronto, probe indisponivel com identidade fora, probe indisponivel com tenant fora, HTTP 200 minimo e HTTP 503 minimo sem vazar detalhes.
-- Build Release: zero avisos e zero erros. Portal E2E 8/8; Domain 79/79; PostgreSQL/RLS 43/43; Identity/TOTP 49/49; HTTP e full-stack aprovados.
-- V89 (rate limiting distribuido via PostgreSQL, migracao 021) permanece validado na run 248 / 44660361862, SHA 90a5bc6. Correcao: CONTINUE_HERE.md dizia run 238 por engano.
+- V91: commit de implementacao d495c65aacbd05c59c8934b3428a9cb1e5da86bb.
+- CI run 253 / 44665423258: sucesso no mesmo SHA (todos os passos do job com sucesso).
+- Todas as respostas da API agora enviam Content-Security-Policy (default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'), Cross-Origin-Resource-Policy same-origin, Cross-Origin-Opener-Policy same-origin e X-Permitted-Cross-Domain-Policies none, alem dos cabecalhos anteriores; novo teste cobre /health/live, /health/ready e rota 404.
+- Build Release: zero avisos e zero erros localmente e no CI.
+- V90 (GET /health/ready) validado na run 251 / 44663263477, SHA 399ead5. V89 (rate limiting distribuido, migracao 021) na run 248 / 44660361862, SHA 90a5bc6.
+- Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
 ANTES DE QUALQUER ALTERACAO
-Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V90_2026-11-19.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V91_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
-V91 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas (incluindo WhatsApp Cloud API) e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Ligar probes de orquestrador a /health/live e /health/ready e decisao de deploy. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel; ITenantNoteStore e apenas exemplo e nao e funcionalidade de produto.
+V92 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas (incluindo WhatsApp Cloud API) e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Ligar probes de orquestrador a /health/live e /health/ready e decisao de deploy. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel; ITenantNoteStore e apenas exemplo e nao e funcionalidade de produto.
 
 REGRAS PERMANENTES
 1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.
