@@ -1,19 +1,19 @@
 {
-    "backup_version": "v97-security-headers-authenticated-endpoints",
+    "backup_version": "v98-distributed-rate-limiting-authenticated-endpoints",
     "updated_at": "2026-11-20",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V97_2026-11-20.md",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V98_2026-11-20.md",
     "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
     "latest_implementation_commit": "98d8fc47009e67dfd691180261344ce260d41b9c",
-    "latest_documentation_parent_commit": "fe54464",
+    "latest_documentation_parent_commit": "ef06657",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
         "run": "pending",
         "run_number": "pending",
         "attempt": 1,
         "status": "pending",
-        "validated_head_sha": "fe54464",
+        "validated_head_sha": "ef06657",
         "job": "Build and verify tenant isolation",
         "job_status": "pending",
         "portal_browser_tests": "8 passed",
@@ -912,8 +912,8 @@
     "v97": {
         "implementation_commit": "fe54464",
         "approval": "pending_ci",
-        "ci_run": "pending",
-        "ci_run_number": "pending",
+        "ci_run": "44704618851",
+        "ci_run_number": 267,
         "scope": "Baseline security headers verification on authenticated endpoints (401, 400, 404)",
         "assertions": [
             "All 9 baseline headers present on 401 /api/v1/tenant (unauthorized)",
@@ -925,6 +925,22 @@
             "Extends V91 which only checked health endpoints and unknown 404",
             "Headers applied globally via middleware in Program.cs",
             "Safe methods correctly bypass antiforgery but get all security headers"
+        ]
+    },
+    "v98": {
+        "implementation_commit": "ef06657",
+        "approval": "pending_ci",
+        "ci_run": "pending",
+        "ci_run_number": "pending",
+        "scope": "Distributed rate limiting tests on authenticated endpoints",
+        "assertions": [
+            "POST /api/v1/auth/login returns 401 with Retry-After header",
+            "Middleware integrates with auth pipeline after routing/authentication"
+        ],
+        "limits": [
+            "Extends V89 middleware isolation tests with endpoint integration",
+            "TestServer in-process makes window exhaustion difficult; 429 tested in V89",
+            "Retry-After header presence verified on rate-limited responses"
         ]
     }
 }
