@@ -1,9 +1,9 @@
 {
-    "backup_version": "v104-tenant-scoped-admin-endpoints",
+    "backup_version": "v105-v104-http-integration-tests",
     "updated_at": "2026-11-20",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V104_2026-11-20.md",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V105_2026-11-20.md",
     "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
     "latest_implementation_commit": "6be7764",
     "latest_documentation_parent_commit": "e01b57b",

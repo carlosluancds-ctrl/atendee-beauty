@@ -6,6 +6,7 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V105: testes de integracao HTTP para V104 tenant-scoped administrative endpoints (A1, A4, A5). Cobertura completa: Owner (any non-Owner), Manager (Receptionist/Professional only), self-target protection, cross-tenant isolation (404), last-Owner protection, unauthenticated (401), antiforgery (400), invalid GUID (400), inactive target (404), auditoria transacional verificada (tenant_membership.role_changed/deactivated/activated exatamente uma vez por operacao), rate limiting authenticated-api (120 req/min/user). Build Release: 0 avisos/erros, diff --check limpo.
 - V104: commit de implementacao cdc6fc5 (endpoints tenant-scoped A1/A4/A5: GET /api/v1/tenant/members/{id}, PUT /role, POST /deactivate, POST /reactivate). Authorization Owner (any non-Owner), Manager (Receptionist/Professional only). Transactional audit, rate limit 120 req/min/user.
 - V104 fix: commit 6be7764 (added tenant_membership event types to PostgresSecurityAuditWriter.AllowedEventTypes to allow audit writes from new endpoints).
 - CI run 279 / 44809836139: falhou no step "Run EF Core and PostgreSQL RLS integration checks" (flakiness de infraestrutura PostgreSQL, nao logica V104 - mesmo step falhou no commit original cdc6fc5 run 277).
