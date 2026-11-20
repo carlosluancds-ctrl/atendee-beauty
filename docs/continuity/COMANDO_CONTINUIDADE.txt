@@ -6,6 +6,13 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V104: commit de implementacao cdc6fc5 (endpoints tenant-scoped A1/A4/A5: GET /api/v1/tenant/members/{id}, PUT /role, POST /deactivate, POST /reactivate). Authorization Owner (any non-Owner), Manager (Receptionist/Professional only). Transactional audit, rate limit 120 req/min/user.
+- CI run aguardando no SHA exato cdc6fc5.
+- V104: estende IOperationalAccountSecurityService com ChangeRoleAsync, DeactivateMembershipAsync, ReactivateMembershipAsync. Mesma transacao para mudanca de dado e auditoria (tenant_membership.role_changed/deactivated/activated). Sem migracao, schema, provider, credencial ou configuracao de producao alterados.
+- V103: commit de implementacao cc36137 (Platform Admin cross-tenant: global realm, step-up MFA, four-eyes para tenant.delete/suspend/unsuspend, platform_admin.create/delete, global.config.change, self/last-Owner/PlatformAdmin protection, audit log querying). Opt-in via PlatformAdmin config. Rate limit 30 req/min/IP.
+- V102: commit de implementacao b86112f (Data Protection key rotation com old-key compatibility). Opt-in.
+- V101: commit de implementacao c2c7df3 (Outbox dispatcher com RabbitMQ). Opt-in.
+- V100: commit de implementacao 5e4fa61 (Appointment rescheduling & cancellation com default policy). Opt-in.
 - V99: commit de teste 678cc1a (validacao RLS em queries tenant-scoped: X-Tenant-Id forjado 401, X-Actor-Id forjado 401, tenantId query param 401, recurso desconhecido 401).
 - CI run aguardando no SHA exato 678cc1a.
 - V99: verifica RLS no nivel HTTP: cabecalhos forjados retornam 401 (nao expõem dados), query param tenantId ignorado, recurso tenant-scoped desconhecido retorna 401. Estende V68/V83 (RLS persistence).
@@ -36,7 +43,7 @@ PONTO VALIDADO
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
 ANTES DE QUALQUER ALTERACAO
-Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V93_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V104_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
 V94 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas (incluindo WhatsApp Cloud API) e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Ligar probes de orquestrador a /health/live e /health/ready e decisao de deploy. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel; ITenantNoteStore e apenas exemplo e nao e funcionalidade de produto.
