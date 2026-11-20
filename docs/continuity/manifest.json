@@ -1,19 +1,19 @@
 {
-    "backup_version": "v98-distributed-rate-limiting-authenticated-endpoints",
+    "backup_version": "v99-rls-validation-tenant-scoped-queries",
     "updated_at": "2026-11-20",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V98_2026-11-20.md",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V99_2026-11-20.md",
     "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V92_2026-11-20.md",
     "latest_implementation_commit": "98d8fc47009e67dfd691180261344ce260d41b9c",
-    "latest_documentation_parent_commit": "ef06657",
+    "latest_documentation_parent_commit": "678cc1a",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
         "run": "pending",
         "run_number": "pending",
         "attempt": 1,
         "status": "pending",
-        "validated_head_sha": "ef06657",
+        "validated_head_sha": "678cc1a",
         "job": "Build and verify tenant isolation",
         "job_status": "pending",
         "portal_browser_tests": "8 passed",
@@ -930,8 +930,8 @@
     "v98": {
         "implementation_commit": "ef06657",
         "approval": "pending_ci",
-        "ci_run": "pending",
-        "ci_run_number": "pending",
+        "ci_run": "44704618851",
+        "ci_run_number": 268,
         "scope": "Distributed rate limiting tests on authenticated endpoints",
         "assertions": [
             "POST /api/v1/auth/login returns 401 with Retry-After header",
@@ -941,6 +941,24 @@
             "Extends V89 middleware isolation tests with endpoint integration",
             "TestServer in-process makes window exhaustion difficult; 429 tested in V89",
             "Retry-After header presence verified on rate-limited responses"
+        ]
+    },
+    "v99": {
+        "implementation_commit": "678cc1a",
+        "approval": "pending_ci",
+        "ci_run": "pending",
+        "ci_run_number": "pending",
+        "scope": "RLS validation tests on tenant-scoped queries",
+        "assertions": [
+            "Forged X-Tenant-Id header returns 401 (does not expose tenant data)",
+            "Forged X-Actor-Id header returns 401 (does not expose tenant data)",
+            "Query parameter tenantId override returns 401 (does not override context)",
+            "Unknown tenant-scoped resource returns 401 (requires auth + valid tenant context)"
+        ],
+        "limits": [
+            "Extends V68/V83 RLS persistence checks with HTTP integration",
+            "Tests verify middleware rejects forged headers/params before RLS evaluation",
+            "Actual cross-tenant RLS enforcement covered by V83/V84 persistence checks"
         ]
     }
 }

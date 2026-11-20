@@ -6,8 +6,11 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V99: commit de teste 678cc1a (validacao RLS em queries tenant-scoped: X-Tenant-Id forjado 401, X-Actor-Id forjado 401, tenantId query param 401, recurso desconhecido 401).
+- CI run aguardando no SHA exato 678cc1a.
+- V99: verifica RLS no nivel HTTP: cabecalhos forjados retornam 401 (nao expõem dados), query param tenantId ignorado, recurso tenant-scoped desconhecido retorna 401. Estende V68/V83 (RLS persistence).
 - V98: commit de teste ef06657 (rate limiting distribuido em endpoints autenticados: POST /api/v1/auth/login 401 com Retry-After).
-- CI run aguardando no SHA exato ef06657.
+- CI run 268 / 44704618851: em andamento no SHA exato ef06657.
 - V98: verifica middleware de rate limiting integrado ao pipeline de auth em endpoint real; Retry-After presente em 401. Estende V89 (middleware isolado).
 - V97: commit de teste fe54464 (cabecalhos de seguranca baselines em endpoints autenticados 401/400/404: todos os 9 cabecalhos presentes).
 - CI run 267 / 44704618851: em andamento no SHA exato fe54464.
