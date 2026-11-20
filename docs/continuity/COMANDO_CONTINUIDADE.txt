@@ -6,51 +6,26 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
-- V105: testes de integracao HTTP para V104 tenant-scoped administrative endpoints (A1, A4, A5). Cobertura completa: Owner (any non-Owner), Manager (Receptionist/Professional only), self-target protection, cross-tenant isolation (404), last-Owner protection, unauthenticated (401), antiforgery (400), invalid GUID (400), inactive target (404), auditoria transacional verificada (tenant_membership.role_changed/deactivated/activated exatamente uma vez por operacao), rate limiting authenticated-api (120 req/min/user). Build Release: 0 avisos/erros, diff --check limpo.
+- V106: migration 022_enforce_last_owner_protection.sql com triggers de constraiao de nível de banco para proteger o ultimo Owner ativo com MFA. Triggers: tr_tenant_users_last_owner_lock, tr_tenants_last_owner_lock, ct_tenant_users_active_mfa_owner, ct_tenants_active_mfa_owner, tr_identity_mfa_last_owner_lock, ct_identity_mfa_active_owner. Usa advisory locks para serializacao e funcoes SECURITY DEFINER para comportamento fail-closed. CI workflow atualizado para executar a migracao. Testes existentes em Atendee.Identity.Checks verificam a restricao (rejeita desativar MFA, mudanca de papel, desativacao, remocao do ultimo Owner). Build Release: 0 avisos/erros, diff --check limpo.
+- V105: testes de integracao HTTP para V104 tenant-scoped administrative endpoints (A1, A4, A5). Cobertura completa: Owner (any non-Owner), Manager (Receptionist/Professional only), self-target protection, cross-tenant isolation (404), last-Owner protection, unauthenticated (401), antiforgery (400), invalid GUID (400), inactive target (404), auditoria transacional verificada (tenant_membership.role_changed/deactivated/activated exatamente uma vez por operacao), rate limiting authenticated-api (120 req/min/user).
 - V104: commit de implementacao cdc6fc5 (endpoints tenant-scoped A1/A4/A5: GET /api/v1/tenant/members/{id}, PUT /role, POST /deactivate, POST /reactivate). Authorization Owner (any non-Owner), Manager (Receptionist/Professional only). Transactional audit, rate limit 120 req/min/user.
 - V104 fix: commit 6be7764 (added tenant_membership event types to PostgresSecurityAuditWriter.AllowedEventTypes to allow audit writes from new endpoints).
-- CI run 279 / 44809836139: falhou no step "Run EF Core and PostgreSQL RLS integration checks" (flakiness de infraestrutura PostgreSQL, nao logica V104 - mesmo step falhou no commit original cdc6fc5 run 277).
-- CI run 280 / 44810648547: falhou no mesmo step (flakiness de infraestrutura).
-- CI run 282 / 44820150539: falhou no mesmo step no SHA ae630cb (V105 docs commit). O step V105 HTTP tests foi pulado devido a falha anterior. Mesmo padrao de flakiness de infraestrutura PostgreSQL desde V92.
-- V104: estende IOperationalAccountSecurityService com ChangeRoleAsync, DeactivateMembershipAsync, ReactivateMembershipAsync. Mesma transacao para mudanca de dado e auditoria (tenant_membership.role_changed/deactivated/activated). Sem migracao, schema, provider, credencial ou configuracao de producao alterados.
 - V103: commit de implementacao cc36137 (Platform Admin cross-tenant: global realm, step-up MFA, four-eyes para tenant.delete/suspend/unsuspend, platform_admin.create/delete, global.config.change, self/last-Owner/PlatformAdmin protection, audit log querying). Opt-in via PlatformAdmin config. Rate limit 30 req/min/IP.
 - V102: commit de implementacao b86112f (Data Protection key rotation com old-key compatibility). Opt-in.
 - V101: commit de implementacao c2c7df3 (Outbox dispatcher com RabbitMQ). Opt-in.
 - V100: commit de implementacao 5e4fa61 (Appointment rescheduling & cancellation com default policy). Opt-in.
-- V99: commit de teste 678cc1a (validacao RLS em queries tenant-scoped: X-Tenant-Id forjado 401, X-Actor-Id forjado 401, tenantId query param 401, recurso desconhecido 401).
-- CI run aguardando no SHA exato 678cc1a.
-- V99: verifica RLS no nivel HTTP: cabecalhos forjados retornam 401 (nao expõem dados), query param tenantId ignorado, recurso tenant-scoped desconhecido retorna 401. Estende V68/V83 (RLS persistence).
-- V98: commit de teste ef06657 (rate limiting distribuido em endpoints autenticados: POST /api/v1/auth/login 401 com Retry-After).
-- CI run 268 / 44704618851: em andamento no SHA exato ef06657.
-- V98: verifica middleware de rate limiting integrado ao pipeline de auth em endpoint real; Retry-After presente em 401. Estende V89 (middleware isolado).
-- V97: commit de teste fe54464 (cabecalhos de seguranca baselines em endpoints autenticados 401/400/404: todos os 9 cabecalhos presentes).
-- CI run 267 / 44704618851: em andamento no SHA exato fe54464.
-- V97: testa 9 cabecalhos (CSP, CORP, COOP, X-Permitted-Cross-Domain-Policies, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, Cache-Control: no-store) em 401 /api/v1/tenant, 400 antiforgery /api/v1/customers, 404 rota desconhecida. Estende V91 (so health/unknown).
-- V96: commit de teste eb83b56 (validacao antiforgery em endpoints autenticados: token ausente 400, valido 401 auth, invalido 400, replay 400, GET safe 401).
-- CI run 266 / 44704618851: em andamento no SHA exato eb83b56.
-- V96: testes HTTP verificam antiforgery em endpoints reais (/api/v1/customers, /api/v1/tenant): sem token 400, token valido 401 (precisa auth), token invalido 400, replay 400, GET sem token 401 (safe method).
-- V95: commit de teste b2cadba (verificacao de limites Kestrel configurados: MaxRequestBodySize 1 MiB, MaxRequestHeadersTotalSize 32 KiB, MaxRequestHeaderCount 100, MaxRequestLineSize 8 KiB, RequestHeadersTimeout 15s).
-- CI run 263 / 44703378166: falha no SHA exato b2cadbad845a9a7dfd8633a0c2752dd4636e1195 (flakiness de infraestrutura PostgreSQL, nao logica V95).
-- V95: testes HTTP verificam que limites Kestrel configurados via ApiRequestLimits.Apply() correspondem as constantes declaradas; TestServer nao aplica no socket, Kestrel real aplica via Apply() no startup.
-- V94: commit de implementacao a26d5de6f83922443db84d64ee269b390cd9a4c4 (limite de corpo de resposta de 1 MiB, HTTP 500 se excedido, apos roteamento/autenticacao; simetrico ao V92).
-- CI run 261 / 44702089747: falha no SHA exato (flakiness de infraestrutura PostgreSQL, nao logica V94).
-- V94: ResponseBodySizeLimitMiddleware envolve o stream de resposta, conta bytes escritos, falha com HTTP 500 + Connection: close se exceder 1 MiB; testes HTTP verificam middleware no pipeline e todos cabecalhos de seguranca basicos em 404.
-- V93: commit de teste e1fec9ade0b97652d94e3a9e7bb20cd56c7106ce (teste abrangente de limite de corpo de requisicao em rotas desconhecidas com cabecalhos de seguranca).
-- CI run 259 / 44671789665: falha (flakiness de infraestrutura, nao logica V93).
-- V93: teste HTTP verifica limite de 1 MiB (HTTP 413) em rotas desconhecidas com todos os cabecalhos de seguranca basicos; corpo exatamente no limite e aceito; health endpoints sao GET-only em producao, TestServer roteia POST para 404 antes do middleware de pre-roteamento.
-- V92: commit de implementacao 98d8fc47009e67dfd691180261344ce260d41b9c.
-- CI run 255 / 44667879306: sucesso no mesmo SHA (todos os passos do job com sucesso).
-- V92: limite de corpo de requisicao de 1 MiB (HTTP 413 antes de roteamento/autenticacao/antiforgery; Kestrel MaxRequestBodySize), cabecalhos ate 32 KiB/100 itens, linha de requisicao 8 KiB e timeout de cabecalhos de 15 s; novo teste cobre limites configurados, 413 acima do limite e corpo exatamente no limite.
+- V99: commit de teste 678cc1a (validacao RLS em queries tenant-scoped: X-Tenant-Id forjado 401, X-Actor-Id forjado 401, tenantId query param 401, recurso desconhecido 401). CI run 255 / 44667879306: sucesso no SHA 98d8fc4.
+- V92: commit de implementacao 98d8fc47009e67dfd691180261344ce260d41b9c. CI run 255 / 44667879306: sucesso.
 - V91 (run 253 / 44665423258, SHA d495c65): todas as respostas da API enviam Content-Security-Policy (default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'), Cross-Origin-Resource-Policy same-origin, Cross-Origin-Opener-Policy same-origin e X-Permitted-Cross-Domain-Policies none, alem dos cabecalhos anteriores; novo teste cobre /health/live, /health/ready e rota 404.
-- Build Release: zero avisos e zero erros localmente e no CI.
+- Build Release anterior: zero avisos e zero erros localmente e no CI (V92 run 255).
 - V90 (GET /health/ready) validado na run 251 / 44663263477, SHA 399ead5. V89 (rate limiting distribuido, migracao 021) na run 248 / 44660361862, SHA 90a5bc6.
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
 ANTES DE QUALQUER ALTERACAO
-Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V104_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V106_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
-V94 nao deve inventar regras: rescheduling/cancelamento de agendamentos depende de decisao explicita do proprietario do produto. Outbox dispatcher depende de handlers reais, idempotencia, retry/backoff, dead-letter, observabilidade e aprovacao de provider/credenciais/custos. Data Protection key rotation, Platform Admin, integracoes externas (incluindo WhatsApp Cloud API) e deploy de producao continuam bloqueados ate as aprovacoes necessarias. Ligar probes de orquestrador a /health/live e /health/ready e decisao de deploy. Se nenhuma decisao pendente for necessaria, escolha apenas um incremento backend autonomo, seguro e testavel; ITenantNoteStore e apenas exemplo e nao e funcionalidade de produto.
+V105 CI run 282 falhou com flakiness de infraestrutura PostgreSQL (nao logica V105). O proximo incremento deve escolher uma operacao backend autonoma, segura e testavel. ITenantNoteStore continua sendo apenas exemplo e nao e funcionalidade de produto. As decisoes pendentes que requerem aprovacao proprietaria permanecem: politica de rescheduling/cancelamento de agendamentos, outbox dispatcher com handlers reais/idempotentes/retry/dead-letter/observabilidade, Data Protection key rotation com plano coordinado, Platform Admin e acoes A1/A2 cross-tenant, integracoes externas (incluindo WhatsApp Cloud API), revisao de seguranca independente, validacao de backup/restore, configuracao de proxy confiavel, ligacao de probes de orquestrador a /health/live e /health/ready, e decisao de deploy.
 
 REGRAS PERMANENTES
 1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.
