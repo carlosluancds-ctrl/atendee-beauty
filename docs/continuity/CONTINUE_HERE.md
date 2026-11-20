@@ -1,22 +1,29 @@
 # CONTINUE HERE - Atendee Beauty
 
-Read CLAUDE.md and the highest-numbered continuity status before editing.
+Read CLAUDE.md and this file before editing. Then read the highest-numbered continuation status.
 
 - Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
 - Working branch: security/csrf-webhook-antiforgery-v23; never modify main.
-- Latest approved checkpoint: docs/continuity/CONTINUATION_STATUS_V87_2026-11-19.md.
-- Latest fully validated implementation head: 8e0b70e66bf59833a7474fd6f9a8ef7b0476afee.
-- Latest full CI: run 44638633076 (run 234), success on that exact head. Frontend audit/tests/build passed; portal browser E2E 8/8; locked restore and Release build passed; domain checks 69/69; PostgreSQL 18.7/EF Core/RLS checks 32/32; Identity/TOTP checks 49/49; HTTP availability/authentication/session/security checks passed; real Kestrel + disposable PostgreSQL full-stack browser E2E 1/1. Credentials cleared and disposable PostgreSQL removed.
-- V87 implementation commit: 2833e52aeddb063bfb85e16ead1c8f89fbb257ab; test correction commit: 8e0b70e66bf59833a7474fd6f9a8ef7b0476afee.
-- V86 CI remains approved at run 44633827726; V85 remains approved at run 44595166252. Historical checkpoints V23-V86 are preserved unchanged.
-- V87 API: GET /api/v1/availability?from=YYYY-MM-DD&to=YYYY-MM-DD&serviceId={id}&professionalId={optional}. Date range is inclusive and limited to 31 local calendar days. Returns UTC earliest/latest service-start windows at one-minute precision.
-- V87 combines tenant business hours, professional recurring weekly availability, date-specific full/partial time off, active service assignment, service duration and buffers. DST gaps are skipped naturally; both ambiguous wall-time occurrences remain distinct UTC instants. Owner/Manager/Receptionist can read team availability; Professional can read own only.
-- V87 does not yet subtract existing appointments. Do not claim an open window is reservable until V88 booking persistence and PostgreSQL overlap enforcement are implemented.
-- Next: V88 transactional appointment creation and reads, immutable service/price/duration/buffer/customer/professional snapshots, idempotency key + request hash, PostgreSQL advisory lock and deferred overlap constraint, append-only appointment events and transactional outbox. Then appointment lifecycle, check-in, in-service, completion, no-show, cancellation and atomic rescheduling. Availability must then subtract active appointments.
-- Later: internal conversations/handoff and durable outbox worker. Keep email, WhatsApp, AI provider, billing/payment, Platform Admin and legal retention decisions blocked until their required product, credential, cost or approval decisions are made.
-- Workspace: use the clean clone C:\Users\iaras\Downloads\atendee-beauty-v85-work. The older C:\Users\iaras\Downloads\atendee-beauty-git clone has invalid Git metadata and all files appeared untracked; it was left untouched for recovery. Recheck status before editing.
-- Do not deploy, configure SES/email or WhatsApp, activate billing/trial/payment providers, change production data/configuration or modify main.
-- Preserve authentication-before-antiforgery ordering, fresh tokens after login/MFA/logout, first-Owner provisioning, tenant isolation, RLS, transaction runner, audit-before-commit/cookie ordering, per-identity row locking and independent TOTP replay guard.
-- Keep A1/A2 administrative endpoints blocked pending explicit owner approval of actor/tenant/role scope, self/last-Owner rules, Platform Admin realm, step-up MFA/four-eyes and tenant-scoped audit requirements.
+- Latest validated implementation head: e7efdc40bc2d6c2e88dbb2e182add2379eeea370.
+- Latest full CI: run 237 (44646121213), success on that exact head. Frontend audit/tests/build, portal browser E2E 8/8, Release build zero warnings/errors, domain 79/79, PostgreSQL 18.7 / EF Core / RLS 43/43, Identity/TOTP 49/49, HTTP security and appointment integration, real Kestrel + disposable PostgreSQL full-stack browser E2E 1/1. Credentials cleared and disposable PostgreSQL removed.
+- V88 adds tenant appointments, immutable booking snapshots, idempotency, transactional audit/events/outbox, PostgreSQL overlap prevention, legal lifecycle transitions and tenant-scoped appointment reads.
+- Authoritative availability now subtracts blocking appointment occupancy and buffers. Completed, cancelled and no-show appointments no longer block.
+- V87 availability is validated on run 234 (44638633076). V86 and V85 historical validated checkpoints remain preserved.
+- Read docs/continuity/CONTINUATION_STATUS_V88_2026-11-19.md for full V88 scope and CI evidence.
 
----
+## Next backend increments
+
+1. V89: implement shared/distributed authentication rate limiting with an atomic backend and multi-instance concurrency tests. Do not assume a production Redis/managed-service topology; fail closed safely if the shared limiter is unavailable.
+2. Dedicated appointment rescheduling is not implemented. Before exposing it, define the replacement/history semantics and customer-facing cancellation policy with the product owner; do not invent policy.
+3. Build a durable outbox dispatcher only together with real message handlers, retry/backoff, poison-message/dead-letter handling, observability and idempotent delivery. External providers remain blocked until credentials, cost and product choices are approved.
+4. Data Protection certificate rotation remains blocked until old-key decryption compatibility and a coordinated rotation plan are available. Do not change production keys or paths.
+5. Production readiness requires independent security review, backup/restore validation, trusted proxy configuration and deployment-specific secret/key management.
+6. Platform Admin and A1/A2 cross-tenant administration remain blocked pending explicit approval of realm, actor/scope, step-up MFA/four-eyes, self/last-Owner and audit requirements.
+
+## Guardrails
+
+- No deploy, no production data/configuration changes, no main changes.
+- Do not enable public signup or configure email/WhatsApp/AI/billing/trial/payment providers without the required product, credential and cost decisions.
+- Preserve authentication-before-antiforgery ordering, fresh tokens after login/MFA/logout, tenant isolation, RLS, transaction runner, mandatory audit, per-identity row locking and TOTP replay protections.
+- Active worktree: C:\Users\iaras\Downloads\atendee-beauty-v85-work.
+- Preserve the older invalid clone C:\Users\iaras\Downloads\atendee-beauty-git untouched.
