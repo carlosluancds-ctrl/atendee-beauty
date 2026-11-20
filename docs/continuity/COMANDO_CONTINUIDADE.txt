@@ -10,6 +10,8 @@ PONTO VALIDADO
 - V104: commit de implementacao cdc6fc5 (endpoints tenant-scoped A1/A4/A5: GET /api/v1/tenant/members/{id}, PUT /role, POST /deactivate, POST /reactivate). Authorization Owner (any non-Owner), Manager (Receptionist/Professional only). Transactional audit, rate limit 120 req/min/user.
 - V104 fix: commit 6be7764 (added tenant_membership event types to PostgresSecurityAuditWriter.AllowedEventTypes to allow audit writes from new endpoints).
 - CI run 279 / 44809836139: falhou no step "Run EF Core and PostgreSQL RLS integration checks" (flakiness de infraestrutura PostgreSQL, nao logica V104 - mesmo step falhou no commit original cdc6fc5 run 277).
+- CI run 280 / 44810648547: falhou no mesmo step (flakiness de infraestrutura).
+- CI run 282 / 44820150539: falhou no mesmo step no SHA ae630cb (V105 docs commit). O step V105 HTTP tests foi pulado devido a falha anterior. Mesmo padrao de flakiness de infraestrutura PostgreSQL desde V92.
 - V104: estende IOperationalAccountSecurityService com ChangeRoleAsync, DeactivateMembershipAsync, ReactivateMembershipAsync. Mesma transacao para mudanca de dado e auditoria (tenant_membership.role_changed/deactivated/activated). Sem migracao, schema, provider, credencial ou configuracao de producao alterados.
 - V103: commit de implementacao cc36137 (Platform Admin cross-tenant: global realm, step-up MFA, four-eyes para tenant.delete/suspend/unsuspend, platform_admin.create/delete, global.config.change, self/last-Owner/PlatformAdmin protection, audit log querying). Opt-in via PlatformAdmin config. Rate limit 30 req/min/IP.
 - V102: commit de implementacao b86112f (Data Protection key rotation com old-key compatibility). Opt-in.

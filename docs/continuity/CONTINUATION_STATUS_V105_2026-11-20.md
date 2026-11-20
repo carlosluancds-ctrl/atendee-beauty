@@ -8,6 +8,7 @@ Branch: security/csrf-webhook-antiforgery-v23
 
 - V104 HTTP integration tests added to `tests/Atendee.Api.HttpChecks/Program.cs`
 - Local validation: `git diff --check` clean and Release build of Atendee.Api and Atendee.Api.HttpChecks with 0 warnings and 0 errors.
+- CI run 282 (44820150539) on SHA ae630cb: failed at "Run EF Core and PostgreSQL RLS integration checks" step (infrastructure flakiness, not logic - same step failed on original V104 head cdc6fc5 at run 277, and on V104 doc commits at runs 279 and 280). The V105 HTTP test step was skipped due to the prior failure. This is the same infrastructure flakiness pattern observed since V92.
 
 ## Delivered
 
