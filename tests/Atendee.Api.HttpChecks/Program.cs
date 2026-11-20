@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Atendee.Application.Abstractions;
+using Atendee.Api.Authentication;
 using Atendee.Domain.Tenants;
 using Atendee.Infrastructure.Identity;
 using Atendee.Infrastructure.Web;
@@ -51,7 +52,7 @@ Environment.SetEnvironmentVariable("ConnectionStrings__Identity", identityConnec
 Environment.SetEnvironmentVariable("ConnectionStrings__Tenant", tenantConnectionString);
 Environment.SetEnvironmentVariable("DataProtection__KeyRingPath", keyRing);
 
-var factory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+var factory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
 {
     web.UseContentRoot(apiContentRoot);
     web.UseEnvironment("Development");
@@ -96,7 +97,7 @@ try
         Environment.SetEnvironmentVariable("DataProtection__CertificatePassword", certificatePassword);
 
         string protectedPayload;
-        using (var certificateFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+        using (var certificateFactory = CreateIsolatedRateLimitFactory()
             .WithWebHostBuilder(web =>
             {
                 web.UseContentRoot(apiContentRoot);
@@ -114,7 +115,7 @@ try
                File.ReadAllText(keyFiles[0]).Contains("encryptedSecret", StringComparison.OrdinalIgnoreCase),
             "Production Data Protection persists certificate-encrypted keys instead of plaintext key material.");
 
-        using (var restartedCertificateFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+        using (var restartedCertificateFactory = CreateIsolatedRateLimitFactory()
             .WithWebHostBuilder(web =>
             {
                 web.UseContentRoot(apiContentRoot);
@@ -130,7 +131,7 @@ try
 
         Environment.SetEnvironmentVariable("DataProtection__CertificatePassword", "incorrect-password");
         var invalidCertificateRejected = false;
-        using (var invalidCertificateFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+        using (var invalidCertificateFactory = CreateIsolatedRateLimitFactory()
             .WithWebHostBuilder(web =>
             {
                 web.UseContentRoot(apiContentRoot);
@@ -156,7 +157,7 @@ try
             Environment.SetEnvironmentVariable("DataProtection__CertificatePath", null);
             Environment.SetEnvironmentVariable("DataProtection__CertificatePassword", null);
             var missingCertificateRejected = false;
-            using var missingCertificateFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+            using var missingCertificateFactory = CreateIsolatedRateLimitFactory()
                 .WithWebHostBuilder(web =>
                 {
                     web.UseContentRoot(apiContentRoot);
@@ -236,7 +237,7 @@ try
             // through the environment provider so the application sees it early.
             Environment.SetEnvironmentVariable(
                 trustedProxyEnvironmentKey, trustedProxyAddressCase.ConfiguredAddress);
-            using var trustedProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+            using var trustedProxyFactory = CreateIsolatedRateLimitFactory()
                 .WithWebHostBuilder(web =>
                 {
                     web.UseContentRoot(apiContentRoot);
@@ -306,7 +307,7 @@ try
         {
             Environment.SetEnvironmentVariable(
                 trustedProxyEnvironmentKey, invalidProxyAddress);
-            using var invalidProxyFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>()
+            using var invalidProxyFactory = CreateIsolatedRateLimitFactory()
                 .WithWebHostBuilder(web =>
                 {
                     web.UseContentRoot(apiContentRoot);
@@ -341,7 +342,214 @@ try
             $"Invalid trusted-proxy address '{invalidProxyAddress}' fails application startup closed.");
     }
 
-    using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+    // V89: two independent limiter instances share one atomic PostgreSQL counter.
+    var partitionKeySecret = Convert.FromBase64String(
+        Required("AuthenticationRateLimiting__PartitionKeySecret"));
+    await using var limiterDataSourceA = NpgsqlDataSource.Create(identityConnectionString);
+    await using var limiterDataSourceB = NpgsqlDataSource.Create(identityConnectionString);
+    using var rateLimitLoggerFactory = LoggerFactory.Create(_ => { });
+    var limiterA = new PostgresDistributedAuthenticationRateLimiter(
+        limiterDataSourceA,
+        partitionKeySecret,
+        rateLimitLoggerFactory.CreateLogger<PostgresDistributedAuthenticationRateLimiter>());
+    var limiterB = new PostgresDistributedAuthenticationRateLimiter(
+        limiterDataSourceB,
+        partitionKeySecret,
+        rateLimitLoggerFactory.CreateLogger<PostgresDistributedAuthenticationRateLimiter>());
+    var limiterPolicy = "v89-concurrency-" + Guid.NewGuid().ToString("N");
+    var limiterIp = IPAddress.Parse("198.51.100.42");
+    var limiterNow = DateTimeOffset.UtcNow;
+    const int distributedPermitLimit = 7;
+    var concurrentAcquisitions = await Task.WhenAll(
+        Enumerable.Range(0, 40).Select(index =>
+            (index % 2 == 0 ? limiterA : limiterB).TryAcquireAsync(
+                limiterPolicy,
+                limiterIp,
+                distributedPermitLimit,
+                TimeSpan.FromMinutes(1),
+                limiterNow)));
+    Ensure(concurrentAcquisitions.All(result => result.IsAvailable) &&
+           concurrentAcquisitions.Count(result => result.IsAllowed) == distributedPermitLimit &&
+           concurrentAcquisitions.Count(result => !result.IsAllowed) == 33,
+        "Two independent API limiter instances share an atomic PostgreSQL fixed-window counter without lost increments or excess permits.");
+
+    var limiterWindowTicks = TimeSpan.FromMinutes(1).Ticks;
+    var limiterWindowStart = new DateTimeOffset(
+        limiterNow.UtcDateTime.Ticks / limiterWindowTicks * limiterWindowTicks,
+        TimeSpan.Zero);
+    await using (var hashConnection = await limiterDataSourceA.OpenConnectionAsync())
+    await using (var hashCommand = new NpgsqlCommand(
+        """
+        SELECT "PartitionHash", "RequestCount"
+          FROM identity."AuthenticationRateLimitBuckets"
+         WHERE "Policy" = @policy
+           AND "WindowStartedAtUtc" = @windowStart
+        """,
+        hashConnection))
+    {
+        hashCommand.Parameters.AddWithValue("policy", limiterPolicy);
+        hashCommand.Parameters.AddWithValue("windowStart", limiterWindowStart);
+        await using var hashReader = await hashCommand.ExecuteReaderAsync();
+        Ensure(await hashReader.ReadAsync(), "The concurrent rate-limit bucket is persisted.");
+        var storedPartitionHash = hashReader.GetFieldValue<byte[]>(0);
+        var persistedRequestCount = hashReader.GetInt64(1);
+        Ensure(storedPartitionHash.Length == 32 && persistedRequestCount == 40 &&
+               !storedPartitionHash.SequenceEqual(limiterIp.GetAddressBytes()),
+            "The rate-limit table stores a 32-byte keyed IP digest, never the raw client IP address.");
+    }
+
+    var secondClientPartition = await limiterB.TryAcquireAsync(
+        limiterPolicy,
+        IPAddress.Parse("198.51.100.43"),
+        distributedPermitLimit,
+        TimeSpan.FromMinutes(1),
+        limiterNow);
+    Ensure(secondClientPartition.IsAvailable && secondClientPartition.IsAllowed,
+        "Different client IP addresses receive independent keyed rate-limit partitions.");
+
+    var nextWindowPartition = await limiterB.TryAcquireAsync(
+        limiterPolicy,
+        limiterIp,
+        distributedPermitLimit,
+        TimeSpan.FromMinutes(1),
+        limiterNow.AddMinutes(1));
+    Ensure(nextWindowPartition.IsAvailable && nextWindowPartition.IsAllowed,
+        "A new UTC fixed window starts with a fresh shared counter.");
+
+    var mappedIpPolicy = "v89-mapped-ip-" + Guid.NewGuid().ToString("N");
+    var mappedIpv4Decision = await limiterA.TryAcquireAsync(
+        mappedIpPolicy, IPAddress.Parse("198.51.100.44"), 1, TimeSpan.FromMinutes(1), limiterNow);
+    var mappedIpv6Decision = await limiterB.TryAcquireAsync(
+        mappedIpPolicy, IPAddress.Parse("::ffff:198.51.100.44"), 1, TimeSpan.FromMinutes(1), limiterNow);
+    Ensure(mappedIpv4Decision.IsAllowed && !mappedIpv6Decision.IsAllowed,
+        "IPv4-mapped IPv6 addresses normalize to the same rate-limit partition as their IPv4 address.");
+
+    await using (var privacyConnection = await limiterDataSourceA.OpenConnectionAsync())
+    await using (var privacyCommand = new NpgsqlCommand(
+        """
+        SELECT count(*)
+          FROM information_schema.columns
+         WHERE table_schema = 'identity'
+           AND table_name = 'AuthenticationRateLimitBuckets'
+           AND column_name IN ('IpAddress', 'ClientIp', 'RemoteIpAddress')
+        """,
+        privacyConnection))
+    {
+        Ensure(Convert.ToInt32(await privacyCommand.ExecuteScalarAsync()) == 0,
+            "The shared rate-limit schema contains no plaintext IP address column.");
+    }
+
+    var stalePolicy = "v89-stale-" + Guid.NewGuid().ToString("N");
+    await using (var staleInsertConnection = await limiterDataSourceA.OpenConnectionAsync())
+    await using (var staleInsert = new NpgsqlCommand(
+        """
+        INSERT INTO identity."AuthenticationRateLimitBuckets"
+            ("Policy", "PartitionHash", "WindowStartedAtUtc", "RequestCount", "ExpiresAtUtc")
+        VALUES (@policy, @hash, @windowStart, 1, @expiresAt)
+        """,
+        staleInsertConnection))
+    {
+        staleInsert.Parameters.AddWithValue("policy", stalePolicy);
+        staleInsert.Parameters.AddWithValue("hash", RandomNumberGenerator.GetBytes(32));
+        staleInsert.Parameters.AddWithValue("windowStart", limiterNow.AddMinutes(-20));
+        staleInsert.Parameters.AddWithValue("expiresAt", limiterNow.AddMinutes(-10));
+        await staleInsert.ExecuteNonQueryAsync();
+    }
+
+    var cleanupResult = await limiterA.TryAcquireAsync(
+        "v89-cleanup-trigger-" + Guid.NewGuid().ToString("N"),
+        limiterIp,
+        10,
+        TimeSpan.FromMinutes(1),
+        limiterNow);
+    await using (var staleCountConnection = await limiterDataSourceA.OpenConnectionAsync())
+    await using (var staleCount = new NpgsqlCommand(
+        """
+        SELECT count(*)
+          FROM identity."AuthenticationRateLimitBuckets"
+         WHERE "Policy" = @policy
+        """,
+        staleCountConnection))
+    {
+        staleCount.Parameters.AddWithValue("policy", stalePolicy);
+        Ensure(cleanupResult.IsAvailable && Convert.ToInt64(await staleCount.ExecuteScalarAsync()) == 0,
+            "Expired rate-limit buckets are opportunistically purged in bounded batches.");
+    }
+
+    var unavailableConnectionString = new NpgsqlConnectionStringBuilder(identityConnectionString)
+    {
+        Host = "127.0.0.1",
+        Port = 1,
+        Timeout = 1,
+        CommandTimeout = 1,
+        Pooling = false
+    }.ConnectionString;
+    await using var unavailableDataSource = NpgsqlDataSource.Create(unavailableConnectionString);
+    var unavailableLimiter = new PostgresDistributedAuthenticationRateLimiter(
+        unavailableDataSource,
+        partitionKeySecret,
+        rateLimitLoggerFactory.CreateLogger<PostgresDistributedAuthenticationRateLimiter>());
+    var unavailableDecision = await unavailableLimiter.TryAcquireAsync(
+        "v89-backend-outage",
+        limiterIp,
+        5,
+        TimeSpan.FromMinutes(1),
+        limiterNow);
+    Ensure(!unavailableDecision.IsAvailable && !unavailableDecision.IsAllowed,
+        "A PostgreSQL outage produces an unavailable/deny decision rather than a local in-memory fallback.");
+
+    var failClosedContext = new DefaultHttpContext();
+    failClosedContext.Connection.RemoteIpAddress = limiterIp;
+    failClosedContext.SetEndpoint(new Endpoint(
+        _ => Task.CompletedTask,
+        new EndpointMetadataCollection(
+            new DistributedAuthenticationRateLimitMetadata(
+                "v89-backend-outage", 5, TimeSpan.FromMinutes(1))),
+        "V89 fail-closed middleware check"));
+    using var failClosedServices = new ServiceCollection()
+        .AddSingleton<IDistributedAuthenticationRateLimiter>(unavailableLimiter)
+        .BuildServiceProvider();
+    failClosedContext.RequestServices = failClosedServices;
+    var downstreamWasInvoked = false;
+    var failClosedMiddleware = new DistributedAuthenticationRateLimitingMiddleware(
+        _ =>
+        {
+            downstreamWasInvoked = true;
+            return Task.CompletedTask;
+        },
+        rateLimitLoggerFactory.CreateLogger<DistributedAuthenticationRateLimitingMiddleware>());
+    await failClosedMiddleware.InvokeAsync(failClosedContext);
+    Ensure(failClosedContext.Response.StatusCode == StatusCodes.Status503ServiceUnavailable &&
+           failClosedContext.Response.Headers["Retry-After"] == "5" &&
+           !downstreamWasInvoked,
+        "The HTTP middleware returns 503 with Retry-After and never executes protected endpoints when the shared store is unavailable.");
+
+    var limitedContext = new DefaultHttpContext();
+    limitedContext.Connection.RemoteIpAddress = limiterIp;
+    limitedContext.SetEndpoint(new Endpoint(
+        _ => Task.CompletedTask,
+        new EndpointMetadataCollection(
+            new DistributedAuthenticationRateLimitMetadata(
+                limiterPolicy, distributedPermitLimit, TimeSpan.FromMinutes(1))),
+        "V89 exhausted-window middleware check"));
+    using var limitedServices = new ServiceCollection()
+        .AddSingleton<IDistributedAuthenticationRateLimiter>(limiterA)
+        .BuildServiceProvider();
+    limitedContext.RequestServices = limitedServices;
+    var limitedDownstreamWasInvoked = false;
+    var limitedMiddleware = new DistributedAuthenticationRateLimitingMiddleware(
+        _ =>
+        {
+            limitedDownstreamWasInvoked = true;
+            return Task.CompletedTask;
+        },
+        rateLimitLoggerFactory.CreateLogger<DistributedAuthenticationRateLimitingMiddleware>());
+    await limitedMiddleware.InvokeAsync(limitedContext);
+    Ensure(limitedContext.Response.StatusCode == StatusCodes.Status429TooManyRequests &&
+           !string.IsNullOrWhiteSpace(limitedContext.Response.Headers["Retry-After"]) &&
+           !limitedDownstreamWasInvoked,
+        "An exhausted distributed window returns HTTP 429 with Retry-After before invoking the protected endpoint.");
+using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
     {
         BaseAddress = new Uri("https://localhost"),
         HandleCookies = true,
@@ -833,7 +1041,7 @@ try
     // per-IP login limiter starts with an isolated budget.
     mfaKeyRing = Path.Combine(Path.GetTempPath(), "atendee-mfa-http-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(mfaKeyRing);
-    mfaFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    mfaFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
         web.UseEnvironment("Development");
@@ -2099,7 +2307,7 @@ try
     // Isolate role-promotion login attempts from the earlier MFA and professional clients.
     promotionKeyRing = Path.Combine(Path.GetTempPath(), "atendee-promotion-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(promotionKeyRing);
-    promotionFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    promotionFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
         web.UseEnvironment("Development");
@@ -2174,7 +2382,7 @@ try
     // consumed by the preceding account/MFA scenarios.
     roleMatrixKeyRing = Path.Combine(Path.GetTempPath(), "atendee-role-matrix-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(roleMatrixKeyRing);
-    roleMatrixFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    roleMatrixFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
         web.UseEnvironment("Development");
@@ -2490,7 +2698,7 @@ try
     var sequentialMaxAttempts = 0;
     sequentialLockoutKeyRing = Path.Combine(Path.GetTempPath(), "atendee-sequential-lockout-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(sequentialLockoutKeyRing);
-    using var sequentialLockoutFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    using var sequentialLockoutFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
         web.UseEnvironment("Development");
@@ -2558,7 +2766,7 @@ try
     Guid lockoutUserId;
     lockoutKeyRing = Path.Combine(Path.GetTempPath(), "atendee-lockout-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(lockoutKeyRing);
-    using var lockoutFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    using var lockoutFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
         web.UseEnvironment("Development");
@@ -2669,7 +2877,7 @@ try
     Guid enrollmentCrossFlowUserId;
     crossFlowKeyRing = Path.Combine(Path.GetTempPath(), "atendee-crossflow-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(crossFlowKeyRing);
-    using var crossFlowFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    using var crossFlowFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
         web.UseEnvironment("Development");
@@ -2885,7 +3093,7 @@ try
     Guid disabledSetupUserId;
     revocationKeyRing = Path.Combine(Path.GetTempPath(), "atendee-revocation-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(revocationKeyRing);
-    using var revocationFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    using var revocationFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
         web.UseEnvironment("Development");
@@ -3083,7 +3291,7 @@ try
     Guid revokeAuditFailureUserId;
     Guid disableResultFailureUserId;
     Guid revokeResultFailureUserId;
-    using var raceFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    using var raceFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
         web.UseEnvironment("Development");
@@ -3670,7 +3878,7 @@ try
     // logins their own per-IP login budget (4 of 5 permits are used here).
     statusKeyRing = Path.Combine(Path.GetTempPath(), "atendee-status-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(statusKeyRing);
-    statusFactory = new WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>().WithWebHostBuilder(web =>
+    statusFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
         web.UseEnvironment("Development");
@@ -3842,6 +4050,9 @@ static string FindRepositoryRoot(string startPath)
         ?? throw new DirectoryNotFoundException("Could not locate Atendee.sln from " + startPath);
 }
 
+
+static WebApplicationFactory<Atendee.Api.ApiAssemblyMarker> CreateIsolatedRateLimitFactory() =>
+    new IsolatedRateLimitWebApplicationFactory();
 static string Required(string name)
     => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value
         ? value
@@ -4748,5 +4959,19 @@ internal sealed class FailureInjectingOperationalIdentityUserStore(
         }
 
         return base.UpdateAsync(user, cancellationToken);
+    }
+}
+
+internal sealed class IsolatedRateLimitWebApplicationFactory
+    : WebApplicationFactory<Atendee.Api.ApiAssemblyMarker>
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        var isolatedTestSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        builder.ConfigureAppConfiguration((_, configuration) =>
+            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AuthenticationRateLimiting:PartitionKeySecret"] = isolatedTestSecret
+            }));
     }
 }

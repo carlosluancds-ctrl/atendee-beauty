@@ -93,52 +93,7 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
-
-    options.AddPolicy("auth-antiforgery", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 30,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            }));
-
-    options.AddPolicy("auth-login", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 5,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            }));
-
-    options.AddPolicy("auth-activation", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 5,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            }));
-
-    options.AddPolicy("auth-mfa", context =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            }));
 });
-
 var identityConnectionString = builder.Configuration.GetConnectionString("Identity");
 var tenantConnectionString = builder.Configuration.GetConnectionString("Tenant");
 var identityEnabled = !string.IsNullOrWhiteSpace(identityConnectionString) &&
@@ -160,6 +115,26 @@ if (!identityEnabled && !builder.Environment.IsDevelopment())
 
 if (identityEnabled)
 {
+    var partitionKeySecretSetting = builder.Configuration["AuthenticationRateLimiting:PartitionKeySecret"];
+    byte[] authenticationRateLimitPartitionSecret;
+    try
+    {
+        authenticationRateLimitPartitionSecret = Convert.FromBase64String(
+            partitionKeySecretSetting ?? string.Empty);
+    }
+    catch (FormatException exception)
+    {
+        throw new InvalidOperationException(
+            "AuthenticationRateLimiting:PartitionKeySecret must be a base64-encoded secret containing at least 32 bytes.",
+            exception);
+    }
+
+    if (authenticationRateLimitPartitionSecret.Length < 32)
+    {
+        throw new InvalidOperationException(
+            "AuthenticationRateLimiting:PartitionKeySecret must be a base64-encoded secret containing at least 32 bytes.");
+    }
+
     var dataProtectionBuilder = builder.Services
         .AddDataProtection()
         .SetApplicationName("AtendeeBeauty");
@@ -237,7 +212,7 @@ if (identityEnabled)
         dataProtectionBuilder.PersistKeysToFileSystem(keyDirectory);
     }
 
-    builder.Services.AddAtendeeIdentity(identityConnectionString!);
+    builder.Services.AddAtendeeIdentity(identityConnectionString!, authenticationRateLimitPartitionSecret);
     builder.Services.AddAtendeePersistence(tenantConnectionString!);
 
     var authentication = builder.Services
@@ -390,6 +365,9 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseExceptionHandler();
+app.UseRouting();
+// Shared auth limits run after trusted proxy resolution/routing and before authentication/antiforgery.
+app.UseMiddleware<DistributedAuthenticationRateLimitingMiddleware>();
 app.UseRateLimiter();
 
 if (identityEnabled)

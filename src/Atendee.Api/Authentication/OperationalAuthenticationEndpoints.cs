@@ -41,19 +41,24 @@ public static class OperationalAuthenticationEndpoints
             var tokens = antiforgery.GetAndStoreTokens(context);
             context.Response.Headers.CacheControl = "no-store";
             return Results.Ok(new AntiforgeryResponse(tokens.RequestToken ?? string.Empty));
-        }).AllowAnonymous().RequireRateLimiting("auth-antiforgery");
+        }).AllowAnonymous()
+            .WithMetadata(new DistributedAuthenticationRateLimitMetadata(
+                "auth-antiforgery", 30, TimeSpan.FromMinutes(1)));
 
         group.MapPost("/login", LoginAsync)
             .AllowAnonymous()
-            .RequireRateLimiting("auth-login");
+            .WithMetadata(new DistributedAuthenticationRateLimitMetadata(
+                "auth-login", 5, TimeSpan.FromMinutes(1)));
 
         group.MapPost("/activate", ActivateAsync)
             .AllowAnonymous()
-            .RequireRateLimiting("auth-activation");
+            .WithMetadata(new DistributedAuthenticationRateLimitMetadata(
+                "auth-activation", 5, TimeSpan.FromMinutes(1)));
 
         group.MapPost("/mfa/challenge", CompleteMfaChallengeAsync)
             .AllowAnonymous()
-            .RequireRateLimiting("auth-mfa");
+            .WithMetadata(new DistributedAuthenticationRateLimitMetadata(
+                "auth-mfa", 10, TimeSpan.FromMinutes(1)));
 
         group.MapPost("/logout", (Delegate)LogoutAsync)
             .RequireAuthorization();
@@ -89,7 +94,8 @@ public static class OperationalAuthenticationEndpoints
 
         var setup = group.MapGroup("/mfa/enrollment")
             .RequireAuthorization(MfaSetupPolicy)
-            .RequireRateLimiting("auth-mfa");
+            .WithMetadata(new DistributedAuthenticationRateLimitMetadata(
+                "auth-mfa", 10, TimeSpan.FromMinutes(1)));
 
         setup.MapPost("/start", StartMfaEnrollmentAsync);
         setup.MapPost("/verify", VerifyMfaEnrollmentAsync);

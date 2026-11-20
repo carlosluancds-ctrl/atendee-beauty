@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace Atendee.Infrastructure;
 
@@ -65,6 +66,31 @@ public static class DependencyInjection
         return services;
     }
 
+    public static IServiceCollection AddAtendeeIdentity(
+        this IServiceCollection services,
+        string identityConnectionString,
+        byte[] partitionKeySecret)
+    {
+        ArgumentNullException.ThrowIfNull(partitionKeySecret);
+        if (partitionKeySecret.Length < 32)
+            throw new ArgumentException(
+                "The authentication rate-limit partition key must contain at least 32 bytes.",
+                nameof(partitionKeySecret));
+
+        services.AddAtendeeIdentity(identityConnectionString);
+
+        var limiterConnectionString = new NpgsqlConnectionStringBuilder(identityConnectionString)
+        {
+            Timeout = 3,
+            CommandTimeout = 3
+        }.ConnectionString;
+        services.AddSingleton(_ => NpgsqlDataSource.Create(limiterConnectionString));
+        services.AddSingleton(partitionKeySecret.ToArray());
+        services.AddSingleton<IDistributedAuthenticationRateLimiter, PostgresDistributedAuthenticationRateLimiter>();
+        services.AddHostedService<DistributedAuthenticationRateLimitCleanupService>();
+
+        return services;
+    }
     public static IServiceCollection AddAtendeePersistence(
         this IServiceCollection services,
         string connectionString)
