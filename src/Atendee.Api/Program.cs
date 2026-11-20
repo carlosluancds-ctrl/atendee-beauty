@@ -430,6 +430,9 @@ if (identityEnabled)
 
     app.UseMiddleware<TenantContextMiddleware>();
     app.UseAuthorization();
+
+    // V94: bounded response bodies, prevents memory exhaustion from accidentally large responses.
+    app.UseMiddleware<ResponseBodySizeLimitMiddleware>();
 }
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
