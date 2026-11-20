@@ -524,6 +524,61 @@ try
            !downstreamWasInvoked,
         "The HTTP middleware returns 503 with Retry-After and never executes protected endpoints when the shared store is unavailable.");
 
+    // V90: /health/ready reports PostgreSQL reachability without leaking details.
+    var readinessLogger = rateLimitLoggerFactory.CreateLogger<NpgsqlDatabaseReadinessProbe>();
+    await using (var readyDataSource = NpgsqlDataSource.Create(identityConnectionString))
+    {
+        var readyProbe = new NpgsqlDatabaseReadinessProbe(readyDataSource, tenantConnectionString, readinessLogger);
+        Ensure(await readyProbe.IsReadyAsync(),
+            "The readiness probe reports ready when both PostgreSQL databases are reachable.");
+    }
+
+    var identityDownProbe = new NpgsqlDatabaseReadinessProbe(
+        unavailableDataSource, tenantConnectionString, readinessLogger);
+    Ensure(!await identityDownProbe.IsReadyAsync(),
+        "The readiness probe reports not ready when the identity database is unreachable.");
+
+    var unreachableTenantConnectionString = new NpgsqlConnectionStringBuilder(tenantConnectionString)
+    {
+        Host = "127.0.0.1",
+        Port = 1,
+        Timeout = 1,
+        CommandTimeout = 1,
+        Pooling = false
+    }.ConnectionString;
+    await using (var tenantDownIdentitySource = NpgsqlDataSource.Create(identityConnectionString))
+    {
+        var tenantDownProbe = new NpgsqlDatabaseReadinessProbe(
+            tenantDownIdentitySource, unreachableTenantConnectionString, readinessLogger);
+        Ensure(!await tenantDownProbe.IsReadyAsync(),
+            "The readiness probe reports not ready when the tenant database is unreachable.");
+    }
+
+    using (var readyClient = factory.CreateClient())
+    {
+        var readyResponse = await readyClient.GetAsync("/health/ready");
+        var readyBody = await readyResponse.Content.ReadAsStringAsync();
+        Ensure(readyResponse.StatusCode == HttpStatusCode.OK &&
+               readyBody == "{\"status\":\"ready\"}" &&
+               readyResponse.Headers.CacheControl?.NoStore == true,
+            "GET /health/ready returns 200 with a minimal no-store body, anonymously and without antiforgery.");
+    }
+
+    using (var unavailableReadyFactory = factory.WithWebHostBuilder(web =>
+               web.ConfigureTestServices(services =>
+                   services.AddSingleton<IDatabaseReadinessProbe>(identityDownProbe))))
+    using (var unavailableReadyClient = unavailableReadyFactory.CreateClient())
+    {
+        var unavailableResponse = await unavailableReadyClient.GetAsync("/health/ready");
+        var unavailableBody = await unavailableResponse.Content.ReadAsStringAsync();
+        Ensure(unavailableResponse.StatusCode == HttpStatusCode.ServiceUnavailable &&
+               unavailableBody == "{\"status\":\"unavailable\"}" &&
+               unavailableResponse.Headers.CacheControl?.NoStore == true &&
+               !unavailableBody.Contains("127.0.0.1", StringComparison.Ordinal) &&
+               !unavailableBody.Contains("Npgsql", StringComparison.OrdinalIgnoreCase),
+            "GET /health/ready returns 503 with a minimal no-store body and no dependency details when PostgreSQL is unreachable.");
+    }
+
     var limitedContext = new DefaultHttpContext();
     limitedContext.Connection.RemoteIpAddress = limiterIp;
     limitedContext.SetEndpoint(new Endpoint(

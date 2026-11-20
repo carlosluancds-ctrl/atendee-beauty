@@ -214,6 +214,7 @@ if (identityEnabled)
 
     builder.Services.AddAtendeeIdentity(identityConnectionString!, authenticationRateLimitPartitionSecret);
     builder.Services.AddAtendeePersistence(tenantConnectionString!);
+    builder.Services.AddAtendeeDatabaseReadiness(tenantConnectionString!);
 
     var authentication = builder.Services
         .AddAuthentication(options =>
@@ -419,6 +420,25 @@ if (identityEnabled)
 }
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }))
+   .RequireRateLimiting("bootstrap-health");
+
+// Readiness: anonymous like /health/live, but reports 503 when PostgreSQL is
+// unreachable. The body is intentionally minimal; no dependency details leak.
+app.MapGet("/health/ready", async (HttpContext context, CancellationToken cancellationToken) =>
+    {
+        context.Response.Headers.CacheControl = "no-store";
+
+        // Without configured databases (Development only) there is nothing to probe.
+        var probe = context.RequestServices.GetService<IDatabaseReadinessProbe>();
+        if (probe is null || await probe.IsReadyAsync(cancellationToken))
+        {
+            return Results.Ok(new { status = "ready" });
+        }
+
+        return Results.Json(
+            new { status = "unavailable" },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    })
    .RequireRateLimiting("bootstrap-health");
 
 if (identityEnabled)

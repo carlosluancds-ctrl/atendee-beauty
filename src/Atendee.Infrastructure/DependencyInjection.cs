@@ -91,6 +91,28 @@ public static class DependencyInjection
 
         return services;
     }
+
+    /// <summary>
+    /// Registers the readiness probe used by <c>/health/ready</c>. It reuses the shared
+    /// identity <see cref="NpgsqlDataSource"/> registered by the rate-limiting overload of
+    /// <c>AddAtendeeIdentity</c>, so that overload must be called first.
+    /// </summary>
+    public static IServiceCollection AddAtendeeDatabaseReadiness(
+        this IServiceCollection services,
+        string tenantConnectionString)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantConnectionString);
+
+        services.AddSingleton<IDatabaseReadinessProbe>(serviceProvider =>
+            new NpgsqlDatabaseReadinessProbe(
+                serviceProvider.GetRequiredService<NpgsqlDataSource>(),
+                tenantConnectionString,
+                serviceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<NpgsqlDatabaseReadinessProbe>>()));
+
+        return services;
+    }
+
     public static IServiceCollection AddAtendeePersistence(
         this IServiceCollection services,
         string connectionString)
