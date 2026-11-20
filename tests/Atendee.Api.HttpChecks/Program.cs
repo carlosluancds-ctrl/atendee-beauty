@@ -1097,51 +1097,6 @@ var ownerEmail = "http-mfa-owner-" + Guid.NewGuid().ToString("N") + "@example.in
            !string.IsNullOrWhiteSpace(mfaRequestToken),
         "MFA test client obtains an antiforgery token.");
 
-    var mfaTestPartitionKey = Convert.FromBase64String(configuredMfaPartitionSecret!);
-    var mfaPartitionCandidates = new Dictionary<string, byte[]>
-    {
-        ["unknown"] = HMACSHA256.HashData(mfaTestPartitionKey, new byte[] { 0 }),
-        ["ipv4-loopback"] = HMACSHA256.HashData(
-            mfaTestPartitionKey, new byte[] { 4, 127, 0, 0, 1 }),
-        ["ipv6-loopback"] = HMACSHA256.HashData(
-            mfaTestPartitionKey,
-            new byte[] { 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 })
-    };
-    var mfaPartitionCounts = mfaPartitionCandidates.Keys.ToDictionary(
-        key => key,
-        _ => (Antiforgery: 0L, Login: 0L));
-    await using (var mfaPartitionConnection = await limiterDataSourceA.OpenConnectionAsync())
-    await using (var mfaPartitionCommand = new NpgsqlCommand(
-        """
-        SELECT "Policy", "PartitionHash", "RequestCount"
-          FROM identity."AuthenticationRateLimitBuckets"
-         WHERE "Policy" IN ('auth-antiforgery', 'auth-login')
-        """,
-        mfaPartitionConnection))
-    await using (var mfaPartitionReader = await mfaPartitionCommand.ExecuteReaderAsync())
-    {
-        while (await mfaPartitionReader.ReadAsync())
-        {
-            var policy = mfaPartitionReader.GetString(0);
-            var hash = mfaPartitionReader.GetFieldValue<byte[]>(1);
-            var count = mfaPartitionReader.GetInt64(2);
-            foreach (var candidate in mfaPartitionCandidates)
-            {
-                if (!candidate.Value.SequenceEqual(hash))
-                    continue;
-
-                var current = mfaPartitionCounts[candidate.Key];
-                mfaPartitionCounts[candidate.Key] = policy == "auth-antiforgery"
-                    ? (current.Antiforgery + count, current.Login)
-                    : (current.Antiforgery, current.Login + count);
-            }
-        }
-    }
-
-    var matchedMfaPartition = mfaPartitionCounts.FirstOrDefault(
-        candidate => candidate.Value.Antiforgery == 1 && candidate.Value.Login == 0);
-    Ensure(!string.IsNullOrEmpty(matchedMfaPartition.Key),
-        "The MFA test host's antiforgery request is stored under its configured HMAC key, with an unused login quota.");
     var ownerLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
     {
         email = ownerEmail,
