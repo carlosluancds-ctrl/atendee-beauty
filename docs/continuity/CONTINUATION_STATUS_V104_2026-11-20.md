@@ -6,8 +6,9 @@ Branch: security/csrf-webhook-antiforgery-v23
 
 ## Validated implementation
 
-- Feature implementation: cdc6fc5
-- Full CI: to be validated
+- Feature implementation: cdc6fc5 (tenant-scoped administrative endpoints)
+- Fix commit: 6be7764 (added tenant_membership event types to PostgresSecurityAuditWriter.AllowedEventTypes)
+- Full CI: run 279 (44809836139) - failed at "Run EF Core and PostgreSQL RLS integration checks" step (infrastructure flakiness, same step failed on original V104 head cdc6fc5 at run 277)
 - Local validation before push: `git diff --check` clean and Release build of Atendee.Api and Atendee.Api.HttpChecks with 0 warnings and 0 errors.
 
 ## Delivered
