@@ -350,11 +350,11 @@ try
     using var rateLimitLoggerFactory = LoggerFactory.Create(_ => { });
     var limiterA = new PostgresDistributedAuthenticationRateLimiter(
         limiterDataSourceA,
-        partitionKeySecret,
+        new AuthenticationRateLimitPartitionKey(partitionKeySecret),
         rateLimitLoggerFactory.CreateLogger<PostgresDistributedAuthenticationRateLimiter>());
     var limiterB = new PostgresDistributedAuthenticationRateLimiter(
         limiterDataSourceB,
-        partitionKeySecret,
+        new AuthenticationRateLimitPartitionKey(partitionKeySecret),
         rateLimitLoggerFactory.CreateLogger<PostgresDistributedAuthenticationRateLimiter>());
     var limiterPolicy = "v89-concurrency-" + Guid.NewGuid().ToString("N");
     var limiterIp = IPAddress.Parse("198.51.100.42");
@@ -487,7 +487,7 @@ try
     await using var unavailableDataSource = NpgsqlDataSource.Create(unavailableConnectionString);
     var unavailableLimiter = new PostgresDistributedAuthenticationRateLimiter(
         unavailableDataSource,
-        partitionKeySecret,
+        new AuthenticationRateLimitPartitionKey(partitionKeySecret),
         rateLimitLoggerFactory.CreateLogger<PostgresDistributedAuthenticationRateLimiter>());
     var unavailableDecision = await unavailableLimiter.TryAcquireAsync(
         "v89-backend-outage",

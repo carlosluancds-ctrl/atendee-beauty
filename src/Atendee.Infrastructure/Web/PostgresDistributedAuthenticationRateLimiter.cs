@@ -8,13 +8,13 @@ namespace Atendee.Infrastructure.Web;
 
 public sealed class PostgresDistributedAuthenticationRateLimiter(
     NpgsqlDataSource dataSource,
-    byte[] partitionKeySecret,
+    AuthenticationRateLimitPartitionKey partitionKey,
     ILogger<PostgresDistributedAuthenticationRateLimiter> logger)
     : IDistributedAuthenticationRateLimiter
 {
     private static readonly TimeSpan RetentionAfterWindow = TimeSpan.FromMinutes(5);
 
-    private readonly byte[] _partitionKeySecret = partitionKeySecret.ToArray();
+    private readonly byte[] _partitionKeySecret = partitionKey.CopyValue();
 
     private const string AcquireSql = """
         WITH expired AS

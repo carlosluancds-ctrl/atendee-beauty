@@ -21,3 +21,18 @@ public interface IDistributedAuthenticationRateLimiter
         DateTimeOffset utcNow,
         CancellationToken cancellationToken = default);
 }
+public sealed class AuthenticationRateLimitPartitionKey
+{
+    private readonly byte[] _value;
+
+    public AuthenticationRateLimitPartitionKey(byte[] value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (value.Length < 32)
+            throw new ArgumentException("The authentication rate-limit partition key must contain at least 32 bytes.", nameof(value));
+
+        _value = value.ToArray();
+    }
+
+    public byte[] CopyValue() => _value.ToArray();
+}

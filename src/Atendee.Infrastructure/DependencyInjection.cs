@@ -85,7 +85,7 @@ public static class DependencyInjection
             CommandTimeout = 3
         }.ConnectionString;
         services.AddSingleton(_ => NpgsqlDataSource.Create(limiterConnectionString));
-        services.AddSingleton(partitionKeySecret.ToArray());
+        services.AddSingleton(new AuthenticationRateLimitPartitionKey(partitionKeySecret));
         services.AddSingleton<IDistributedAuthenticationRateLimiter, PostgresDistributedAuthenticationRateLimiter>();
         services.AddHostedService<DistributedAuthenticationRateLimitCleanupService>();
 
