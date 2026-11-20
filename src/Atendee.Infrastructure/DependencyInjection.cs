@@ -2,6 +2,7 @@ using Atendee.Application.Abstractions;
 using Atendee.Infrastructure.Identity;
 using Atendee.Infrastructure.Messaging;
 using Atendee.Infrastructure.Persistence;
+using Atendee.Infrastructure.Security;
 using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -177,6 +178,22 @@ public static class DependencyInjection
             contextLifetime: ServiceLifetime.Scoped);
 
         services.AddHostedService<OutboxDispatcher>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers the coordinated Data Protection key rotation service.
+    /// </summary>
+    public static IServiceCollection AddAtendeeDataProtectionKeyRotation(
+        this IServiceCollection services,
+        Action<DataProtectionKeyRotationOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        services.Configure(configure);
+        services.AddHostedService<DataProtectionKeyRotationService>();
 
         return services;
     }

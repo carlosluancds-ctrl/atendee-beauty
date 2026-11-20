@@ -10,6 +10,7 @@ using Atendee.Api.Services;
 using Atendee.Api.Tenants;
 using Atendee.Api.Professionals;
 using Atendee.Infrastructure;
+using Atendee.Infrastructure.Security;
 using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -220,6 +221,22 @@ if (identityEnabled)
     builder.Services.AddAtendeeIdentity(identityConnectionString!, authenticationRateLimitPartitionSecret);
     builder.Services.AddAtendeePersistence(tenantConnectionString!);
     builder.Services.AddAtendeeDatabaseReadiness(tenantConnectionString!);
+
+    // V102: Data Protection key rotation (optional, opt-in via configuration)
+    var keyRotationConfig = builder.Configuration.GetSection(DataProtectionKeyRotationOptions.SectionName);
+    if (keyRotationConfig.Exists())
+    {
+        builder.Services.AddAtendeeDataProtectionKeyRotation(opt =>
+        {
+            opt.Enabled = keyRotationConfig.GetValue<bool>("Enabled", false);
+            opt.KeyLifetime = keyRotationConfig.GetValue<TimeSpan>("KeyLifetime", TimeSpan.FromDays(90));
+            opt.OldKeyGracePeriod = keyRotationConfig.GetValue<TimeSpan>("OldKeyGracePeriod", TimeSpan.FromDays(30));
+            opt.NewCertificatePath = keyRotationConfig["NewCertificatePath"];
+            opt.NewCertificatePassword = keyRotationConfig["NewCertificatePassword"];
+            opt.CheckOnStartup = keyRotationConfig.GetValue<bool>("CheckOnStartup", true);
+            opt.MinimumCheckInterval = keyRotationConfig.GetValue<TimeSpan>("MinimumCheckInterval", TimeSpan.FromHours(24));
+        });
+    }
 
     var authentication = builder.Services
         .AddAuthentication(options =>
