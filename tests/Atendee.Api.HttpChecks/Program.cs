@@ -1041,6 +1041,7 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
     // per-IP login limiter starts with an isolated budget.
     mfaKeyRing = Path.Combine(Path.GetTempPath(), "atendee-mfa-http-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(mfaKeyRing);
+    var mfaTestRemoteIp = IPAddress.Parse("198.51.100.200");
     mfaFactory = CreateIsolatedRateLimitFactory().WithWebHostBuilder(web =>
     {
         web.UseContentRoot(apiContentRoot);
@@ -1054,6 +1055,8 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
                 ["DataProtection:KeyRingPath"] = mfaKeyRing
             });
         });
+        web.ConfigureTestServices(services => services.AddSingleton<IStartupFilter>(
+            new FixedRemoteIpStartupFilter(mfaTestRemoteIp)));
     });
 
     var configuredMfaPartitionSecret = mfaFactory.Services
@@ -1070,7 +1073,7 @@ using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         HandleCookies = true,
         AllowAutoRedirect = false
     });
-var ownerEmail = "http-mfa-owner-" + Guid.NewGuid().ToString("N") + "@example.invalid";
+    var ownerEmail = "http-mfa-owner-" + Guid.NewGuid().ToString("N") + "@example.invalid";
     const string ownerPassword = "Atendee-MFA-HTTP-2026!";
     var ownerTenantId = Guid.NewGuid();
     Guid ownerUserId;
@@ -1097,6 +1100,28 @@ var ownerEmail = "http-mfa-owner-" + Guid.NewGuid().ToString("N") + "@example.in
            !string.IsNullOrWhiteSpace(mfaRequestToken),
         "MFA test client obtains an antiforgery token.");
 
+    var mfaTestPartitionKey = Convert.FromBase64String(configuredMfaPartitionSecret!);
+    var mfaTestPartitionHash = HMACSHA256.HashData(
+        mfaTestPartitionKey,
+        new byte[] { 4, 198, 51, 100, 200 });
+    await using (var mfaPartitionConnection = await limiterDataSourceA.OpenConnectionAsync())
+    await using (var mfaPartitionCommand = new NpgsqlCommand(
+        """
+        SELECT
+            COALESCE(MAX("RequestCount") FILTER (WHERE "Policy" = 'auth-antiforgery'), 0),
+            COALESCE(MAX("RequestCount") FILTER (WHERE "Policy" = 'auth-login'), 0)
+          FROM identity."AuthenticationRateLimitBuckets"
+         WHERE "PartitionHash" = @partitionHash
+        """,
+        mfaPartitionConnection))
+    {
+        mfaPartitionCommand.Parameters.AddWithValue("partitionHash", mfaTestPartitionHash);
+        await using var mfaPartitionReader = await mfaPartitionCommand.ExecuteReaderAsync();
+        Ensure(await mfaPartitionReader.ReadAsync() &&
+               mfaPartitionReader.GetInt64(0) == 1 &&
+               mfaPartitionReader.GetInt64(1) == 0,
+            "The MFA host stores its antiforgery request under the configured HMAC key and a fresh test IP partition.");
+    }
     var ownerLogin = await PostWithCsrfAsync(mfaClient, "/api/v1/auth/login", mfaRequestToken!, new
     {
         email = ownerEmail,
@@ -4985,4 +5010,17 @@ internal sealed class IsolatedRateLimitWebApplicationFactory
                 ["AuthenticationRateLimiting:PartitionKeySecret"] = isolatedTestSecret
             }));
     }
+}
+internal sealed class FixedRemoteIpStartupFilter(IPAddress remoteIpAddress) : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) =>
+        app =>
+        {
+            app.Use(async (context, nextRequest) =>
+            {
+                context.Connection.RemoteIpAddress = remoteIpAddress;
+                await nextRequest();
+            });
+            next(app);
+        };
 }
