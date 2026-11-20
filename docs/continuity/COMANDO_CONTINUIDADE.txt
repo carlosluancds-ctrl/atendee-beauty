@@ -6,8 +6,11 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V97: commit de teste fe54464 (cabecalhos de seguranca baselines em endpoints autenticados 401/400/404: todos os 9 cabecalhos presentes).
+- CI run aguardando no SHA exato fe54464.
+- V97: testa 9 cabecalhos (CSP, CORP, COOP, X-Permitted-Cross-Domain-Policies, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, Cache-Control: no-store) em 401 /api/v1/tenant, 400 antiforgery /api/v1/customers, 404 rota desconhecida. Estende V91 (so health/unknown).
 - V96: commit de teste eb83b56 (validacao antiforgery em endpoints autenticados: token ausente 400, valido 401 auth, invalido 400, replay 400, GET safe 401).
-- CI run aguardando no SHA exato eb83b56.
+- CI run 266 / 44704618851: em andamento no SHA exato eb83b56.
 - V96: testes HTTP verificam antiforgery em endpoints reais (/api/v1/customers, /api/v1/tenant): sem token 400, token valido 401 (precisa auth), token invalido 400, replay 400, GET sem token 401 (safe method).
 - V95: commit de teste b2cadba (verificacao de limites Kestrel configurados: MaxRequestBodySize 1 MiB, MaxRequestHeadersTotalSize 32 KiB, MaxRequestHeaderCount 100, MaxRequestLineSize 8 KiB, RequestHeadersTimeout 15s).
 - CI run 263 / 44703378166: falha no SHA exato b2cadbad845a9a7dfd8633a0c2752dd4636e1195 (flakiness de infraestrutura PostgreSQL, nao logica V95).
