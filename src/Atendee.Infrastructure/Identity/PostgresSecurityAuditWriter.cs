@@ -19,7 +19,11 @@ public sealed class PostgresSecurityAuditWriter(AtendeeIdentityDbContext db) : I
         "operational_auth.password_verified_mfa_pending",
         "operational_identity.activation_issued",
         "operational_identity.activation_reissued",
-        "operational_identity.activation_succeeded"
+        "operational_identity.activation_succeeded",
+        "tenant_membership.created",
+        "tenant_membership.role_changed",
+        "tenant_membership.activated",
+        "tenant_membership.deactivated"
     };
 
     public async Task WriteAsync(string eventType, Guid? actorIdentityUserId, Guid targetIdentityUserId,
