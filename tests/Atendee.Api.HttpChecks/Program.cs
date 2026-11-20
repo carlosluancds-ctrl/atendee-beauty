@@ -689,6 +689,23 @@ try
                 $"V94: GET {endpoint} returns all baseline security headers on 404.");
         }
     }
+    // V95: verify Kestrel request limits are correctly configured from ApiRequestLimits.
+    // TestServer doesn't enforce these at the socket level (they're Kestrel socket limits),
+    // so we assert the configured values match our constants. Real Kestrel enforcement
+    // is covered by the Apply() call in Program.cs.
+    {
+        var limits = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerLimits>>().Value;
+        Ensure(limits.MaxRequestBodySize == ApiRequestLimits.MaxRequestBodyBytes,
+            $"V95: Kestrel MaxRequestBodySize ({limits.MaxRequestBodySize}) equals ApiRequestLimits.MaxRequestBodyBytes ({ApiRequestLimits.MaxRequestBodyBytes}).");
+        Ensure(limits.MaxRequestHeadersTotalSize == ApiRequestLimits.MaxRequestHeadersTotalSizeBytes,
+            $"V95: Kestrel MaxRequestHeadersTotalSize ({limits.MaxRequestHeadersTotalSize}) equals ApiRequestLimits.MaxRequestHeadersTotalSizeBytes ({ApiRequestLimits.MaxRequestHeadersTotalSizeBytes}).");
+        Ensure(limits.MaxRequestHeaderCount == ApiRequestLimits.MaxRequestHeaderCount,
+            $"V95: Kestrel MaxRequestHeaderCount ({limits.MaxRequestHeaderCount}) equals ApiRequestLimits.MaxRequestHeaderCount ({ApiRequestLimits.MaxRequestHeaderCount}).");
+        Ensure(limits.MaxRequestLineSize == ApiRequestLimits.MaxRequestLineSizeBytes,
+            $"V95: Kestrel MaxRequestLineSize ({limits.MaxRequestLineSize}) equals ApiRequestLimits.MaxRequestLineSizeBytes ({ApiRequestLimits.MaxRequestLineSizeBytes}).");
+        Ensure(limits.RequestHeadersTimeout == ApiRequestLimits.RequestHeadersTimeout,
+            $"V95: Kestrel RequestHeadersTimeout ({limits.RequestHeadersTimeout}) equals ApiRequestLimits.RequestHeadersTimeout ({ApiRequestLimits.RequestHeadersTimeout}).");
+    }
     using (var unavailableReadyFactory = factory.WithWebHostBuilder(web =>
                web.ConfigureTestServices(services =>
                    services.AddSingleton<IDatabaseReadinessProbe>(identityDownProbe))))
