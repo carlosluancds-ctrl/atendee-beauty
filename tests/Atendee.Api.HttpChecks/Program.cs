@@ -1473,6 +1473,9 @@ try
 
         await using var auditConnection = new NpgsqlConnection(migratorConnectionString);
         await auditConnection.OpenAsync();
+        await using var auditTransaction = await auditConnection.BeginTransactionAsync();
+        await using (var auditRole = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", auditConnection, auditTransaction))
+            await auditRole.ExecuteNonQueryAsync();
         await using var auditCommand = new NpgsqlCommand(
             """
             SELECT
@@ -1482,11 +1485,12 @@ try
                  WHERE tenant_id = @tenant AND resource_id = @appointment AND event_type = 'appointment.created') +
                 (SELECT count(*) FROM atendee.transactional_outbox
                  WHERE tenant_id = @tenant AND aggregate_id = @appointment AND event_type = 'appointment.created')
-            """, auditConnection);
+            """, auditConnection, auditTransaction);
         auditCommand.Parameters.AddWithValue("tenant", ownerTenantId);
         auditCommand.Parameters.AddWithValue("appointment", appointmentId);
         Ensure(Convert.ToInt32(await auditCommand.ExecuteScalarAsync()) == 3,
             "Appointment, immutable event, tenant audit and transactional outbox commit atomically.");
+        await auditTransaction.CommitAsync();
 
         var overlapRejected = false;
         await using (var overlapConnection = new NpgsqlConnection(migratorConnectionString))
@@ -1575,6 +1579,9 @@ try
 
         await using var lifecycleAuditConnection = new NpgsqlConnection(migratorConnectionString);
         await lifecycleAuditConnection.OpenAsync();
+        await using var lifecycleAuditTransaction = await lifecycleAuditConnection.BeginTransactionAsync();
+        await using (var auditRole = new NpgsqlCommand("SET LOCAL ROLE atendee_owner", lifecycleAuditConnection, lifecycleAuditTransaction))
+            await auditRole.ExecuteNonQueryAsync();
         await using var lifecycleAuditCommand = new NpgsqlCommand(
             """
             SELECT
@@ -1584,11 +1591,12 @@ try
                  WHERE tenant_id = @tenant AND resource_id = @appointment) +
                 (SELECT count(*) FROM atendee.transactional_outbox
                  WHERE tenant_id = @tenant AND aggregate_id = @appointment)
-            """, lifecycleAuditConnection);
+            """, lifecycleAuditConnection, lifecycleAuditTransaction);
         lifecycleAuditCommand.Parameters.AddWithValue("tenant", ownerTenantId);
         lifecycleAuditCommand.Parameters.AddWithValue("appointment", appointmentId);
         Ensure(Convert.ToInt32(await lifecycleAuditCommand.ExecuteScalarAsync()) == 12,
             "Every legal lifecycle transition appends one immutable event, audit record and outbox message atomically.");
+        await lifecycleAuditTransaction.CommitAsync();
     }
 
     var unassignedProfessionalAvailability = await mfaClient.GetAsync(
