@@ -9,6 +9,7 @@ using Atendee.Api.Security;
 using Atendee.Api.Services;
 using Atendee.Api.Tenants;
 using Atendee.Api.Professionals;
+using Atendee.Api.PlatformAdmin;
 using Atendee.Infrastructure;
 using Atendee.Infrastructure.Security;
 using Atendee.Infrastructure.Web;
@@ -95,6 +96,17 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 60,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
+    options.AddPolicy("platform-admin", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
@@ -235,6 +247,20 @@ if (identityEnabled)
             opt.NewCertificatePassword = keyRotationConfig["NewCertificatePassword"];
             opt.CheckOnStartup = keyRotationConfig.GetValue<bool>("CheckOnStartup", true);
             opt.MinimumCheckInterval = keyRotationConfig.GetValue<TimeSpan>("MinimumCheckInterval", TimeSpan.FromHours(24));
+        });
+    }
+
+    // V103: Platform Admin (optional, opt-in via configuration)
+    var platformAdminConfig = builder.Configuration.GetSection(PlatformAdminOptions.SectionName);
+    if (platformAdminConfig.Exists())
+    {
+        builder.Services.AddAtendeePlatformAdmin(opt =>
+        {
+            opt.Enabled = platformAdminConfig.GetValue<bool>("Enabled", false);
+            opt.RequireMfaForAllActions = platformAdminConfig.GetValue<bool>("RequireMfaForAllActions", true);
+            opt.RequireFourEyesForCriticalActions = platformAdminConfig.GetValue<bool>("RequireFourEyesForCriticalActions", true);
+            opt.ProtectLastOwner = platformAdminConfig.GetValue<bool>("ProtectLastOwner", true);
+            opt.MaxPlatformAdmins = platformAdminConfig.GetValue<int>("MaxPlatformAdmins", 10);
         });
     }
 
@@ -486,6 +512,14 @@ if (identityEnabled)
     app.MapTenantProfessionalTimeOff();
     app.MapTenantAvailability();
     app.MapTenantAppointments();
+
+    // V103: Platform Admin endpoints (opt-in)
+    var platformAdminEnabled = builder.Configuration.GetSection(PlatformAdminOptions.SectionName)
+        .GetValue<bool>("Enabled", false);
+    if (platformAdminEnabled)
+    {
+        app.MapPlatformAdmin();
+    }
 }
 
 app.Run();

@@ -197,4 +197,20 @@ public static class DependencyInjection
 
         return services;
     }
+
+    /// <summary>
+    /// Registers the Platform Admin service for cross-tenant administration.
+    /// </summary>
+    public static IServiceCollection AddAtendeePlatformAdmin(
+        this IServiceCollection services,
+        Action<PlatformAdminOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        services.Configure(configure);
+        services.AddScoped<IPlatformAdminService, PlatformAdminService>();
+
+        return services;
+    }
 }
