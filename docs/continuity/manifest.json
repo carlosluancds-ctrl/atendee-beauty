@@ -3,10 +3,10 @@
     "updated_at": "2026-11-21",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V115_2026-11-21.md",
-    "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V115_2026-11-21.md",
-    "latest_implementation_commit": "687cb68",
-    "latest_documentation_parent_commit": "687cb68",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V116_2026-11-21.md",
+    "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V116_2026-11-21.md",
+    "latest_implementation_commit": "75e24de",
+    "latest_documentation_parent_commit": "75e24de",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
         "run": "44851428076",
@@ -120,6 +120,30 @@
             "CSRF protection on cancel API call",
             "Success/error feedback displayed to user",
             "Route: GET /appointments shows cancelable appointments with cancel action"
+        ]
+    },
+    "v116": {
+        "implementation_commit": "75e24de",
+        "approval": "validated_locally",
+        "scope": "Frontend Appointment Rescheduling UI implementing reschedule button and date/time picker modal",
+        "files_created": [],
+        "files_modified": [
+            "web/atendee-portal/src/AppointmentPage.tsx"
+        ],
+        "local_validation": {
+            "diff_check": "clean",
+            "typescript_compile": "successful",
+            "release_build": "0 warnings / 0 errors"
+        },
+        "notes": [
+            "Frontend-only implementation consuming existing POST /api/v1/appointments/{id}/reschedule API",
+            "Reschedule button on appointment cards (PendingConfirmation/Confirmed status)",
+            "Date and time pickers for new schedule selection",
+            "Authorization: Owner/Manager/Receptionist (reschedule any), Professional (reschedule own)",
+            "CSRF protection on reschedule API call",
+            "Error handling: 401, 403, 404, 409 (time conflict)",
+            "Cancel and Reschedule buttons styled differently on same card",
+            "Modal uses HTML date/time inputs for native browser behavior"
         ]
     },
     "v110": {
