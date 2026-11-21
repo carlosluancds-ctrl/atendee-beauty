@@ -1,55 +1,46 @@
-# Continuation status V114 - Appointment Calendar and Customer Management Complete
+# Continuation status V114 - Appointment Creation Form Complete
 
 Date: 2026-11-21
 Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch: security/csrf-webhook-antiforgery-v23
 
 ## Summary
-**V112-V113 complete: Customer Management and Appointment Calendar UIs implemented in React.** Both features consume existing backend APIs with CSRF protection and proper authorization.
+**V114 complete: Appointment Creation Form implemented in React.** Frontend provides a complete form UI for creating appointments with customer selection, service selection, professional assignment, and date/time picker. All frontend-only increments validated locally with clean builds.
 
 ## Validation Status
 - **Local**: `git diff --check` clean, TypeScript compilation successful, Web build completed with 0 errors.
-- **Release build**: 0 warnings / 0 errors on all projects.
-- **Commits**: V112/V113 implemented in single commit `a353585` (push confirmed).
+- **Release build**: 0 warnings / 0 errors on all projects (both backend and frontend).
+- **Commit**: `207da45` V114 - push confirmed (HEAD local == origin).
 
 ## Implementation Details
 
-### V112: Customer Management UI
+### V114: Appointment Creation Form
 **Files Created**
-- `web/atendee-portal/src/CustomerPage.tsx` - React page component for customer CRUD
+- `web/atendee-portal/src/AppointmentFormPage.tsx` - React page component for appointment creation form
 
 **Files Modified**
-- `web/atendee-portal/src/App.tsx` - Added route for `/customers`
-- `web/atendee-portal/src/types.ts` - Added Customer type
-- `web/atendee-portal/src/styles.css` - Added customer grid and form styles
+- `web/atendee-portal/src/App.tsx` - Added route for `/appointments/new`
+- `web/atendee-portal/src/types.ts` - Added `Service` and `Professional` types
+- `web/atendee-portal/src/styles.css` - Added form section and styling for appointment creation
 
 **Features**
-- Customer listing with active/inactive tabs
-- Create new customer with name, WhatsApp, email
-- Edit existing customer
-- Archive customers (soft delete)
-- Reactivate archived customers
-- Authorization: Owner/Manager/Receptionist (Read), Owner/Manager (Write/Archive)
-- CSRF protection on all state-changing operations
-
-### V113: Appointment Calendar UI
-**Files Created**
-- `web/atendee-portal/src/AppointmentPage.tsx` - React page component for appointment calendar view
-
-**Files Modified**
-- `web/atendee-portal/src/App.tsx` - Added route for `/appointments`
-- `web/atendee-portal/src/styles.css` - Added appointment grid and status badge styles
-
-**Features**
-- Appointment listing for current month view (uses `/api/v1/appointments?fromUtc=&toUtc=`)
-- Appointment status display with color-coded badges
-- Customer and professional name display
-- Service name and duration display
-- Appointment time display (formatted in local timezone)
+- Customer search with dropdown selection (search by name or phone)
+- Service selection with automatic duration display
+- Professional selection filtered by available services for the selected service
+- Date and time picker for scheduling
+- CSRF protection on form submission
+- Validation: date must be in the future, all fields required
+- Error feedback for conflicts (409: time conflicts)
+- Success redirect to appointment calendar view
 - Authorization: Owner/Manager/Receptionist/Professional
-- Responsive grid layout with card design
 
-### Status Badge Colors (Appointment)
+**API Endpoints Consumed**
+- `GET /api/v1/customers` - List all customers for selection
+- `GET /api/v1/services` - List services with duration and pricing
+- `GET /api/v1/professionals` - List professionals with their services
+- `POST /api/v1/appointments` - Create new appointment (requires customer, professional, service, and start time)
+
+### Status Badge Colors (Appointment) - Reference
 - PendingConfirmation: gray (#77736b)
 - Confirmed: green (#4d6a4c)
 - CheckedIn: blue (#2a5f9c)
@@ -66,17 +57,20 @@ Branch: security/csrf-webhook-antiforgery-v23
 2. **Customer self-service rescheduling** - Replacement vs history semantics
 3. **Customer notification flows** - WhatsApp/email integration requirements
 4. **Dedicated cancellation/reschedule pages** - Modal vs full-page UX
-5. **Appointment creation form** - Requires service selection and customer choice
-6. **Appointment rescheduling modal** - Needs product approval for workflow
+5. **Appointment rescheduling modal** - Needs product approval for workflow
 
 ## Next Steps
-1. Await product decisions on customer cancellation policy and notifications
-2. Implement appointment creation form (requires service selection)
-3. Implement appointment rescheduling modal
-4. Implement cancellation confirmation flow
+1. ~~Implement appointment creation form~~ - **COMPLETED**
+2. Implement appointment rescheduling modal
+3. Implement cancellation confirmation flow
+4. Await product decisions on customer cancellation policy and notifications
 
-## CI Note
-The current CI infrastructure (PostgreSQL 18.7) is stable per V110. No database integration tests run locally for these frontend-only increments.
+## Notes
+- Frontend-only implementation - no backend changes required
+- Uses existing backend APIs for data and mutation
+- Follows same patterns as CustomerPage.tsx (search, CSRF, authorization)
+- React Router navigation to /appointments/new
 
 ## Commit Status
+- `207da45` V114: Frontend appointment creation form - push confirmed (HEAD local == origin).
 - `a353585` V112/V113: Frontend Customer Management and Appointment Calendar - push confirmed (HEAD local == origin).
