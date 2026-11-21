@@ -6,6 +6,8 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V111: Frontend Tenant Member Management UI implemented. React page at `/tenant/members` with role change, deactivation, and reactivation functionality. Consumes TenantMemberEndpoints.cs API (Authorization: Owner/Manager, CSRF protected, 120 req/min rate limit). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: pending_push.
+- V110: CI estabilizado no GitHub Actions (Run 296, commit 3db3e01). Infraestrutura PostgreSQL 18.7 funcional. Mapeamento Backend vs Frontend concluído, identificando lacunas na UI para gestão de membros, clientes e agenda.
 - V106: migration 022_enforce_last_owner_protection.sql com triggers de constraiao de nível de banco para proteger o ultimo Owner ativo com MFA. Triggers: tr_tenant_users_last_owner_lock, tr_tenants_last_owner_lock, ct_tenant_users_active_mfa_owner, ct_tenants_active_mfa_owner, tr_identity_mfa_last_owner_lock, ct_identity_mfa_active_owner. Usa advisory locks para serializacao e funcoes SECURITY DEFINER para comportamento fail-closed. CI workflow atualizado para executar a migracao. Testes existentes em Atendee.Identity.Checks verificam a restricao (rejeita desativar MFA, mudanca de papel, desativacao, remocao do ultimo Owner). Build Release: 0 avisos/erros, diff --check limpo.
 - V105: testes de integracao HTTP para V104 tenant-scoped administrative endpoints (A1, A4, A5). Cobertura completa: Owner (any non-Owner), Manager (Receptionist/Professional only), self-target protection, cross-tenant isolation (404), last-Owner protection, unauthenticated (401), antiforgery (400), invalid GUID (400), inactive target (404), auditoria transacional verificada (tenant_membership.role_changed/deactivated/activated exatamente uma vez por operacao), rate limiting authenticated-api (120 req/min/user).
 - V104: commit de implementacao cdc6fc5 (endpoints tenant-scoped A1/A4/A5: GET /api/v1/tenant/members/{id}, PUT /role, POST /deactivate, POST /reactivate). Authorization Owner (any non-Owner), Manager (Receptionist/Professional only). Transactional audit, rate limit 120 req/min/user.
@@ -26,13 +28,13 @@ STATUS CI ATUAL (V108/V109)
 - Run 294 (commit d056144, V108 service containers): FALHOU no Step 16 (mesmo ponto de falha). Tentativa de migrar para containers nativos do GitHub Actions em vez de docker run manual NAO resolveu a flakiness. Runs 283-293 falharam no Step 15 com abordagem manual.
 - Run 288 (commit 99059af, V107 docs): falhou no Step 15, job 136656569946 completado 2026-11-21T00:22:32Z.
 - Validacao local passa: git diff --check limpo, Release build 0 avisos/erros, todos os projetos de teste compilam.
-- Ultimo CI verde completo: run 255 / 44667879306 (V92).
+- Ultimo CI verde completo: run 296 / 44851428076 (V110) - sucesso.
 
 ANTES DE QUALQUER ALTERACAO
-Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V109_2026-11-21.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V111_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
-V109: CI infrastructure flakiness investigation needed. Service container approach (run 294) did NOT resolve PostgreSQL 18.7 provisioning failure on ubuntu-26.04. Investigate: different PostgreSQL image (18.x latest, 17), ubuntu-24.04 runner, adjusted provisioning script with more retries, or alternative CI strategy. No logic changes needed - V106 implementation validated locally. Pending decisions requiring owner approval remain: appointment rescheduling/cancellation policy, outbox dispatcher with real handlers/idempotent/retry/dead-letter/observability, Data Protection key rotation with coordinated plan, Platform Admin and A1/A2 cross-tenant actions, external integrations (including WhatsApp Cloud API), independent security review, backup/restore validation, trusted proxy configuration, orchestrator probe wiring to /health/live and /health/ready, and deploy decision.
+V112: Desenvolver a interface no React (atendee-portal) para Gestão de Clientes e Calendario/Agendamento, consumindo os endpoints TenantCustomerEndpoints.cs e TenantAppointmentEndpoints.cs.
 
 REGRAS PERMANENTES
 1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.
