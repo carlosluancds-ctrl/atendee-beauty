@@ -5,8 +5,8 @@
     "branch": "security/csrf-webhook-antiforgery-v23",
     "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V117_2026-11-21.md",
     "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V117_2026-11-21.md",
-    "latest_implementation_commit": "pending",
-    "latest_documentation_parent_commit": "75e24de",
+    "latest_implementation_commit": "42d2760",
+    "latest_documentation_parent_commit": "42d2760",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
         "run": "44851428076",
@@ -147,8 +147,8 @@
         ]
     },
     "v117": {
-        "implementation_commit": "pending",
-        "approval": "pending_local_validation",
+        "implementation_commit": "42d2760",
+        "approval": "validated_locally",
         "scope": "Customer Appointment Cancellation API implementing public endpoints for customer self-service cancellation",
         "files_created": [
             "web/atendee-portal/src/CustomerAppointmentPage.tsx"
@@ -158,9 +158,9 @@
             "web/atendee-portal/src/App.tsx"
         ],
         "local_validation": {
-            "diff_check": "pending",
-            "typescript_compile": "pending",
-            "release_build": "pending"
+            "diff_check": "clean",
+            "typescript_compile": "successful",
+            "release_build": "0 warnings / 0 errors"
         },
         "notes": [
             "Public endpoints: GET /api/v1/appointments/customer/{bookingCode} (view) and POST /api/v1/appointments/customer/{bookingCode}/cancel (cancel)",

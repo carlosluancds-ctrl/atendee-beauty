@@ -13,7 +13,7 @@ Read `CLAUDE.md` and this file before editing. Then read the highest-numbered co
 - V114: Frontend Appointment Creation Form implemented at `/appointments/new`.
 - V115: Frontend Appointment Cancellation implemented at `/appointments` - cancel button on appointment cards with confirmation modal.
 - V116: Frontend Appointment Rescheduling implemented at `/appointments` - reschedule button with date/time picker modal.
-- V117: Customer Appointment Cancellation - public endpoints at `/api/v1/appointments/customer/{bookingCode}`.
+- V117: Customer Appointment Cancellation - public endpoints at `/api/v1/appointments/customer/{bookingCode}` (commit `42d2760` - push confirmed).
 
 ## Completed increments
 
@@ -45,7 +45,7 @@ Read `CLAUDE.md` and this file before editing. Then read the highest-numbered co
 
 ## Recent Activity
 
-- V117 (2026-11-21): Customer Appointment Cancellation API implemented. Added public endpoints `/api/v1/appointments/customer/{bookingCode}` for GET (view) and POST (cancel). Booking code is base64(tenantId:N + appointmentId:N). 24h notice validation enforced. Phone redacted in responses.
+- V117 (2026-11-21): Customer Appointment Cancellation API implemented. Added public endpoints `/api/v1/appointments/customer/{bookingCode}` for GET (view) and POST (cancel). Booking code is base64(tenantId:N + appointmentId:N). 24h notice validation enforced. Phone redacted in responses. Commit: 42d2760 - push confirmed.
 - V116 (2026-11-21): Frontend Appointment Rescheduling UI completed. Added cancel and reschedule buttons on appointment cards with separate modals. Reschedule modal has date/time pickers, cancel modal has reason textarea. Features: CSRF protection, authorization checks, loading states.
 - V115 (2026-11-21): Frontend Appointment Cancellation UI completed. Added `/appointments` cancel button on appointment cards with confirmation modal and reason field.
 - V114 (2026-11-21): Frontend Appointment Creation Form UI completed. Added `/appointments/new` route, `AppointmentFormPage.tsx`, updated types with `Service` and `Professional`, and CSS styles. Features: customer search, service/professional selection, date/time picker, CSRF protected submission.

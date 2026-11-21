@@ -8,10 +8,10 @@ Branch: security/csrf-webhook-antiforgery-v23
 **V117: Customer self-service appointment cancellation implemented.** Added public endpoints for customers to view and cancel their appointments via a booking code.
 
 ## Validation Status
-- **Local**: `git diff --check` pending, TypeScript compilation pending, Build pending
-- **Release build**: Pending
-- **Commit**: Pending
-- **Remote**: Push pending
+- **Local**: `git diff --check` clean, TypeScript compilation successful, Web build 0 errors
+- **Release build**: 0 warnings / 0 errors on all projects
+- **Commit**: `42d2760` V117 - push confirmed (HEAD local == origin)
+- **Remote**: Push confirmed to origin/security/csrf-webhook-antiforgery-v23
 
 ## Implementation Details
 
@@ -54,4 +54,4 @@ Branch: security/csrf-webhook-antiforgery-v23
 - Implementation maintains all security guards (tenant isolation, 24h notice, audit)
 
 ## Commit Status
-- Pending - requires local validation and CI confirmation
+- `42d2760` V117: Customer appointment cancellation API and frontend - push confirmed (HEAD local == origin).
