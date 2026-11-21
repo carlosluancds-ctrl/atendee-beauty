@@ -6,6 +6,7 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V115: Frontend Appointment Cancellation implemented. React page at `/appointments` displaying cancel button on appointment cards (PendingConfirmation/Confirmed status) with confirmation modal and reason field. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments/{id}/cancel API. Authorization: Owner/Manager/Receptionist (can cancel any), Professional (cancel own only). CSRF protected. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 687cb68 (push confirmed).
 - V114: Frontend Appointment Creation Form implemented. React page at `/appointments/new` with customer selection (search by name/phone), service selection (with duration/price), professional selection (filtered by service), date/time picker, and CSRF protected submission. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments API. Authorization: Owner/Manager/Receptionist/Professional. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 207da45 (push confirmed).
 - V113: Frontend Appointment Calendar UI implemented. React page at `/appointments` displaying current month appointments with status badges, customer and professional info, consuming TenantAppointmentEndpoints.cs API (Authorization: Owner/Manager/Receptionist/Professional, CSRF protected). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: a353585 (push confirmed).
 - V112: Frontend Customer Management UI implemented. React page at `/customers` with role change, deactivation, and reactivation functionality. Consumes TenantCustomerEndpoints.cs API (Authorization: Owner/Manager/Receptionist Read, Owner/Manager Write, CSRF protected). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: a353585 (push confirmed).
@@ -26,8 +27,8 @@ PONTO VALIDADO
 - V90 (GET /health/ready) validado na run 251 / 44663263477, SHA 399ead5. V89 (rate limiting distribuido, migracao 021) na run 248 / 44660361862, SHA 90a5bc6.
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
-STATUS CI ATUAL (V113/V114)
-- V113/V114: Implementacao frontend completa. Commits a353585 (V112/V113) e 207da45 (V114) push confirmed para origin. Nao requerem CI de integracao (frontend-only).
+STATUS CI ATUAL (V113/V114/V115)
+- V113/V114/V115: Implementacao frontend completa. Commits a353585 (V112/V113), 207da45 (V114) e 687cb68 (V115) push confirmed para origin. Nao requerem CI de integracao (frontend-only).
 - V111: Frontend Tenant Member Management (commit b9f9377) push confirmado para origin/security/csrf-webhook-antiforgery-v23.
 - V110: CI verde run 296 (commit 3db3e01) - sucesso.
 - V106/V107/V108 CI runs 283-294: todos falham no Step 15/16 "Provision disposable database and restricted roles" - flakiness de infraestrutura PostgreSQL 18.7 no GitHub Actions ubuntu-26.04. Container health check passa mas provisionamento falha logo apos. NAO e falha de logica.
@@ -37,10 +38,10 @@ STATUS CI ATUAL (V113/V114)
 - Ultimo CI verde completo: run 296 / 44851428076 (V110) - sucesso.
 
 ANTES DE QUALQUER ALTERACAO
-Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V111_2026-11-20.md, docs/continuity/CONTINUATION_STATUS_V114_2026-11-21.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V115_2026-11-21.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
-V114: Implementacao do formulario de criacao de agendamentos concluida. Próximos passos: implementar modal de reagendamento e fluxo de cancelamento. Decisoes do produto sao necessarias para politica de cancelamento (24h notice, fees), fluxos de notificacao cliente (WhatsApp/email) e semantis de reagendamento (replacement vs history).
+V115: Implementacao do cancelamento de agendamentos concluida. Próximos passos: implementar modal de reagendamento (rescheduling) e fluxo de cancelamento cliente (nao implementado). Decisoes do produto sao necessarias para politica de cancelamento (24h notice, fees), fluxos de notificacao cliente (WhatsApp/email) e semantis de reagendamento (replacement vs history). O backend já possui POST /api/v1/appointments/{id}/reschedule para reagendamento.
 
 REGRAS PERMANENTES
 1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.

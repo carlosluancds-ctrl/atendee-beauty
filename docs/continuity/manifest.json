@@ -3,10 +3,10 @@
     "updated_at": "2026-11-21",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V114_2026-11-21.md",
-    "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V114_2026-11-21.md",
-    "latest_implementation_commit": "a353585",
-    "latest_documentation_parent_commit": "a353585",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V115_2026-11-21.md",
+    "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V115_2026-11-21.md",
+    "latest_implementation_commit": "687cb68",
+    "latest_documentation_parent_commit": "687cb68",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
         "run": "44851428076",
@@ -96,6 +96,30 @@
             "Status badges with color coding",
             "Future full CRUD requires product decisions on client cancellation policy and notifications",
             "Route added: GET /appointments displays appointment calendar page"
+        ]
+    },
+    "v115": {
+        "implementation_commit": "687cb68",
+        "approval": "validated_locally",
+        "scope": "Frontend Appointment Cancellation UI implementing cancel button and confirmation modal",
+        "files_created": [],
+        "files_modified": [
+            "web/atendee-portal/src/AppointmentPage.tsx",
+            "web/atendee-portal/src/styles.css"
+        ],
+        "local_validation": {
+            "diff_check": "clean",
+            "typescript_compile": "successful",
+            "release_build": "0 warnings / 0 errors"
+        },
+        "notes": [
+            "Frontend-only implementation consuming existing POST /api/v1/appointments/{id}/cancel API",
+            "Cancel button appears on PendingConfirmation and Confirmed status appointments",
+            "Confirmation modal with optional reason field",
+            "Authorization: Owner/Manager/Receptionist (can cancel any), Professional (cancel own only)",
+            "CSRF protection on cancel API call",
+            "Success/error feedback displayed to user",
+            "Route: GET /appointments shows cancelable appointments with cancel action"
         ]
     },
     "v110": {

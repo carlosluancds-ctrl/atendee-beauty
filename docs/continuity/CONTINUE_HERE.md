@@ -4,13 +4,14 @@ Read `CLAUDE.md` and this file before editing. Then read the highest-numbered co
 
 - Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
 - Working branch: `security/csrf-webhook-antiforgery-v23`; never modify `main`.
-- Latest validated implementation head: HEAD (V114 Frontend Appointment Creation Form on commit `207da45` - push confirmed).
-- Latest documentation head: V114 documentation with continuity status file.
-- Latest full CI: V110 run 296 (`44851428076`), success per manifest. V111/V112/V113/V114 are frontend-only, no CI validation required locally. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors.
+- Latest validated implementation head: HEAD (V115 Appointment Cancellation on commit `687cb68` - push confirmed).
+- Latest documentation head: V115 documentation with continuity status file.
+- Latest full CI: V110 run 296 (`44851428076`), success per manifest. V111/V112/V113/V114/V115 are frontend-only, no CI validation required locally. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors.
 - V111: Frontend Tenant Member Management UI implemented at `/tenant/members`.
 - V112: Frontend Customer Management UI implemented at `/customers`.
 - V113: Frontend Appointment Calendar UI implemented at `/appointments`.
 - V114: Frontend Appointment Creation Form implemented at `/appointments/new`.
+- V115: Frontend Appointment Cancellation implemented at `/appointments` - cancel button on appointment cards with confirmation modal.
 
 ## Completed increments
 
@@ -18,10 +19,12 @@ Read `CLAUDE.md` and this file before editing. Then read the highest-numbered co
 2. **V112**: Frontend Customer Management - `/customers` route with CRUD operations (list, create, edit, archive).
 3. **V113**: Frontend Appointment Calendar - `/appointments` route with month view listing and status badges.
 4. **V114**: Frontend Appointment Creation Form - `/appointments/new` route with customer selection, service selection, professional assignment, and date/time picker.
+5. **V115**: Frontend Appointment Cancellation - Cancel button on appointment cards (PendingConfirmation/Confirmed status) with confirmation modal and reason field.
 
 ## Next increments
 
-1. **Appointment full CRUD**: Implement appointment rescheduling modal and cancellation confirmation flow. Customer-facing flows require product-owner decisions on cancellation policy and notifications. See CONTINUATION_STATUS_V114.md for details.
+1. **Appointment rescheduling modal**: Implement UI for rescheduling appointments using POST /api/v1/appointments/{id}/reschedule. Need product approval for customer self-service rescheduling semantics (replacement vs history).
+2. The transactional outbox has no dispatcher/consumer. Build it only alongside real idempotent handlers, retry/backoff, poison/dead-letter handling, observability and approved provider/credential/cost choices.
 2. The transactional outbox has no dispatcher/consumer. Build it only alongside real idempotent handlers, retry/backoff, poison/dead-letter handling, observability and approved provider/credential/cost choices.
 3. Data Protection key-ring persistence/protection and certificate rotation remain blocked until old-key compatibility and a coordinated deployment-specific rotation plan exist. Do not change production keys or paths.
 4. Production readiness requires independent security review, backup/restore validation, trusted proxy configuration and deployment-specific secret/key management.
