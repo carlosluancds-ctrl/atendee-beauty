@@ -3,9 +3,9 @@
     "updated_at": "2026-11-21",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V116_2026-11-21.md",
-    "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V116_2026-11-21.md",
-    "latest_implementation_commit": "75e24de",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V117_2026-11-21.md",
+    "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V117_2026-11-21.md",
+    "latest_implementation_commit": "pending",
     "latest_documentation_parent_commit": "75e24de",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
@@ -144,6 +144,31 @@
             "Error handling: 401, 403, 404, 409 (time conflict)",
             "Cancel and Reschedule buttons styled differently on same card",
             "Modal uses HTML date/time inputs for native browser behavior"
+        ]
+    },
+    "v117": {
+        "implementation_commit": "pending",
+        "approval": "pending_local_validation",
+        "scope": "Customer Appointment Cancellation API implementing public endpoints for customer self-service cancellation",
+        "files_created": [
+            "web/atendee-portal/src/CustomerAppointmentPage.tsx"
+        ],
+        "files_modified": [
+            "src/Atendee.Api/Scheduling/TenantAppointmentEndpoints.cs",
+            "web/atendee-portal/src/App.tsx"
+        ],
+        "local_validation": {
+            "diff_check": "pending",
+            "typescript_compile": "pending",
+            "release_build": "pending"
+        },
+        "notes": [
+            "Public endpoints: GET /api/v1/appointments/customer/{bookingCode} (view) and POST /api/v1/appointments/customer/{bookingCode}/cancel (cancel)",
+            "Booking code: base64(tenantId:N + appointmentId:N), ~44 chars URL-safe",
+            "24-hour notice policy enforced for customer cancellations",
+            "Phone number redacted in responses for privacy",
+            "No authentication required - tenant derived from booking code",
+            "Frontend page at /appointments/book with booking code from query parameter"
         ]
     },
     "v110": {

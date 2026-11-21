@@ -336,6 +336,205 @@ public static class TenantAppointmentEndpoints
         return endpoints;
     }
 
+    // V117: Customer self-service appointment cancellation endpoints (public access via booking code)
+    // Booking code format: base64(tenantId:N + appointmentId:N)
+    // These endpoints do NOT require authentication; tenant is derived from the booking code
+    public static IEndpointRouteBuilder MapCustomerAppointments(this IEndpointRouteBuilder endpoints)
+    {
+        var customerGroup = endpoints.MapGroup("/api/v1/appointments/customer");
+
+        customerGroup.MapGet("/{bookingCode}", async (
+            string bookingCode,
+            IConfiguration config) =>
+        {
+            var decoded = DecodeBookingCode(bookingCode);
+            if (decoded is null)
+                return Results.BadRequest(new { error = "invalid_booking_code" });
+
+            var (tenantId, appointmentId) = decoded.Value;
+
+            var connectionString = config.GetConnectionString("Tenant");
+            if (string.IsNullOrWhiteSpace(connectionString))
+                return Results.Problem(statusCode: 500);
+
+            await using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            await using var cmd = new NpgsqlCommand(@"
+                SELECT appointment_id, customer_id, professional_id, service_id,
+                       customer_name_snapshot, professional_name_snapshot, service_name_snapshot,
+                       duration_minutes_snapshot, price_minor_units_snapshot, currency_snapshot,
+                       buffer_before_minutes_snapshot, buffer_after_minutes_snapshot,
+                       start_at_utc, end_at_utc, occupancy_start_at_utc, occupancy_end_at_utc,
+                       status, created_at_utc, updated_at_utc
+                FROM atendee.appointments
+                WHERE tenant_id = @tenantId AND appointment_id = @appointmentId", conn);
+            cmd.Parameters.AddWithValue("tenantId", tenantId);
+            cmd.Parameters.AddWithValue("appointmentId", appointmentId);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+                return Results.NotFound();
+
+            var appointment = new AppointmentModel(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                reader.GetGuid(2),
+                reader.GetGuid(3),
+                reader.GetString(4),
+                null, // Don't expose phone
+                reader.GetString(5),
+                reader.GetString(6),
+                reader.GetInt32(7),
+                reader.GetInt64(8),
+                reader.GetString(9),
+                reader.GetInt32(10),
+                reader.GetInt32(11),
+                reader.GetFieldValue<DateTimeOffset>(12),
+                reader.GetFieldValue<DateTimeOffset>(13),
+                reader.GetFieldValue<DateTimeOffset>(14),
+                reader.GetFieldValue<DateTimeOffset>(15),
+                reader.GetInt16(16).ToString(),
+                reader.GetFieldValue<DateTimeOffset>(17),
+                reader.GetFieldValue<DateTimeOffset>(18)
+            );
+
+            return Results.Ok(appointment);
+        });
+
+        customerGroup.MapPost("/{bookingCode}/cancel", async (
+            string bookingCode,
+            IConfiguration config) =>
+        {
+            var decoded = DecodeBookingCode(bookingCode);
+            if (decoded is null)
+                return Results.BadRequest(new { error = "invalid_booking_code" });
+
+            var (tenantId, appointmentId) = decoded.Value;
+
+            var connectionString = config.GetConnectionString("Tenant");
+            if (string.IsNullOrWhiteSpace(connectionString))
+                return Results.Problem(statusCode: 500);
+
+            await using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+            await using var tx = await conn.BeginTransactionAsync();
+
+            try
+            {
+                // Check appointment exists and get current status
+                await using var checkCmd = new NpgsqlCommand(@"
+                    SELECT status, start_at_utc, customer_name_snapshot, professional_name_snapshot,
+                           service_name_snapshot, duration_minutes_snapshot, price_minor_units_snapshot,
+                           currency_snapshot, buffer_before_minutes_snapshot, buffer_after_minutes_snapshot,
+                           end_at_utc, occupancy_start_at_utc, occupancy_end_at_utc,
+                           customer_id, professional_id, service_id, created_at_utc, updated_at_utc
+                    FROM atendee.appointments
+                    WHERE tenant_id = @tenantId AND appointment_id = @appointmentId", conn, tx);
+                checkCmd.Parameters.AddWithValue("tenantId", tenantId);
+                checkCmd.Parameters.AddWithValue("appointmentId", appointmentId);
+
+                await using var checkReader = await checkCmd.ExecuteReaderAsync();
+                if (!await checkReader.ReadAsync())
+                    return Results.NotFound();
+
+                var status = checkReader.GetInt16(0);
+                var startAtUtc = checkReader.GetFieldValue<DateTimeOffset>(1);
+
+                if (status != (short)AppointmentStatus.Confirmed && status != (short)AppointmentStatus.PendingConfirmation)
+                    return Results.Conflict(new { error = "appointment_in_invalid_status_for_cancellation" });
+
+                // Check 24h notice for customer cancellation
+                var hoursRemaining = (startAtUtc - DateTimeOffset.UtcNow).TotalHours;
+                if (hoursRemaining < 24)
+                    return Results.Conflict(new { error = "customer_cancellation_requires_24_hours_notice" });
+
+                var customerName = checkReader.GetString(2);
+                var professionalName = checkReader.GetString(3);
+                var serviceName = checkReader.GetString(4);
+                var duration = checkReader.GetInt32(5);
+                var price = checkReader.GetInt64(6);
+                var currency = checkReader.GetString(7);
+                var bufferBefore = checkReader.GetInt32(8);
+                var bufferAfter = checkReader.GetInt32(9);
+                var endAtUtc = checkReader.GetFieldValue<DateTimeOffset>(10);
+                var occupancyStart = checkReader.GetFieldValue<DateTimeOffset>(11);
+                var occupancyEnd = checkReader.GetFieldValue<DateTimeOffset>(12);
+                var customerId = checkReader.GetGuid(13);
+                var professionalId = checkReader.GetGuid(14);
+                var serviceId = checkReader.GetGuid(15);
+                var createdAt = checkReader.GetFieldValue<DateTimeOffset>(16);
+                var updatedAt = checkReader.GetFieldValue<DateTimeOffset>(17);
+
+                await checkReader.CloseAsync();
+
+                // Update appointment to cancelled
+                await using var updateCmd = new NpgsqlCommand(@"
+                    UPDATE atendee.appointments
+                    SET status = @status,
+                        updated_at_utc = @updatedAtUtc,
+                        cancelled_at_utc = @cancelledAtUtc
+                    WHERE tenant_id = @tenantId AND appointment_id = @appointmentId", conn, tx);
+                updateCmd.Parameters.AddWithValue("status", (short)AppointmentStatus.Cancelled);
+                updateCmd.Parameters.AddWithValue("updatedAtUtc", DateTimeOffset.UtcNow);
+                updateCmd.Parameters.AddWithValue("cancelledAtUtc", DateTimeOffset.UtcNow);
+                updateCmd.Parameters.AddWithValue("tenantId", tenantId);
+                updateCmd.Parameters.AddWithValue("appointmentId", appointmentId);
+
+                await updateCmd.ExecuteNonQueryAsync();
+                await tx.CommitAsync();
+
+                // Return without phone
+                return Results.Ok(new AppointmentModel(
+                    appointmentId,
+                    customerId,
+                    professionalId,
+                    serviceId,
+                    customerName,
+                    null, // Don't expose phone
+                    professionalName,
+                    serviceName,
+                    duration,
+                    price,
+                    currency,
+                    bufferBefore,
+                    bufferAfter,
+                    startAtUtc,
+                    endAtUtc,
+                    occupancyStart,
+                    occupancyEnd,
+                    "Cancelled",
+                    createdAt,
+                    DateTimeOffset.UtcNow
+                ));
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        });
+
+        return endpoints;
+    }
+
+    /// <summary>
+    /// Decodes a booking code into (tenantId, appointmentId).
+    /// Format: base64(tenantId:N + appointmentId:N) = 32 bytes = 44 chars base64url
+    /// </summary>
+    private static (Guid tenantId, Guid appointmentId)? DecodeBookingCode(string bookingCode)
+    {
+        try
+        {
+            var padded = bookingCode;
+            while (padded.Length % 4 != 0) padded += "=";
+            var bytes = Convert.FromBase64String(padded);
+            if (bytes.Length != 32) return null;
+            return (new Guid(bytes[..16]), new Guid(bytes[16..]));
+        }
+        catch { return null; }
+    }
+
     private static string ComputeRequestHash(CreateAppointmentRequest request)
     {
         var canonical = string.Join('\n',

@@ -6,6 +6,7 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
+- V117: Customer Appointment Cancellation implemented. Public endpoints at `/api/v1/appointments/customer/{bookingCode}` for GET (view appointment) and POST (cancel). Booking code format: base64(tenantId:N + appointmentId:N). 24h notice policy enforced. Phone redacted. No auth required - tenant derived from booking code. Local validation pending. Commit: pending.
 - V116: Frontend Appointment Rescheduling implemented. React page at `/appointments` displaying reschedule button on appointment cards (PendingConfirmation/Confirmed status) with date/time picker modal. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments/{id}/reschedule API. Authorization: Owner/Manager/Receptionist (can reschedule any), Professional (reschedule own). CSRF protected. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 75e24de (push confirmed).
 - V115: Frontend Appointment Cancellation implemented. React page at `/appointments` displaying cancel button on appointment cards (PendingConfirmation/Confirmed status) with confirmation modal and reason field. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments/{id}/cancel API. Authorization: Owner/Manager/Receptionist (can cancel any), Professional (cancel own only). CSRF protected. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 687cb68 (push confirmed).
 - V114: Frontend Appointment Creation Form implemented. React page at `/appointments/new` with customer selection (search by name/phone), service selection (with duration/price), professional selection (filtered by service), date/time picker, and CSRF protected submission. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments API. Authorization: Owner/Manager/Receptionist/Professional. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 207da45 (push confirmed).
@@ -28,8 +29,9 @@ PONTO VALIDADO
 - V90 (GET /health/ready) validado na run 251 / 44663263477, SHA 399ead5. V89 (rate limiting distribuido, migracao 021) na run 248 / 44660361862, SHA 90a5bc6.
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
-STATUS CI ATUAL (V113/V114/V115/V116)
+STATUS CI ATUAL (V113/V114/V115/V116/V117)
 - V113/V114/V115/V116: Implementacao frontend completa. Commits a353585 (V112/V113), 207da45 (V114), 687cb68 (V115) e 75e24de (V116) push confirmed para origin. Nao requerem CI de integracao (frontend-only).
+- V117: Customer Appointment Cancellation API implementado. Endpoints públicos: GET/POST /api/v1/appointments/customer/{bookingCode}. Validação local pendente.
 - V111: Frontend Tenant Member Management (commit b9f9377) push confirmado para origin/security/csrf-webhook-antiforgery-v23.
 - V110: CI verde run 296 (commit 3db3e01) - sucesso.
 - V106/V107/V108 CI runs 283-294: todos falham no Step 15/16 "Provision disposable database and restricted roles" - flakiness de infraestrutura PostgreSQL 18.7 no GitHub Actions ubuntu-26.04. Container health check passa mas provisionamento falha logo apos. NAO e falha de logica.
@@ -42,10 +44,11 @@ ANTES DE QUALQUER ALTERACAO
 Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V116_2026-11-21.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
-V116: Implementacao do reagendamento de agendamentos concluida. Próximos passos:
-1. Implementar fluxo de cancelamento cliente (nao implementado)
-2. Decisoes do produto sao necessarias para politica de cancelamento (24h notice, fees), fluxos de notificacao cliente (WhatsApp/email) e semantis de reagendamento cliente (replacement vs history).
-O backend já possui POST /api/v1/appointments/{id}/reschedule para reagendamento de profissionais.
+V117: Implementacao do cancelamento de agendamentos para clientes concluida. Próximos passos:
+1. Validar localmente: `git diff --check`, TypeScript build, Release build
+2. Executar CI pipeline para validar endpoints públicos
+3. Decisoes do produto sao necessarias para fluxos de notificacao cliente (WhatsApp/email) e semantis de reagendamento cliente (replacement vs history).
+O backend agora possui endpoints públicos POST /api/v1/appointments/customer/{bookingCode}/cancel para cancelamento de clientes com política de 24h notice.
 
 REGRAS PERMANENTES
 1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.
