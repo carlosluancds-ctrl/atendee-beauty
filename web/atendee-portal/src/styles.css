@@ -1063,6 +1063,103 @@ select { font: inherit; }
   .appointment-grid { grid-template-columns: 1fr; }
 }
 
+/* Appointment cancel modal */
+.appointment-actions {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.dialog-actions button {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 8px;
+}
+
+.dialog-actions .secondary-button {
+  width: auto;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #d8cec0;
+  background: transparent;
+  color: var(--accent-dark);
+}
+
+.dialog-actions .secondary-button:hover:not(:disabled) {
+  background: #eee8de;
+  color: var(--ink);
+}
+
+.dialog-actions button[type="submit"] {
+  width: auto;
+  min-height: 36px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 8px;
+  background: #a43f36;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+
+.dialog-actions button[type="submit"]:hover:not(:disabled) {
+  background: #84322b;
+}
+
+.dialog-actions button[type="submit"]:disabled {
+  opacity: .58;
+  cursor: not-allowed;
+}
+
+.dialog-actions textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px;
+  border: 1px solid #dcd5ca;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  margin-top: 6px;
+}
+
+.dialog-actions textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(128, 107, 82, .13);
+}
+
+#cancelReason {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+#cancelReason label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #5c554b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#cancelReason textarea {
+  font-family: inherit;
+}
+
 /* Appointment creation form */
 .appointment-form {
   display: grid;
