@@ -91,6 +91,8 @@ jobs:
               docker exec atendee-postgres18-ci psql -U postgres -d postgres \
                 -Atqc 'SHOW server_version;' \
                 | sed 's/^/Disposable test server: PostgreSQL /'
+              # Extra stabilization wait after health check passes
+              sleep 3
               exit 0
             fi
             sleep 2
@@ -117,95 +119,68 @@ jobs:
           echo "::add-mask::${RATE_LIMIT_PARTITION_SECRET}"
           export PGPASSWORD="${ATENDEE_TEST_POSTGRES_ADMIN_PASSWORD}"
 
-          createdb --host 127.0.0.1 --username postgres atendee_rls_lab
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username postgres --dbname atendee_rls_lab \
-            --file db/security/001_roles_template.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username postgres --dbname atendee_rls_lab \
-            --file db/security/002_identity_provisioner_role.sql
+          # Retry logic for provisioning - transient connection issues after health check
+          for attempt in $(seq 1 3); do
+            if createdb --host 127.0.0.1 --username postgres atendee_rls_lab 2>/dev/null; then
+              break
+            fi
+            if [[ $attempt -eq 3 ]]; then
+              echo "Failed to create database after 3 attempts"
+              exit 1
+            fi
+            echo "Database creation failed, retrying in 2s (attempt $attempt/3)..."
+            sleep 2
+          done
 
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username postgres --dbname atendee_rls_lab \
-            --command "ALTER ROLE atendee_app_login PASSWORD '${APP_TEST_PASSWORD}';"
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username postgres --dbname atendee_rls_lab \
-            --command "ALTER ROLE atendee_auth_login PASSWORD '${AUTH_TEST_PASSWORD}';"
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username postgres --dbname atendee_rls_lab \
-            --command "ALTER ROLE atendee_migrator PASSWORD '${MIGRATOR_TEST_PASSWORD}';"
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username postgres --dbname atendee_rls_lab \
-            --command "ALTER ROLE atendee_identity_provisioner PASSWORD '$PROVISIONER_TEST_PASSWORD';"
+          # Helper function to run psql with retry
+          run_psql() {
+            local description="$1"
+            shift
+            for attempt in $(seq 1 3); do
+              if psql --no-psqlrc --set ON_ERROR_STOP=1 "$@" 2>/dev/null; then
+                return 0
+              fi
+              if [[ $attempt -eq 3 ]]; then
+                echo "Failed: $description after 3 attempts"
+                exit 1
+              fi
+              echo "Retrying $description in 2s (attempt $attempt/3)..."
+              sleep 2
+            done
+          }
+
+          run_psql "roles template" --host 127.0.0.1 --username postgres --dbname atendee_rls_lab --file db/security/001_roles_template.sql
+          run_psql "identity provisioner role" --host 127.0.0.1 --username postgres --dbname atendee_rls_lab --file db/security/002_identity_provisioner_role.sql
+
+          run_psql "atendee_app_login password" --host 127.0.0.1 --username postgres --dbname atendee_rls_lab --command "ALTER ROLE atendee_app_login PASSWORD '${APP_TEST_PASSWORD}';"
+          run_psql "atendee_auth_login password" --host 127.0.0.1 --username postgres --dbname atendee_rls_lab --command "ALTER ROLE atendee_auth_login PASSWORD '${AUTH_TEST_PASSWORD}';"
+          run_psql "atendee_migrator password" --host 127.0.0.1 --username postgres --dbname atendee_rls_lab --command "ALTER ROLE atendee_migrator PASSWORD '${MIGRATOR_TEST_PASSWORD}';"
+          run_psql "atendee_identity_provisioner password" --host 127.0.0.1 --username postgres --dbname atendee_rls_lab --command "ALTER ROLE atendee_identity_provisioner PASSWORD '$PROVISIONER_TEST_PASSWORD';"
 
           export PGPASSWORD="${MIGRATOR_TEST_PASSWORD}"
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/001_create_tenant_notes.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/002_create_operational_identity.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/003_create_security_audit_events.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/004_extend_security_audit_event_types.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/005_audit_tenant_membership_changes.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/006_extend_security_audit_mfa_pending_and_enrollment_failure.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/007_audit_tenant_status_changes.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/008_trusted_actor_for_trigger_audit.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/009_resolve_audit_target_tenant.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/010_enforce_active_mfa_owner.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/011_operational_identity_activation.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/012_tenant_profile_projection.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/013_create_tenant_services.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/014_create_professional_profiles.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/015_complete_tenant_onboarding.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/016_create_tenant_customers.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/017_create_tenant_business_hours.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/018_create_professional_availability.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/019_create_professional_time_off.sql
+          run_psql "001_create_tenant_notes" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/001_create_tenant_notes.sql
+          run_psql "002_create_operational_identity" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/002_create_operational_identity.sql
+          run_psql "003_create_security_audit_events" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/003_create_security_audit_events.sql
+          run_psql "004_extend_security_audit_event_types" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/004_extend_security_audit_event_types.sql
+          run_psql "005_audit_tenant_membership_changes" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/005_audit_tenant_membership_changes.sql
+          run_psql "006_extend_security_audit_mfa_pending_and_enrollment_failure" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/006_extend_security_audit_mfa_pending_and_enrollment_failure.sql
+          run_psql "007_audit_tenant_status_changes" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/007_audit_tenant_status_changes.sql
+          run_psql "008_trusted_actor_for_trigger_audit" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/008_trusted_actor_for_trigger_audit.sql
+          run_psql "009_resolve_audit_target_tenant" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/009_resolve_audit_target_tenant.sql
+          run_psql "010_enforce_active_mfa_owner" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/010_enforce_active_mfa_owner.sql
+          run_psql "011_operational_identity_activation" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/011_operational_identity_activation.sql
+          run_psql "012_tenant_profile_projection" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/012_tenant_profile_projection.sql
+          run_psql "013_create_tenant_services" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/013_create_tenant_services.sql
+          run_psql "014_create_professional_profiles" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/014_create_professional_profiles.sql
+          run_psql "015_complete_tenant_onboarding" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/015_complete_tenant_onboarding.sql
+          run_psql "016_create_tenant_customers" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/016_create_tenant_customers.sql
+          run_psql "017_create_tenant_business_hours" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/017_create_tenant_business_hours.sql
+          run_psql "018_create_professional_availability" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/018_create_professional_availability.sql
+          run_psql "019_create_professional_time_off" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/019_create_professional_time_off.sql
+          run_psql "020_create_appointments_and_outbox" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/020_create_appointments_and_outbox.sql
+          run_psql "021_create_distributed_authentication_rate_limits" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/021_create_distributed_authentication_rate_limits.sql
+          run_psql "022_enforce_last_owner_protection" --host 127.0.0.1 --username atendee_migrator --dbname atendee_rls_lab --file db/migrations/022_enforce_last_owner_protection.sql
 
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/020_create_appointments_and_outbox.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/021_create_distributed_authentication_rate_limits.sql
-          psql --no-psqlrc --set ON_ERROR_STOP=1 --host 127.0.0.1 \
-            --username atendee_migrator --dbname atendee_rls_lab \
-            --file db/migrations/022_enforce_last_owner_protection.sql
           printf '%s\n' \
             "ATENDEE_TEST_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=atendee_rls_lab;Username=atendee_app_login;Password=${APP_TEST_PASSWORD};Pooling=true;Maximum Pool Size=1" \
             "ATENDEE_TEST_PROVISIONER_CONNECTION_STRING=Host=127.0.0.1;Port=5432;Database=atendee_rls_lab;Username=atendee_identity_provisioner;Password=$PROVISIONER_TEST_PASSWORD;Pooling=false" \
