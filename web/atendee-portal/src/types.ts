@@ -28,6 +28,27 @@ export type Customer = {
   createdAtUtc: string;
 };
 
+export type Service = {
+  id: string;
+  name: string;
+  durationMinutes: number;
+  priceMinorUnits: number;
+  currency: string;
+  bufferBeforeMinutes: number;
+  bufferAfterMinutes: number;
+  isActive: boolean;
+};
+
+export type Professional = {
+  id: string;
+  identityUserId: string;
+  displayName: string;
+  isActive: boolean;
+  serviceIds: string[];
+  createdAtUtc: string;
+  updatedAtUtc: string;
+};
+
 export type Appointment = {
   id: string;
   appointmentStatus: "PendingConfirmation" | "Confirmed" | "CheckedIn" | "InService" | "Completed" | "Cancelled" | "NoShow" | "Rescheduled";
