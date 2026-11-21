@@ -81,34 +81,36 @@ jobs:
             --health-cmd 'pg_isready -U postgres -d postgres' \
             --health-interval 2s \
             --health-timeout 5s \
-            --health-retries 30 \
+            --health-retries 60 \
             postgres:18.7-bookworm
           unset ADMIN_TEST_PASSWORD
 
-          for attempt in $(seq 1 45); do
+          for attempt in $(seq 1 90); do
             HEALTH="$(docker inspect --format '{{.State.Health.Status}}' atendee-postgres18-ci 2>/dev/null || true)"
             if [[ "${HEALTH}" == "healthy" ]]; then
               # Verify PostgreSQL can actually accept connections and execute queries
-              for verify_attempt in $(seq 1 5); do
+              for verify_attempt in $(seq 1 10); do
                 if docker exec atendee-postgres18-ci psql -U postgres -d postgres -Atqc 'SELECT 1;' >/dev/null 2>&1; then
                   docker exec atendee-postgres18-ci psql -U postgres -d postgres \
                     -Atqc 'SHOW server_version;' \
                     | sed 's/^/Disposable test server: PostgreSQL /'
                   # Extra stabilization wait after successful query
-                  sleep 5
+                  sleep 10
                   exit 0
                 fi
-                echo "PostgreSQL health check passed but query failed, retrying in 2s (attempt $verify_attempt/5)..."
-                sleep 2
+                echo "PostgreSQL health check passed but query failed, retrying in 3s (attempt $verify_attempt/10)..."
+                sleep 3
               done
               echo "PostgreSQL did not respond to queries after health check passed." >&2
+              docker logs atendee-postgres18-ci || true
               exit 1
             fi
+            echo "Waiting for PostgreSQL to become healthy (attempt $attempt/90)..."
             sleep 2
           done
 
           docker logs atendee-postgres18-ci || true
-          echo 'PostgreSQL 18.7 did not become healthy.' >&2
+          echo 'PostgreSQL 18.7 did not become healthy within timeout.' >&2
           exit 1
 
       - name: Provision disposable database and restricted roles
@@ -129,32 +131,32 @@ jobs:
           export PGPASSWORD="${ATENDEE_TEST_POSTGRES_ADMIN_PASSWORD}"
 
           # Retry logic for provisioning - transient connection issues after health check
-          for attempt in $(seq 1 5); do
+          for attempt in $(seq 1 8); do
             if createdb --host 127.0.0.1 --username postgres atendee_rls_lab 2>/dev/null; then
               break
             fi
-            if [[ $attempt -eq 5 ]]; then
-              echo "Failed to create database after 5 attempts"
+            if [[ $attempt -eq 8 ]]; then
+              echo "Failed to create database after 8 attempts"
               exit 1
             fi
-            echo "Database creation failed, retrying in 3s (attempt $attempt/5)..."
-            sleep 3
+            echo "Database creation failed, retrying in 5s (attempt $attempt/8)..."
+            sleep 5
           done
 
           # Helper function to run psql with retry
           run_psql() {
             local description="$1"
             shift
-            for attempt in $(seq 1 5); do
+            for attempt in $(seq 1 8); do
               if psql --no-psqlrc --set ON_ERROR_STOP=1 "$@" 2>/dev/null; then
                 return 0
               fi
-              if [[ $attempt -eq 5 ]]; then
-                echo "Failed: $description after 5 attempts"
+              if [[ $attempt -eq 8 ]]; then
+                echo "Failed: $description after 8 attempts"
                 exit 1
               fi
-              echo "Retrying $description in 3s (attempt $attempt/5)..."
-              sleep 3
+              echo "Retrying $description in 5s (attempt $attempt/8)..."
+              sleep 5
             done
           }
 
