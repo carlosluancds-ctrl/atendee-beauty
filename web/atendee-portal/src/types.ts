@@ -18,3 +18,33 @@ export type DeactivateMemberRequest = {
 export type ReactivateMemberRequest = {
   reason: string;
 };
+
+export type Customer = {
+  id: string;
+  fullName: string;
+  phoneNumber: string | null;
+  emailAddress: string | null;
+  isActive: boolean;
+  createdAtUtc: string;
+};
+
+export type Appointment = {
+  id: string;
+  appointmentStatus: "PendingConfirmation" | "Confirmed" | "CheckedIn" | "InService" | "Completed" | "Cancelled" | "NoShow" | "Rescheduled";
+  customer: {
+    id: string;
+    fullName: string;
+  };
+  professional: {
+    id: string;
+    displayName: string;
+  };
+  service: {
+    id: string;
+    name: string;
+    durationMinutes: number;
+  };
+  startAtUtc: string;
+  endAtUtc: string;
+  createdAtUtc: string;
+};
