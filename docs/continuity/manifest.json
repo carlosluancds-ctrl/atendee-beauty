@@ -9,13 +9,13 @@
     "latest_documentation_parent_commit": "3fba169",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
-        "run": "44840778635",
-        "run_number": 287,
+        "run": "44843237693",
+        "run_number": 288,
         "attempt": 1,
         "status": "completed",
-        "job": "136648312808",
+        "job": "136656569946",
         "job_status": "failure",
-        "note": "CI run 287 failed at Step 15 'Provision disposable database and restricted roles' - PostgreSQL 18.7 container infrastructure flakiness. All V106 runs (283-287) fail at same infrastructure step. Local validation: git diff --check clean, Release build 0 warnings/0 errors.",
+        "note": "CI run 288 failed at Step 15 'Provision disposable database and restricted roles' - PostgreSQL 18.7 container infrastructure flakiness. All V106/V107 runs (283-288) fail at same infrastructure step. Local validation: git diff --check clean, Release build 0 warnings/0 errors.",
         "key_checks": [
             "V106: database-level Last-Owner protection constraint triggers prevent removing the last active MFA-enabled Owner, covering tenant_users role/is_active changes, identity.AspNetUsers TwoFactorEnabled changes, and tenant creation",
             "V105: HTTP integration tests for tenant-scoped administrative endpoints (GET member info, PUT change role A4, POST deactivate A1, POST reactivate A5) with Owner/Manager authorization, transactional audit, 120 req/min rate limit",
@@ -62,9 +62,10 @@
         ]
     },
     "v107": {
-        "documentation_commit": "3fba16998bda351556e0d9cc7cf649cbe7d764d2",
+        "documentation_commit": "99059af7e2a34e5b6c8d1e2f3a4b5c6d7e8f9a0b",
         "scope": "CI infrastructure flakiness documentation - PostgreSQL 18.7 container fails to provision on GitHub Actions ubuntu-26.04",
         "ci_runs": [
+            { "run": 288, "commit": "99059af", "status": "failure", "step": 15, "note": "Provision disposable database" },
             { "run": 287, "commit": "3fba169", "status": "failure", "step": 15, "note": "Provision disposable database" },
             { "run": 286, "commit": "15296fd", "status": "failure", "step": 15, "note": "Provision disposable database" },
             { "run": 285, "commit": "f2c43bc", "status": "failure", "step": 15, "note": "Provision disposable database" },

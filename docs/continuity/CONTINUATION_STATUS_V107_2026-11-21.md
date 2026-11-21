@@ -52,10 +52,11 @@ The following test scenarios from ADMIN_ACTIONS_DESIGN_V1.md item 99 are verifie
 
 ## CI Status
 
-**Infrastructure flakiness persists across all V106 runs:**
+**Infrastructure flakiness persists across all V106 and V107 runs:**
 
 | Run | Commit | Status | Failure Point |
 |-----|--------|--------|---------------|
+| 288 | 99059af (V107 docs) | FAILURE | Step 15: Provision disposable database |
 | 287 | 3fba169 (V106 docs) | FAILURE | Step 15: Provision disposable database |
 | 286 | 15296fd (V106 feat) | FAILURE | Step 15: Provision disposable database |
 | 285 | f2c43bc | FAILURE | Step 15: Provision disposable database |

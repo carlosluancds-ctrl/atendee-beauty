@@ -22,7 +22,8 @@ PONTO VALIDADO
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
 STATUS CI ATUAL (V107)
-- V106 CI runs 283-287: todos falham no Step 15 "Provision disposable database and restricted roles" - flakiness de infraestrutura PostgreSQL 18.7 no GitHub Actions ubuntu-26.04. Container health check passa mas provisionamento falha logo apos. NAO e falha de logica.
+- V106/V107 CI runs 283-288: todos falham no Step 15 "Provision disposable database and restricted roles" - flakiness de infraestrutura PostgreSQL 18.7 no GitHub Actions ubuntu-26.04. Container health check passa mas provisionamento falha logo apos. NAO e falha de logica.
+- Run 288 (commit 99059af, V107 docs): falhou no Step 15, job 136656569946 completado 2026-11-21T00:22:32Z.
 - Validacao local passa: git diff --check limpo, Release build 0 avisos/erros, todos os projetos de teste compilam.
 - Ultimo CI verde completo: run 255 / 44667879306 (V92).
 
