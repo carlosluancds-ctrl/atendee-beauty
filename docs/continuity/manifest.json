@@ -1,21 +1,21 @@
 {
-    "backup_version": "v106-last-owner-protection",
-    "updated_at": "2026-11-20",
+    "backup_version": "v107-ci-infrastructure-flakiness",
+    "updated_at": "2026-11-21",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V106_2026-11-20.md",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V107_2026-11-21.md",
     "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V106_2026-11-20.md",
     "latest_implementation_commit": "15296fd",
-    "latest_documentation_parent_commit": "15296fd",
+    "latest_documentation_parent_commit": "3fba169",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
-        "run": "pending",
-        "run_number": "pending",
+        "run": "44840778635",
+        "run_number": 287,
         "attempt": 1,
-        "status": "pending",
-        "job": "pending",
-        "job_status": "pending",
-        "note": "CI run pending validation of V106 commit 15296fd; V105 CI run 282 failed with PostgreSQL infrastructure flakiness (not logic). Local validation: git diff --check clean, Release build 0 warnings/0 errors.",
+        "status": "completed",
+        "job": "136648312808",
+        "job_status": "failure",
+        "note": "CI run 287 failed at Step 15 'Provision disposable database and restricted roles' - PostgreSQL 18.7 container infrastructure flakiness. All V106 runs (283-287) fail at same infrastructure step. Local validation: git diff --check clean, Release build 0 warnings/0 errors.",
         "key_checks": [
             "V106: database-level Last-Owner protection constraint triggers prevent removing the last active MFA-enabled Owner, covering tenant_users role/is_active changes, identity.AspNetUsers TwoFactorEnabled changes, and tenant creation",
             "V105: HTTP integration tests for tenant-scoped administrative endpoints (GET member info, PUT change role A4, POST deactivate A1, POST reactivate A5) with Owner/Manager authorization, transactional audit, 120 req/min rate limit",
@@ -59,6 +59,28 @@
             "V106 uses advisory lock hash 73190422 (different from V10's 73190421)",
             "Both constraints can coexist; V106 provides additional coverage",
             "Tests use atendee_owner role which has EXECUTE permission on the functions"
+        ]
+    },
+    "v107": {
+        "documentation_commit": "3fba16998bda351556e0d9cc7cf649cbe7d764d2",
+        "scope": "CI infrastructure flakiness documentation - PostgreSQL 18.7 container fails to provision on GitHub Actions ubuntu-26.04",
+        "ci_runs": [
+            { "run": 287, "commit": "3fba169", "status": "failure", "step": 15, "note": "Provision disposable database" },
+            { "run": 286, "commit": "15296fd", "status": "failure", "step": 15, "note": "Provision disposable database" },
+            { "run": 285, "commit": "f2c43bc", "status": "failure", "step": 15, "note": "Provision disposable database" },
+            { "run": 284, "commit": "15296fd", "status": "failure", "step": 15, "note": "Provision disposable database (retry)" },
+            { "run": 283, "commit": "84159e0", "status": "failure", "step": 15, "note": "Provision disposable database" }
+        ],
+        "local_validation": {
+            "diff_check": "clean",
+            "release_build": "0 warnings / 0 errors",
+            "test_projects_build": true
+        },
+        "notes": [
+            "Infrastructure flakiness, not logic failure - same PostgreSQL 18.7 container provisioning issue",
+            "Container health check passes but database provisioning fails immediately after",
+            "All subsequent integration checks skipped due to Step 15 failure",
+            "Local validation passes completely"
         ]
     },
     "v99": {

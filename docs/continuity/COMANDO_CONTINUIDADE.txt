@@ -21,11 +21,16 @@ PONTO VALIDADO
 - V90 (GET /health/ready) validado na run 251 / 44663263477, SHA 399ead5. V89 (rate limiting distribuido, migracao 021) na run 248 / 44660361862, SHA 90a5bc6.
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
+STATUS CI ATUAL (V107)
+- V106 CI runs 283-287: todos falham no Step 15 "Provision disposable database and restricted roles" - flakiness de infraestrutura PostgreSQL 18.7 no GitHub Actions ubuntu-26.04. Container health check passa mas provisionamento falha logo apos. NAO e falha de logica.
+- Validacao local passa: git diff --check limpo, Release build 0 avisos/erros, todos os projetos de teste compilam.
+- Ultimo CI verde completo: run 255 / 44667879306 (V92).
+
 ANTES DE QUALQUER ALTERACAO
-Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V106_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V107_2026-11-21.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
-V105 CI run 282 falhou com flakiness de infraestrutura PostgreSQL (nao logica V105). O proximo incremento deve escolher uma operacao backend autonoma, segura e testavel. ITenantNoteStore continua sendo apenas exemplo e nao e funcionalidade de produto. As decisoes pendentes que requerem aprovacao proprietaria permanecem: politica de rescheduling/cancelamento de agendamentos, outbox dispatcher com handlers reais/idempotentes/retry/dead-letter/observabilidade, Data Protection key rotation com plano coordinado, Platform Admin e acoes A1/A2 cross-tenant, integracoes externas (incluindo WhatsApp Cloud API), revisao de seguranca independente, validacao de backup/restore, configuracao de proxy confiavel, ligacao de probes de orquestrador a /health/live e /health/ready, e decisao de deploy.
+CI infrastructure flakiness persists (PostgreSQL 18.7 container provisioning). No logic changes needed - V106 implementation validated locally. Next increment should wait for CI recovery or investigate container health on ubuntu-26.04. Pending decisions requiring owner approval remain: appointment rescheduling/cancellation policy, outbox dispatcher with real handlers/idempotent/retry/dead-letter/observability, Data Protection key rotation with coordinated plan, Platform Admin and A1/A2 cross-tenant actions, external integrations (including WhatsApp Cloud API), independent security review, backup/restore validation, trusted proxy configuration, orchestrator probe wiring to /health/live and /health/ready, and deploy decision.
 
 REGRAS PERMANENTES
 1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.
