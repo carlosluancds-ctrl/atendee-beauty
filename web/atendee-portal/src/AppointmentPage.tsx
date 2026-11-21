@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Appointment, Role } from "./types";
+import type { Appointment, Role, Service, Professional } from "./types";
 
 type TenantProfile = {
   tenantId: string;
@@ -58,16 +58,74 @@ async function cancelAppointment(id: string, reason: string): Promise<Response> 
   });
 }
 
+async function rescheduleAppointment(id: string, newStartAtUtc: Date): Promise<Response> {
+  const token = await getAntiforgeryToken();
+  return fetch(`/api/v1/appointments/${id}/reschedule`, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    referrerPolicy: "no-referrer",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-CSRF-TOKEN": token
+    },
+    body: JSON.stringify({ newStartAtUtc: newStartAtUtc.toISOString() })
+  });
+}
+
+async function loadServicesAndProfessionals(): Promise<{ services: Service[]; professionals: Professional[] }> {
+  const [servicesRes, professionalsRes] = await Promise.all([
+    fetch("/api/v1/services", {
+      method: "GET", credentials: "same-origin", cache: "no-store",
+      referrerPolicy: "no-referrer", headers: { Accept: "application/json" }
+    }),
+    fetch("/api/v1/professionals", {
+      method: "GET", credentials: "same-origin", cache: "no-store",
+      referrerPolicy: "no-referrer", headers: { Accept: "application/json" }
+    })
+  ]);
+
+  let services: Service[] = [];
+  let professionals: Professional[] = [];
+
+  if (servicesRes.ok) {
+    const body = await servicesRes.json() as unknown;
+    const list = body && typeof body === "object" && "items" in body
+      ? (body as any).items as Service[]
+      : Array.isArray(body) ? body as Service[]
+      : [];
+    services = list.filter(s => s.isActive);
+  }
+
+  if (professionalsRes.ok) {
+    const body = await professionalsRes.json() as unknown;
+    const list = body && typeof body === "object" && "items" in body
+      ? (body as any).items as Professional[]
+      : Array.isArray(body) ? body as Professional[]
+      : [];
+    professionals = list.filter(p => p.isActive);
+  }
+
+  return { services, professionals };
+}
+
 export default function AppointmentPage() {
   const [tenant, setTenant] = useState<TenantProfile | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  // Services and professionals loaded for future availability checking
+  const [_services, _setServices] = useState<Service[]>([]);
+  const [_professionals, _setProfessionals] = useState<Professional[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [rescheduleDate, setRescheduleDate] = useState<string>("");
+  const [rescheduleTime, setRescheduleTime] = useState<string>("09:00");
   const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
+  const [appointmentToReschedule, setAppointmentToReschedule] = useState<Appointment | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -93,14 +151,18 @@ export default function AppointmentPage() {
         });
         if (apptResponse.status === 401) { window.location.replace("/login"); return; }
         if (!apptResponse.ok) throw new Error("Não foi possível carregar os agendamentos.");
-        const body: unknown = await apptResponse.json();
-        if (body && typeof body === "object" && "items" in body && Array.isArray((body as any).items)) {
-          if (mounted) setAppointments((body as any).items);
-        } else if (Array.isArray(body)) {
-          if (mounted) setAppointments(body as Appointment[]);
+        const apptBody: unknown = await apptResponse.json();
+        let appts: Appointment[] = [];
+        if (apptBody && typeof apptBody === "object" && "items" in apptBody && Array.isArray((apptBody as any).items)) {
+          appts = (apptBody as any).items;
+        } else if (Array.isArray(apptBody)) {
+          appts = apptBody as Appointment[];
         } else {
           throw new Error("A resposta da lista de agendamentos está em formato inesperado.");
         }
+        if (mounted) setAppointments(appts);
+
+        await loadServicesAndProfessionals(); // Preload for future availability checking
       } catch (cause) {
         if (mounted) setError(cause instanceof Error ? cause.message : "Falha ao carregar os agendamentos.");
       } finally {
@@ -112,8 +174,10 @@ export default function AppointmentPage() {
   }, []);
 
   const now = new Date();
+  const today = new Date().toISOString().split("T")[0];
   const monthName = now.toLocaleString("pt-BR", { month: "long", year: "numeric" });
   const canCancelStatus = ["PendingConfirmation", "Confirmed"] as const;
+  const canRescheduleStatus = ["PendingConfirmation", "Confirmed"] as const;
   const upcomingAppointments = appointments.filter(a => new Date(a.startAtUtc) > new Date());
 
   async function handleCancelAppointment(id: string) {
@@ -142,6 +206,43 @@ export default function AppointmentPage() {
   async function handleConfirmCancel() {
     if (appointmentToCancel) {
       await handleCancelAppointment(appointmentToCancel.id);
+    }
+  }
+
+  async function handleReschedule() {
+    if (!appointmentToReschedule || !rescheduleDate || !rescheduleTime) return;
+
+    const [hours, minutes] = rescheduleTime.split(":").map(Number);
+    const newDateTime = new Date(rescheduleDate);
+    newDateTime.setHours(hours || 0, minutes || 0, 0, 0);
+
+    if (newDateTime <= now) {
+      setError("A data/hora de reagendamento deve ser futura.");
+      return;
+    }
+
+    setReschedulingId(appointmentToReschedule.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await rescheduleAppointment(appointmentToReschedule.id, newDateTime);
+      if (response.status === 401) { window.location.replace("/login"); return; }
+      if (response.status === 403) throw new Error("Seu perfil não tem permissão para reagendar este agendamento.");
+      if (response.status === 404) throw new Error("Agendamento não encontrado.");
+      if (response.status === 409) throw new Error("Conflito de horário - o profissional já tem outro agendamento.");
+      if (!response.ok) throw new Error("Não foi possível reagendar o agendamento.");
+      const updated = await response.json() as Appointment;
+      setAppointments(prev => prev.map(a => a.id === appointmentToReschedule.id ? updated : a));
+      setNotice("Agendamento reagendado com sucesso!");
+      setRescheduleDate("");
+      setRescheduleTime("09:00");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Falha ao reagendar o agendamento.");
+    } finally {
+      setReschedulingId(null);
+      setAppointmentToReschedule(null);
+      setShowRescheduleModal(false);
     }
   }
 
@@ -184,6 +285,7 @@ export default function AppointmentPage() {
                 const statusColor = STATUS_COLORS[status] || STATUS_COLORS.PendingConfirmation;
                 const startTime = new Date(appointment.startAtUtc);
                 const isCancellable = canCancelStatus.includes(status as typeof canCancelStatus[number]);
+                const isReschedulable = canRescheduleStatus.includes(status as typeof canRescheduleStatus[number]);
                 return (
                   <article className="appointment-card" key={appointment.id}>
                     <div className="appointment-card-top">
@@ -216,15 +318,26 @@ export default function AppointmentPage() {
                         <p className="appointment-name">{appointment.service.durationMinutes} min</p>
                       </div>
                     </div>
-                    {isCancellable && (
+                    {(isCancellable || isReschedulable) && (
                       <div className="appointment-actions">
-                        <button
-                          className="action-button danger"
-                          onClick={() => { setAppointmentToCancel(appointment); setShowCancelModal(true); }}
-                          disabled={cancelingId === appointment.id}
-                        >
-                          {cancelingId === appointment.id ? "Cancelando..." : "Cancelar"}
-                        </button>
+                        {isReschedulable && (
+                          <button
+                            className="action-button"
+                            onClick={() => { setAppointmentToReschedule(appointment); setRescheduleDate(""); setShowRescheduleModal(true); }}
+                            disabled={reschedulingId === appointment.id}
+                          >
+                            {reschedulingId === appointment.id ? "Reagendando..." : "Reagendar"}
+                          </button>
+                        )}
+                        {isCancellable && (
+                          <button
+                            className="action-button danger"
+                            onClick={() => { setAppointmentToCancel(appointment); setShowCancelModal(true); }}
+                            disabled={cancelingId === appointment.id}
+                          >
+                            {cancelingId === appointment.id ? "Cancelando..." : "Cancelar"}
+                          </button>
+                        )}
                       </div>
                     )}
                   </article>
@@ -241,7 +354,7 @@ export default function AppointmentPage() {
             <p>Tem certeza que deseja cancelar este agendamento?</p>
             <p><strong>Cliente:</strong> {appointmentToCancel.customer.fullName}</p>
             <p><strong>Serviço:</strong> {appointmentToCancel.service.name}</p>
-            <p><strong>Horário:</strong> {new Date(appointmentToCancel.startAtUtc).toLocaleString("pt-BR", {
+            <p><strong>Horário original:</strong> {new Date(appointmentToCancel.startAtUtc).toLocaleString("pt-BR", {
               weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
             })}</p>
             <form onSubmit={(e) => { e.preventDefault(); handleConfirmCancel(); }}>
@@ -264,6 +377,46 @@ export default function AppointmentPage() {
                 </button>
               </div>
             </form>
+          </dialog>
+        </div>
+      )}
+
+      {showRescheduleModal && appointmentToReschedule && (
+        <div className="dialog-backdrop" onClick={() => { setShowRescheduleModal(false); setAppointmentToReschedule(null); setRescheduleDate(""); }}>
+          <dialog className="dialog-card" open>
+            <h2>Reagendar Agendamento</h2>
+            <p>Reagende o agendamento para uma nova data e hora.</p>
+            <p><strong>Cliente:</strong> {appointmentToReschedule.customer.fullName}</p>
+            <p><strong>Serviço:</strong> {appointmentToReschedule.service.name} ({appointmentToReschedule.service.durationMinutes} min)</p>
+            <div>
+              <label htmlFor="rescheduleDate">Nova data:</label>
+              <input
+                type="date"
+                id="rescheduleDate"
+                value={rescheduleDate}
+                onChange={e => setRescheduleDate(e.target.value)}
+                min={today}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="rescheduleTime">Nova hora:</label>
+              <input
+                type="time"
+                id="rescheduleTime"
+                value={rescheduleTime}
+                onChange={e => setRescheduleTime(e.target.value)}
+                required
+              />
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="secondary-button" onClick={() => { setShowRescheduleModal(false); setAppointmentToReschedule(null); setRescheduleDate(""); setRescheduleTime("09:00"); }}>
+                Voltar
+              </button>
+              <button type="submit" onClick={handleReschedule} disabled={reschedulingId === appointmentToReschedule.id}>
+                {reschedulingId === appointmentToReschedule.id ? "Reagendando..." : "Confirmar Reagendamento"}
+              </button>
+            </div>
           </dialog>
         </div>
       )}
