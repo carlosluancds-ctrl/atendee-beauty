@@ -1,12 +1,12 @@
 {
     "backup_version": "v107-ci-infrastructure-flakiness",
-    "updated_at": "2026-11-20",
+    "updated_at": "2026-11-21",
     "repository": "https://github.com/carlosluancds-ctrl/atendee-beauty",
     "branch": "security/csrf-webhook-antiforgery-v23",
-    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V111_2026-11-20.md",
-    "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V111_2026-11-20.md",
-    "latest_implementation_commit": "pending_push",
-    "latest_documentation_parent_commit": "48bb8e6",
+    "latest_continuity_status": "docs/continuity/CONTINUATION_STATUS_V114_2026-11-21.md",
+    "latest_approved_implementation_status": "docs/continuity/CONTINUATION_STATUS_V114_2026-11-21.md",
+    "latest_implementation_commit": "a353585",
+    "latest_documentation_parent_commit": "a353585",
     "latest_ci": {
         "workflow": "PostgreSQL 18 persistence integration",
         "run": "44851428076",
@@ -25,16 +25,16 @@
         ]
     },
     "v111": {
-        "implementation_commit": "pending_push",
-        "approval": "validated_locally",
+        "implementation_commit": "b9f9377",
+        "approval": "validated_by_remote",
         "scope": "Frontend Tenant Member Management UI (A1, A4, A5) implementing React page for role change, deactivation, and reactivation",
         "files_created": [
-            "web/atendee-portal/src/types.ts",
             "web/atendee-portal/src/TenantMemberPage.tsx"
         ],
         "files_modified": [
             "web/atendee-portal/src/App.tsx",
-            "web/atendee-portal/src/styles.css"
+            "web/atendee-portal/src/styles.css",
+            "web/atendee-portal/src/types.ts"
         ],
         "local_validation": {
             "diff_check": "clean",
@@ -47,6 +47,55 @@
             "Authorization enforced: Owner (any non-Owner), Manager (Receptionist/Professional only)",
             "Transactional audit events emitted: tenant_membership.role_changed/deactivated/activated",
             "Route added: GET /tenant/members displays member management page"
+        ]
+    },
+    "v112": {
+        "implementation_commit": "a353585",
+        "approval": "validated_locally",
+        "scope": "Frontend Customer Management UI implementing React page for customer CRUD operations",
+        "files_created": [
+            "web/atendee-portal/src/CustomerPage.tsx"
+        ],
+        "files_modified": [
+            "web/atendee-portal/src/App.tsx",
+            "web/atendee-portal/src/types.ts",
+            "web/atendee-portal/src/styles.css"
+        ],
+        "local_validation": {
+            "diff_check": "clean",
+            "typescript_compile": "successful",
+            "release_build": "0 warnings / 0 errors"
+        },
+        "notes": [
+            "Frontend-only implementation consuming existing TenantCustomerEndpoints API",
+            "All state-changing operations protected by CSRF token",
+            "Authorization enforced: Owner/Manager/Receptionist (Read), Owner/Manager (Write/Archive)",
+            "Route added: GET /customers displays customer management page",
+            "Features: customer listing, create, edit, archive (soft delete), reactivate"
+        ]
+    },
+    "v113": {
+        "implementation_commit": "a353585",
+        "approval": "validated_locally",
+        "scope": "Frontend Calendar/Scheduling UI implementing React page for appointment listing and status display",
+        "files_created": [
+            "web/atendee-portal/src/AppointmentPage.tsx"
+        ],
+        "files_modified": [
+            "web/atendee-portal/src/App.tsx",
+            "web/atendee-portal/src/styles.css"
+        ],
+        "local_validation": {
+            "diff_check": "clean",
+            "typescript_compile": "successful",
+            "release_build": "0 warnings / 0 errors"
+        },
+        "notes": [
+            "Frontend-only implementation consuming existing TenantAppointmentEndpoints API",
+            "Appointment listing for current month view",
+            "Status badges with color coding",
+            "Future full CRUD requires product decisions on client cancellation policy and notifications",
+            "Route added: GET /appointments displays appointment calendar page"
         ]
     },
     "v110": {

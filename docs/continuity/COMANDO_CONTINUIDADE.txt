@@ -6,7 +6,9 @@ Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
-- V111: Frontend Tenant Member Management UI implemented. React page at `/tenant/members` with role change, deactivation, and reactivation functionality. Consumes TenantMemberEndpoints.cs API (Authorization: Owner/Manager, CSRF protected, 120 req/min rate limit). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: pending_push.
+- V113: Frontend Appointment Calendar UI implemented. React page at `/appointments` displaying current month appointments with status badges, customer and professional info, consuming TenantAppointmentEndpoints.cs API (Authorization: Owner/Manager/Receptionist/Professional, CSRF protected). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: a353585 (push confirmed).
+- V112: Frontend Customer Management UI implemented. React page at `/customers` with role change, deactivation, and reactivation functionality. Consumes TenantCustomerEndpoints.cs API (Authorization: Owner/Manager/Receptionist Read, Owner/Manager Write, CSRF protected). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: a353585 (push confirmed).
+- V111: Frontend Tenant Member Management UI implemented. React page at `/tenant/members` with role change, deactivation, and reactivation functionality. Consumes TenantMemberEndpoints.cs API (Authorization: Owner/Manager, CSRF protected, 120 req/min rate limit). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: b9f9377 (push confirmed).
 - V110: CI estabilizado no GitHub Actions (Run 296, commit 3db3e01). Infraestrutura PostgreSQL 18.7 funcional. Mapeamento Backend vs Frontend concluído, identificando lacunas na UI para gestão de membros, clientes e agenda.
 - V106: migration 022_enforce_last_owner_protection.sql com triggers de constraiao de nível de banco para proteger o ultimo Owner ativo com MFA. Triggers: tr_tenant_users_last_owner_lock, tr_tenants_last_owner_lock, ct_tenant_users_active_mfa_owner, ct_tenants_active_mfa_owner, tr_identity_mfa_last_owner_lock, ct_identity_mfa_active_owner. Usa advisory locks para serializacao e funcoes SECURITY DEFINER para comportamento fail-closed. CI workflow atualizado para executar a migracao. Testes existentes em Atendee.Identity.Checks verificam a restricao (rejeita desativar MFA, mudanca de papel, desativacao, remocao do ultimo Owner). Build Release: 0 avisos/erros, diff --check limpo.
 - V105: testes de integracao HTTP para V104 tenant-scoped administrative endpoints (A1, A4, A5). Cobertura completa: Owner (any non-Owner), Manager (Receptionist/Professional only), self-target protection, cross-tenant isolation (404), last-Owner protection, unauthenticated (401), antiforgery (400), invalid GUID (400), inactive target (404), auditoria transacional verificada (tenant_membership.role_changed/deactivated/activated exatamente uma vez por operacao), rate limiting authenticated-api (120 req/min/user).
@@ -23,7 +25,10 @@ PONTO VALIDADO
 - V90 (GET /health/ready) validado na run 251 / 44663263477, SHA 399ead5. V89 (rate limiting distribuido, migracao 021) na run 248 / 44660361862, SHA 90a5bc6.
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
-STATUS CI ATUAL (V108/V109)
+STATUS CI ATUAL (V113/V114)
+- V113/V114: Implementacao frontend completa. Commits a353585 (V112/V113) push confirmed para origin. Nao requerem CI de integracao (frontend-only).
+- V111: Frontend Tenant Member Management (commit b9f9377) push confirmado para origin/security/csrf-webhook-antiforgery-v23.
+- V110: CI verde run 296 (commit 3db3e01) - sucesso.
 - V106/V107/V108 CI runs 283-294: todos falham no Step 15/16 "Provision disposable database and restricted roles" - flakiness de infraestrutura PostgreSQL 18.7 no GitHub Actions ubuntu-26.04. Container health check passa mas provisionamento falha logo apos. NAO e falha de logica.
 - Run 294 (commit d056144, V108 service containers): FALHOU no Step 16 (mesmo ponto de falha). Tentativa de migrar para containers nativos do GitHub Actions em vez de docker run manual NAO resolveu a flakiness. Runs 283-293 falharam no Step 15 com abordagem manual.
 - Run 288 (commit 99059af, V107 docs): falhou no Step 15, job 136656569946 completado 2026-11-21T00:22:32Z.
@@ -34,7 +39,7 @@ ANTES DE QUALQUER ALTERACAO
 Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V111_2026-11-20.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
-V112: Desenvolver a interface no React (atendee-portal) para Gestão de Clientes e Calendario/Agendamento, consumindo os endpoints TenantCustomerEndpoints.cs e TenantAppointmentEndpoints.cs.
+V114: Implementar formulario de criacao de agendamentos (requer selection de cliente, profissional e servico), modal de reagendamento e fluxo de cancelamento. Decisoes do produto sao necessarias para politica de cancelamento (24h notice, fees), fluxos de notificacao cliente (WhatsApp/email) e semantis de reagendamento (replacement vs history).
 
 REGRAS PERMANENTES
 1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.
