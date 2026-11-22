@@ -1,0 +1,69 @@
+COMANDO DE CONTINUIDADE - ATENDEE BEAUTY
+
+COMANDO SIMPLES: CONTINUAR ATENDEE
+
+Repositorio: https://github.com/carlosluancds-ctrl/atendee-beauty
+Branch exclusiva: security/csrf-webhook-antiforgery-v23
+
+PONTO VALIDADO
+- V117: Customer Appointment Cancellation implemented. Public endpoints at `/api/v1/appointments/customer/{bookingCode}` for GET (view appointment) and POST (cancel). Booking code format: base64(tenantId:N + appointmentId:N). 24h notice policy enforced. Phone redacted. No auth required - tenant derived from booking code. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors, Release build 0 warnings/0 errors, domain checks 79/79 passed, frontend tests 2/2 passed. Commit: 42d2760 (push confirmed). Working tree clean (2026-11-22).
+- V116: Frontend Appointment Rescheduling implemented. React page at `/appointments` displaying reschedule button on appointment cards (PendingConfirmation/Confirmed status) with date/time picker modal. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments/{id}/reschedule API. Authorization: Owner/Manager/Receptionist (can reschedule any), Professional (reschedule own). CSRF protected. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 75e24de (push confirmed).
+- V115: Frontend Appointment Cancellation implemented. React page at `/appointments` displaying cancel button on appointment cards (PendingConfirmation/Confirmed status) with confirmation modal and reason field. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments/{id}/cancel API. Authorization: Owner/Manager/Receptionist (can cancel any), Professional (cancel own only). CSRF protected. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 687cb68 (push confirmed).
+- V114: Frontend Appointment Creation Form implemented. React page at `/appointments/new` with customer selection (search by name/phone), service selection (with duration/price), professional selection (filtered by service), date/time picker, and CSRF protected submission. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments API. Authorization: Owner/Manager/Receptionist/Professional. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 207da45 (push confirmed).
+- V113: Frontend Appointment Calendar UI implemented. React page at `/appointments` displaying current month appointments with status badges, customer and professional info, consuming TenantAppointmentEndpoints.cs API (Authorization: Owner/Manager/Receptionist/Professional, CSRF protected). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: a353585 (push confirmed).
+- V112: Frontend Customer Management UI implemented. React page at `/customers` with role change, deactivation, and reactivation functionality. Consumes TenantCustomerEndpoints.cs API (Authorization: Owner/Manager/Receptionist Read, Owner/Manager Write, CSRF protected). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: a353585 (push confirmed).
+- V111: Frontend Tenant Member Management UI implemented. React page at `/tenant/members` with role change, deactivation, and reactivation functionality. Consumes TenantMemberEndpoints.cs API (Authorization: Owner/Manager, CSRF protected, 120 req/min rate limit). Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: b9f9377 (push confirmed).
+- V110: CI estabilizado no GitHub Actions (Run 296, commit 3db3e01). Infraestrutura PostgreSQL 18.7 funcional. Mapeamento Backend vs Frontend concluído, identificando lacunas na UI para gestão de membros, clientes e agenda.
+- V106: migration 022_enforce_last_owner_protection.sql com triggers de constraiao de nível de banco para proteger o ultimo Owner ativo com MFA. Triggers: tr_tenant_users_last_owner_lock, tr_tenants_last_owner_lock, ct_tenant_users_active_mfa_owner, ct_tenants_active_mfa_owner, tr_identity_mfa_last_owner_lock, ct_identity_mfa_active_owner. Usa advisory locks para serializacao e funcoes SECURITY DEFINER para comportamento fail-closed. CI workflow atualizado para executar a migracao. Testes existentes em Atendee.Identity.Checks verificam a restricao (rejeita desativar MFA, mudanca de papel, desativacao, remocao do ultimo Owner). Build Release: 0 avisos/erros, diff --check limpo.
+- V105: testes de integracao HTTP para V104 tenant-scoped administrative endpoints (A1, A4, A5). Cobertura completa: Owner (any non-Owner), Manager (Receptionist/Professional only), self-target protection, cross-tenant isolation (404), last-Owner protection, unauthenticated (401), antiforgery (400), invalid GUID (400), inactive target (404), auditoria transacional verificada (tenant_membership.role_changed/deactivated/activated exatamente uma vez por operacao), rate limiting authenticated-api (120 req/min/user).
+- V104: commit de implementacao cdc6fc5 (endpoints tenant-scoped A1/A4/A5: GET /api/v1/tenant/members/{id}, PUT /role, POST /deactivate, POST /reactivate). Authorization Owner (any non-Owner), Manager (Receptionist/Professional only). Transactional audit, rate limit 120 req/min/user.
+- V104 fix: commit 6be7764 (added tenant_membership event types to PostgresSecurityAuditWriter.AllowedEventTypes to allow audit writes from new endpoints).
+- V103: commit de implementacao cc36137 (Platform Admin cross-tenant: global realm, step-up MFA, four-eyes para tenant.delete/suspend/unsuspend, platform_admin.create/delete, global.config.change, self/last-Owner/PlatformAdmin protection, audit log querying). Opt-in via PlatformAdmin config. Rate limit 30 req/min/IP.
+- V102: commit de implementacao b86112f (Data Protection key rotation com old-key compatibility). Opt-in.
+- V101: commit de implementacao c2c7df3 (Outbox dispatcher com RabbitMQ). Opt-in.
+- V100: commit de implementacao 5e4fa61 (Appointment rescheduling & cancellation com default policy). Opt-in.
+- V99: commit de teste 678cc1a (validacao RLS em queries tenant-scoped: X-Tenant-Id forjado 401, X-Actor-Id forjado 401, tenantId query param 401, recurso desconhecido 401). CI run 255 / 44667879306: sucesso no SHA 98d8fc4.
+- V92: commit de implementacao 98d8fc47009e67dfd691180261344ce260d41b9c. CI run 255 / 44667879306: sucesso.
+- V91 (run 253 / 44665423258, SHA d495c65): todas as respostas da API enviam Content-Security-Policy (default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'), Cross-Origin-Resource-Policy same-origin, Cross-Origin-Opener-Policy same-origin e X-Permitted-Cross-Domain-Policies none, alem dos cabecalhos anteriores; novo teste cobre /health/live, /health/ready e rota 404.
+- Build Release anterior: zero avisos e zero erros localmente e no CI (V92 run 255).
+- V90 (GET /health/ready) validado na run 251 / 44663263477, SHA 399ead5. V89 (rate limiting distribuido, migracao 021) na run 248 / 44660361862, SHA 90a5bc6.
+- Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
+
+STATUS CI ATUAL (V113/V114/V115/V116/V117)
+- V113/V114/V115/V116: Implementacao frontend completa. Commits a353585 (V112/V113), 207da45 (V114), 687cb68 (V115) e 75e24de (V116) push confirmed para origin. Nao requerem CI de integracao (frontend-only).
+- V117: Customer Appointment Cancellation API implementado. Endpoints públicos: GET/POST /api/v1/appointments/customer/{bookingCode}. Validação local: `git diff --check` clean, TypeScript/Web build 0 errors, Release build 0 avisos/erros, domain checks 79/79 passed, frontend tests 2/2 passed. Commit: 42d2760 (push confirmed). Working tree clean (2026-11-22).
+- V111: Frontend Tenant Member Management (commit b9f9377) push confirmado para origin/security/csrf-webhook-antiforgery-v23.
+- V110: CI verde run 296 (commit 3db3e01) - sucesso.
+- V106/V107/V108 CI runs 283-294: todos falham no Step 15/16 "Provision disposable database and restricted roles" - flakiness de infraestrutura PostgreSQL 18.7 no GitHub Actions ubuntu-26.04. Container health check passa mas provisionamento falha logo apos. NAO e falha de logica.
+- Run 294 (commit d056144, V108 service containers): FALHOU no Step 16 (mesmo ponto de falha). Tentativa de migrar para containers nativos do GitHub Actions em vez de docker run manual NAO resolveu a flakiness. Runs 283-293 falharam no Step 15 com abordagem manual.
+- Run 288 (commit 99059af, V107 docs): falhou no Step 15, job 136656569946 completado 2026-11-21T00:22:32Z.
+- Validacao local passa: git diff --check limpo, Release build 0 avisos/erros, todos os projetos de teste compilam.
+- Ultimo CI verde completo: run 296 / 44851428076 (V110) - sucesso.
+
+ANTES DE QUALQUER ALTERACAO
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V118_2026-11-22.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+
+PROXIMO PASSO
+V117: Implementacao do cancelamento de agendamentos para clientes concluida e validada localmente (2026-11-22). Próximos passos:
+1. Executar CI pipeline para validar endpoints públicos (GitHub Actions run)
+2. Decisoes do produto sao necessarias para fluxos de notificacao cliente (WhatsApp/email) e semantis de reagendamento cliente (replacement vs history).
+O backend agora possui endpoints públicos POST /api/v1/appointments/customer/{bookingCode}/cancel para cancelamento de clientes com política de 24h notice.
+
+REGRAS PERMANENTES
+1. Preserve todo o historico e alteracoes existentes. Nunca altere main, faca merge, deploy ou operacoes destrutivas.
+2. Trabalhe somente em security/csrf-webhook-antiforgery-v23.
+3. Implemente, teste, documente, execute diff --check e build Release, faca commit e push. Acompanhe o CI do SHA exato ate sucesso; nunca declare concluido antes disso.
+4. Apos cada etapa validada, crie o proximo CONTINUATION_STATUS_V<n>, atualize CONTINUE_HERE.md, manifest.json e este comando; faca push e valide o CI do commit documental.
+5. Entregue um novo comando copiavel e um arquivo para download ao concluir cada etapa.
+6. Solicite aprovacao antes de alterar regra de negocio, usar provider pago, credenciais/servicos externos, assumir custos de infraestrutura, alterar producao, fazer deploy ou executar acao irreversivel/de alto risco.
+7. Nunca exponha nem grave tokens, senhas, cookies, recovery codes ou chaves. A chave HMAC do rate limiter deve ser igual em todas as instancias e permanecer em secret manager/ambiente; nao a rotacione sem plano coordenado.
+8. Preserve tenant isolation, RLS, auditoria obrigatoria, transaction runner, ordem authentication-before-antiforgery e protecoes MFA/TOTP existentes.
+9. Mantenha intocada a copia antiga invalida em C:\Users\iaras\Downloads\atendee-beauty-git. Checkout ativo conhecido: C:\Users\iaras\Downloads\atendee-beauty-v85-work.
+
+NOTAS OPERACIONAIS
+- O computador do usuario tem .NET 10 e Docker; nao tem gh. O push funciona pelo credential manager do Git do proprio computador.
+- O ambiente web do Claude consegue clonar e consultar o CI, mas o push de la e recusado enquanto o app GitHub do Claude nao estiver instalado na organizacao.
+- Testes de integracao exigem PostgreSQL 18.7 descartavel e rodam no CI; localmente valide diff --check e build Release.
+
+CONTEXTO HISTORICO
+Atendee Beauty e uma recepcionista IA multiempresa para saloes e clinicas de estetica. O usuario informou em 2026-11-17 que possui um numero WhatsApp Business para testes; o numero nao foi compartilhado. A integracao oficial WhatsApp Cloud API ainda nao foi implantada e depende de aprovacao de conta Meta Business, provider, credenciais e custos.

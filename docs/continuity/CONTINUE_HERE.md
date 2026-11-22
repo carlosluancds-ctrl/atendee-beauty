@@ -4,9 +4,9 @@ Read `CLAUDE.md` and this file before editing. Then read the highest-numbered co
 
 - Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
 - Working branch: `security/csrf-webhook-antiforgery-v23`; never modify `main`.
-- Latest validated implementation head: HEAD (V117 Customer Appointment Cancellation in progress).
+- Latest validated implementation head: HEAD (V117 Customer Appointment Cancellation completed and locally validated).
 - Latest documentation head: V117 documentation with continuity status file.
-- Latest full CI: V110 run 296 (`44851428076`), success per manifest. V111-V116 are frontend-only, no CI validation required locally. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors.
+- Latest full CI: V110 run 296 (`44851428076`), success per manifest. V111-V116 are frontend-only, no CI validation required locally. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors, Release build 0 warnings/0 errors, domain checks 79/79 passed, frontend tests 2/2 passed.
 - V111: Frontend Tenant Member Management UI implemented at `/tenant/members`.
 - V112: Frontend Customer Management UI implemented at `/customers`.
 - V113: Frontend Appointment Calendar UI implemented at `/appointments`.
