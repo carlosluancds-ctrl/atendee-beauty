@@ -194,6 +194,34 @@
             "Documentation commit 33ab52d push confirmed to origin"
         ]
     },
+    "v119": {
+        "implementation_commit": "46bf871",
+        "approval": "validated_locally",
+        "scope": "Customer Self-Service Appointment Rescheduling with history semantics",
+        "files_created": [],
+        "files_modified": [
+            "src/Atendee.Api/Scheduling/TenantAppointmentEndpoints.cs",
+            "web/atendee-portal/src/CustomerAppointmentPage.tsx"
+        ],
+        "local_validation": {
+            "diff_check": "clean",
+            "typescript_compile": "successful",
+            "release_build": "0 warnings / 0 errors",
+            "domain_checks": "79/79 passed",
+            "frontend_tests": "2/2 passed"
+        },
+        "notes": [
+            "Public endpoint: POST /api/v1/appointments/customer/{bookingCode}/reschedule",
+            "History semantics: original appointment marked Rescheduled, new appointment created as Confirmed",
+            "24-hour notice policy enforced for customer rescheduling",
+            "Phone number redacted in responses for privacy",
+            "Professional overlap checked via DB exclusion constraint",
+            "No authentication required - tenant derived from booking code",
+            "Frontend: date/time picker modal with HTML5 native inputs",
+            "Local validation completed 2026-11-22: all checks passed",
+            "Commit 46bf871 push confirmed to origin"
+        ]
+    },
     "v110": {
         "documentation_commit": "3db3e01",
         "scope": "CI infrastructure flakiness resolved and frontend gap analysis completed",
