@@ -10,7 +10,9 @@ using Atendee.Api.Services;
 using Atendee.Api.Tenants;
 using Atendee.Api.Professionals;
 using Atendee.Api.PlatformAdmin;
+using Atendee.Application.Abstractions;
 using Atendee.Infrastructure;
+using Atendee.Infrastructure.Messaging;
 using Atendee.Infrastructure.Security;
 using Atendee.Infrastructure.Web;
 using Microsoft.AspNetCore.Antiforgery;
@@ -273,6 +275,18 @@ if (identityEnabled)
             opt.RequireFourEyesForCriticalActions = platformAdminConfig.GetValue<bool>("RequireFourEyesForCriticalActions", true);
             opt.ProtectLastOwner = platformAdminConfig.GetValue<bool>("ProtectLastOwner", true);
             opt.MaxPlatformAdmins = platformAdminConfig.GetValue<int>("MaxPlatformAdmins", 10);
+        });
+    }
+
+    // V119: Resend email sender (optional, opt-in via configuration)
+    var resendConfig = builder.Configuration.GetSection(Atendee.Infrastructure.DependencyInjection.ResendEmailOptions.SectionName);
+    if (resendConfig.Exists())
+    {
+        builder.Services.AddAtendeeResendEmail(opt =>
+        {
+            opt.ApiKey = resendConfig["ApiKey"] ?? string.Empty;
+            opt.FromEmail = resendConfig["FromEmail"] ?? "Atendee Beauty <noreply@atendee.local>";
+            opt.FromName = resendConfig["FromName"] ?? "Atendee Beauty";
         });
     }
 

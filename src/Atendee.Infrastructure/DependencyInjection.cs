@@ -199,6 +199,45 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// Registers the Resend email sender.
+    /// </summary>
+    public static IServiceCollection AddAtendeeResendEmail(
+        this IServiceCollection services,
+        Action<ResendEmailOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var options = new ResendEmailOptions();
+        configure(options);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.ApiKey, nameof(options.ApiKey));
+
+        services.Configure<ResendEmailOptions>(opt =>
+        {
+            opt.ApiKey = options.ApiKey;
+            opt.FromEmail = options.FromEmail;
+            opt.FromName = options.FromName;
+        });
+
+        services.AddHttpClient<ResendEmailSender>();
+        services.AddScoped<IEmailSender, ResendEmailSender>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Configuration for the Resend email sender.
+    /// </summary>
+    public sealed class ResendEmailOptions
+    {
+        public const string SectionName = "Resend";
+
+        public string ApiKey { get; set; } = string.Empty;
+        public string FromEmail { get; set; } = "Atendee Beauty <noreply@atendee.local>";
+        public string FromName { get; set; } = "Atendee Beauty";
+    }
+
+    /// <summary>
     /// Registers the Platform Admin service for cross-tenant administration.
     /// </summary>
     public static IServiceCollection AddAtendeePlatformAdmin(

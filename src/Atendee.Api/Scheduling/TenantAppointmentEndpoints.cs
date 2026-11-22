@@ -24,6 +24,8 @@ public static class TenantAppointmentEndpoints
             TrustedRequestContext current,
             ITenantTransactionRunner transactionRunner,
             ITenantAppointmentStore appointments,
+            ITenantCustomerStore customers,
+            IEmailSender? emailSender,
             [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey) =>
         {
             if (!CanWrite(current))
@@ -55,6 +57,29 @@ public static class TenantAppointmentEndpoints
                         current.ActorId.Value,
                         token),
                     context.RequestAborted);
+
+                if (result.Outcome == AppointmentCreateOutcome.Created && result.Appointment is not null && emailSender is not null)
+                {
+                    // Get customer email for confirmation
+                    var customer = await transactionRunner.ExecuteAsync(
+                        token => customers.GetByIdAsync(request.CustomerId, token),
+                        context.RequestAborted);
+                    if (customer?.EmailAddress is not null)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            await emailSender.SendAppointmentConfirmationAsync(
+                                customer.EmailAddress,
+                                customer.FullName,
+                                result.Appointment.ServiceNameSnapshot,
+                                result.Appointment.ProfessionalNameSnapshot,
+                                result.Appointment.StartAtUtc,
+                                result.Appointment.DurationMinutesSnapshot,
+                                current.TenantTimeZoneId!,
+                                context.RequestAborted);
+                        });
+                    }
+                }
 
                 return result.Outcome switch
                 {
