@@ -1,27 +1,44 @@
-# Continuation status V119 - Customer Self-Service Appointment Rescheduling Implemented
+# Continuation status V119 - Email Notifications (Resend) + Customer Self-Service Appointment Rescheduling Implemented
 
 Date: 2026-11-22
 Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
 Branch: security/csrf-webhook-antiforgery-v23
 
 ## Summary
-**V119: Customer self-service appointment rescheduling implemented.** Added public endpoint for customers to reschedule their appointments via booking code with history semantics (original marked Rescheduled, new appointment created as Confirmed).
+**V119: Email notifications (Resend 3k/month free) + Customer self-service appointment rescheduling implemented.**
+
+1. **Email Notifications**: `IEmailSender` abstraction with `ResendEmailSender` implementation (free tier: 3,000 emails/month). Appointment confirmation/cancellation/reschedule/reminder templates with timezone-aware local times. Confirmation email sent on appointment creation (fire-and-forget).
+
+2. **Customer self-service appointment rescheduling**: Public endpoint for customers to reschedule their appointments via booking code with history semantics (original marked Rescheduled, new appointment created as Confirmed).
 
 ## Validation Status
 - **Local**: `git diff --check` clean, TypeScript compilation successful, Web build 0 errors
 - **Release build**: 0 warnings / 0 errors on all projects
 - **Domain checks**: 79/79 passed
 - **Frontend tests**: 2/2 passed
-- **Commit**: `46bf871` V119 - push confirmed (HEAD local == origin)
+- **Commits**: `5fa05c9` (email), `46bf871` (reschedule) - push confirmed (HEAD local == origin)
 - **Remote**: Push confirmed to origin/security/csrf-webhook-antiforgery-v23
 
 ## Implementation Details
 
+### Files Created
+- `src/Atendee.Application/Abstractions/IEmailSender.cs` - Email sender abstraction
+- `src/Atendee.Infrastructure/Messaging/ResendEmailSender.cs` - Resend implementation
+
 ### Files Modified
-- `src/Atendee.Api/Scheduling/TenantAppointmentEndpoints.cs` - Added public customer reschedule endpoint
+- `src/Atendee.Api/Program.cs` - Registers Resend email sender (opt-in)
+- `src/Atendee.Api/Scheduling/TenantAppointmentEndpoints.cs` - Added public customer reschedule endpoint + confirmation email on creation
+- `src/Atendee.Infrastructure/DependencyInjection.cs` - AddAtendeeResendEmail() registration
 - `web/atendee-portal/src/CustomerAppointmentPage.tsx` - Added reschedule button and date/time picker modal
 
-### Features
+### Features - Email Notifications
+- `IEmailSender` abstraction with methods: SendAsync, SendAppointmentConfirmationAsync, SendAppointmentCancellationAsync, SendAppointmentRescheduleAsync, SendAppointmentReminderAsync
+- `ResendEmailSender` implementation using Resend.com API (free tier: 3,000 emails/month)
+- HTML + plain text templates for all appointment events
+- Timezone-aware local time display using tenant's timezone
+- Fire-and-forget email sending on appointment creation (non-blocking)
+
+### Features - Customer Self-Service Rescheduling
 - Public endpoint: `POST /api/v1/appointments/customer/{bookingCode}/reschedule` - Reschedule appointment
 - Booking code: base64 encoded tenantId + appointmentId (44 characters, URL-safe)
 - **History semantics**: Original appointment marked as `Rescheduled` (status 8), new appointment created as `Confirmed`
@@ -30,7 +47,7 @@ Branch: security/csrf-webhook-antiforgery-v23
 - Professional overlap checked via DB exclusion constraint
 - No authentication required - tenant isolated via booking code
 
-### API Endpoint Added
+### API Endpoints Added
 - `POST /api/v1/appointments/customer/{bookingCode}/reschedule` - Reschedules with 24h notice check, history semantics
 
 ### Authorization
@@ -47,11 +64,13 @@ Branch: security/csrf-webhook-antiforgery-v23
 ## Pending Product Decisions
 ⚠️ **The following require explicit product-owner approval before implementation:**
 
-1. **Customer notification flows** - WhatsApp/email integration requirements
+1. **Customer notification flows (WhatsApp)** - WhatsApp Cloud API integration requires Meta Business account approval, provider, credentials, and cost decisions.
+2. **Outbox consumer handlers** - Idempotent handlers for appointment events (email, WhatsApp), retry/backoff, dead-letter handling, observability.
 
 ## Next Steps
 1. Validate CI pipeline (PostgreSQL 18.7 integration tests - known infrastructure flakiness)
-2. Product decision needed for customer notification flows (WhatsApp/email)
+2. Product decision needed for WhatsApp Cloud API integration
+3. Implement outbox consumer handlers for appointment events
 
 ## Notes
 - History semantics chosen over replacement (product-owner decision)
@@ -61,7 +80,8 @@ Branch: security/csrf-webhook-antiforgery-v23
 - CI pipeline has infrastructure flakiness (PostgreSQL 18.7 provisioning on ubuntu-26.04) - last full green CI was run 296 (V110)
 
 ## Commit Status
-- `46bf871` V119: Customer self-service appointment rescheduling (history semantics) - push confirmed (HEAD local == origin).
+- `5fa05c9` V119: Email notifications (Resend) + Customer self-service appointment rescheduling (history semantics) - push confirmed (HEAD local == origin).
+- `46bf871` V119: Customer self-service appointment rescheduling (history semantics) - push confirmed.
 - `7cc8329` docs: V118 - update continuation files with documentation commit reference - push confirmed.
 - `33ab52d` docs: V118 - update continuation files with local validation completed - push confirmed.
 - `42d2760` V117: Customer appointment cancellation API and frontend - push confirmed.

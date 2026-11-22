@@ -4,10 +4,10 @@ Read `CLAUDE.md` and this file before editing. Then read the highest-numbered co
 
 - Repository: https://github.com/carlosluancds-ctrl/atendee-beauty
 - Working branch: `security/csrf-webhook-antiforgery-v23`; never modify `main`.
-- Latest validated implementation head: HEAD (V119 Customer Appointment Rescheduling completed and locally validated).
+- Latest validated implementation head: HEAD (V119 Email notifications + Customer Appointment Rescheduling completed and locally validated).
 - Latest documentation head: V119 documentation with continuity status file.
 - Latest full CI: V110 run 296 (`44851428076`), success per manifest. V111-V116 are frontend-only, no CI validation required locally. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors, Release build 0 warnings/0 errors, domain checks 79/79 passed, frontend tests 2/2 passed.
-- V119: Customer self-service rescheduling commit `46bf871` - push confirmed (history semantics).
+- V119: Email notifications (Resend 3k/mo free) + Customer self-service rescheduling commit `5fa05c9` - push confirmed.
 - V118: Documentation commit `33ab52d` - push confirmed (local validation docs).
 - V111: Frontend Tenant Member Management UI implemented at `/tenant/members`.
 - V112: Frontend Customer Management UI implemented at `/customers`.
@@ -27,11 +27,12 @@ Read `CLAUDE.md` and this file before editing. Then read the highest-numbered co
 6. **V116**: Frontend Appointment Rescheduling - Reschedule button on appointment cards with date/time picker modal.
 7. **V117**: Customer Appointment Cancellation - Public endpoints for customer self-service cancellation with 24h notice policy, booking code based access.
 8. **V119**: Customer Appointment Rescheduling - Public endpoint `POST /api/v1/appointments/customer/{bookingCode}/reschedule` with history semantics (original marked Rescheduled, new appointment Confirmed), 24h notice policy, date/time picker modal.
+9. **V119**: Email Notifications (Resend) - `IEmailSender` abstraction + `ResendEmailSender` implementation (3k emails/month free tier). Appointment confirmation/cancellation/reschedule/reminder templates. Opt-in via config. Confirmation email sent on appointment creation.
 
 ## Next increments
 
-1. **Customer notification flows** - WhatsApp/email integration requires product, credential, and cost decisions.
-2. The transactional outbox has no dispatcher/consumer. Build it only alongside real idempotent handlers, retry/backoff, poison/dead-letter handling, observability and approved provider/credential/cost choices.
+1. **Customer notification flows (WhatsApp)** - WhatsApp Cloud API integration requires Meta Business account approval, provider, credentials, and cost decisions.
+2. **Outbox consumer handlers** - Idempotent handlers for appointment events (email, WhatsApp, etc.), retry/backoff, dead-letter handling, observability.
 3. Data Protection key-ring persistence/protection and certificate rotation remain blocked until old-key compatibility and a coordinated deployment-specific rotation plan exist. Do not change production keys or paths.
 4. Production readiness requires independent security review, backup/restore validation, trusted proxy configuration and deployment-specific secret/key management.
 5. Platform Admin and A1/A2 cross-tenant administration remain blocked pending explicit approval of realm, actor/scope, step-up MFA/four-eyes, self/last-Owner and audit requirements.
@@ -47,7 +48,7 @@ Read `CLAUDE.md` and this file before editing. Then read the highest-numbered co
 
 ## Recent Activity
 
-- V119 (2026-11-22): Customer Appointment Rescheduling implemented. Public endpoint `POST /api/v1/appointments/customer/{bookingCode}/reschedule` with history semantics. Original appointment marked Rescheduled, new appointment created as Confirmed. 24h notice policy enforced. Date/time picker modal. Commit: 46bf871 - push confirmed.
+- V119 (2026-11-22): Email Notifications (Resend) + Customer Appointment Rescheduling implemented. `IEmailSender` abstraction with Resend implementation (3k emails/month free). Appointment confirmation/cancellation/reschedule/reminder templates. Confirmation email sent on appointment creation (fire-and-forget). Public reschedule endpoint with history semantics (24h notice). Commits: 5fa05c9 (email), 46bf871 (reschedule) - push confirmed.
 - V117 (2026-11-21): Customer Appointment Cancellation API implemented. Added public endpoints `/api/v1/appointments/customer/{bookingCode}` for GET (view) and POST (cancel). Booking code is base64(tenantId:N + appointmentId:N). 24h notice validation enforced. Phone redacted in responses. Commit: 42d2760 - push confirmed.
 - V116 (2026-11-21): Frontend Appointment Rescheduling UI completed. Added cancel and reschedule buttons on appointment cards with separate modals. Reschedule modal has date/time pickers, cancel modal has reason textarea. Features: CSRF protection, authorization checks, loading states.
 - V115 (2026-11-21): Frontend Appointment Cancellation UI completed. Added `/appointments` cancel button on appointment cards with confirmation modal and reason field.
