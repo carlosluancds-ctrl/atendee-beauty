@@ -7,6 +7,7 @@ Branch exclusiva: security/csrf-webhook-antiforgery-v23
 
 PONTO VALIDADO
 - V117: Customer Appointment Cancellation implemented. Public endpoints at `/api/v1/appointments/customer/{bookingCode}` for GET (view appointment) and POST (cancel). Booking code format: base64(tenantId:N + appointmentId:N). 24h notice policy enforced. Phone redacted. No auth required - tenant derived from booking code. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors, Release build 0 warnings/0 errors, domain checks 79/79 passed, frontend tests 2/2 passed. Commit: 42d2760 (push confirmed). Working tree clean (2026-11-22).
+- V118: Documentação de validação local V117 concluída. Commit: 33ab52d (push confirmed).
 - V116: Frontend Appointment Rescheduling implemented. React page at `/appointments` displaying reschedule button on appointment cards (PendingConfirmation/Confirmed status) with date/time picker modal. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments/{id}/reschedule API. Authorization: Owner/Manager/Receptionist (can reschedule any), Professional (reschedule own). CSRF protected. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 75e24de (push confirmed).
 - V115: Frontend Appointment Cancellation implemented. React page at `/appointments` displaying cancel button on appointment cards (PendingConfirmation/Confirmed status) with confirmation modal and reason field. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments/{id}/cancel API. Authorization: Owner/Manager/Receptionist (can cancel any), Professional (cancel own only). CSRF protected. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 687cb68 (push confirmed).
 - V114: Frontend Appointment Creation Form implemented. React page at `/appointments/new` with customer selection (search by name/phone), service selection (with duration/price), professional selection (filtered by service), date/time picker, and CSRF protected submission. Consumes TenantAppointmentEndpoints.cs POST /api/v1/appointments API. Authorization: Owner/Manager/Receptionist/Professional. Local validation: `git diff --check` clean, TypeScript/Web build 0 errors. Commit: 207da45 (push confirmed).
@@ -29,9 +30,10 @@ PONTO VALIDADO
 - V90 (GET /health/ready) validado na run 251 / 44663263477, SHA 399ead5. V89 (rate limiting distribuido, migracao 021) na run 248 / 44660361862, SHA 90a5bc6.
 - Dica: consultar CI sem token via Invoke-RestMethod em api.github.com/repos/.../actions/runs?head_sha=<sha> e .../runs/<id>/jobs (limite 60/hora por IP; nao repetir consultas em loop).
 
-STATUS CI ATUAL (V113/V114/V115/V116/V117)
+STATUS CI ATUAL (V113/V114/V115/V116/V117/V118)
 - V113/V114/V115/V116: Implementacao frontend completa. Commits a353585 (V112/V113), 207da45 (V114), 687cb68 (V115) e 75e24de (V116) push confirmed para origin. Nao requerem CI de integracao (frontend-only).
 - V117: Customer Appointment Cancellation API implementado. Endpoints públicos: GET/POST /api/v1/appointments/customer/{bookingCode}. Validação local: `git diff --check` clean, TypeScript/Web build 0 errors, Release build 0 avisos/erros, domain checks 79/79 passed, frontend tests 2/2 passed. Commit: 42d2760 (push confirmed). Working tree clean (2026-11-22).
+- V118: Documentação de validação local V117 concluída. Commit: 33ab52d (push confirmed).
 - V111: Frontend Tenant Member Management (commit b9f9377) push confirmado para origin/security/csrf-webhook-antiforgery-v23.
 - V110: CI verde run 296 (commit 3db3e01) - sucesso.
 - V106/V107/V108 CI runs 283-294: todos falham no Step 15/16 "Provision disposable database and restricted roles" - flakiness de infraestrutura PostgreSQL 18.7 no GitHub Actions ubuntu-26.04. Container health check passa mas provisionamento falha logo apos. NAO e falha de logica.
@@ -41,7 +43,7 @@ STATUS CI ATUAL (V113/V114/V115/V116/V117)
 - Ultimo CI verde completo: run 296 / 44851428076 (V110) - sucesso.
 
 ANTES DE QUALQUER ALTERACAO
-Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V116_2026-11-21.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
+Leia CLAUDE.md, docs/continuity/CONTINUE_HERE.md, docs/continuity/CONTINUATION_STATUS_V118_2026-11-22.md, docs/continuity/manifest.json, docs/continuity/COMANDO_CONTINUIDADE.txt e a documentacao tecnica relevante. Confira branch, git status, git log, HEAD local/remoto e CI mais recente.
 
 PROXIMO PASSO
 V117: Implementacao do cancelamento de agendamentos para clientes concluida e validada localmente (2026-11-22). Próximos passos:
