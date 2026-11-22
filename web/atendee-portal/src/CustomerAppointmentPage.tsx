@@ -14,6 +14,9 @@ export default function CustomerAppointmentPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [newDate, setNewDate] = useState("");
+  const [newTime, setNewTime] = useState("");
 
   // Booking code from URL query parameter
   const bookingCode = new URLSearchParams(window.location.search).get("code");
@@ -114,8 +117,57 @@ export default function CustomerAppointmentPage() {
     }
   };
 
+  const handleReschedule = async () => {
+    setError(null);
+    setNotice(null);
+    if (!newDate || !newTime) {
+      setError("Selecione a nova data e horário.");
+      return;
+    }
+    try {
+      const newStartAtUtc = new Date(`${newDate}T${newTime}:00.000Z`).toISOString();
+      const response = await fetch(`/api/v1/appointments/customer/${bookingCode}/reschedule`, {
+        method: "POST", credentials: "same-origin", cache: "no-store",
+        referrerPolicy: "no-referrer",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ newStartAtUtc })
+      });
+
+      if (response.status === 401) { window.location.replace("/login"); return; }
+      if (response.status === 403) {
+        setError("Acesso negado. Este link é para um agendamento de outro salão.");
+        return;
+      }
+      if (response.status === 404) {
+        setError("Agendamento não encontrado.");
+        return;
+      }
+      if (response.status === 409) {
+        const data = await response.json() as { error?: string };
+        throw new Error(data.error || "Reagendamento não disponível neste horário.");
+      }
+      if (!response.ok) {
+        const data = await response.json() as { error?: string };
+        throw new Error(data.error || "Não foi possível reagendar o agendamento.");
+      }
+
+      setNotice("Agendamento reagendado com sucesso! O original foi marcado como 'Reagendado'.");
+      setAppointment(null);
+      setCustomer(null);
+      setShowRescheduleModal(false);
+      setNewDate("");
+      setNewTime("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Falha ao reagendar o agendamento.");
+    }
+  };
+
   const now = new Date();
   const canCancel = appointment && new Date(appointment.startAtUtc) > now;
+  const canReschedule = appointment && new Date(appointment.startAtUtc) > now;
 
   const STATUS_COLORS: Record<string, string> = {
     PendingConfirmation: "#77736b",
@@ -225,19 +277,30 @@ export default function CustomerAppointmentPage() {
             </div>
           </div>
 
-          {canCancel ? (
-            <div className="appointment-actions">
-              <button
-                className="action-button danger"
-                onClick={() => setShowCancelModal(true)}
-                style={{ width: "100%" }}
-              >
-                Cancelar Agendamento
-              </button>
+          {canCancel || canReschedule ? (
+            <div className="appointment-actions" style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {canReschedule && (
+                <button
+                  className="action-button primary"
+                  onClick={() => setShowRescheduleModal(true)}
+                  style={{ width: "100%" }}
+                >
+                  Reagendar Agendamento
+                </button>
+              )}
+              {canCancel && (
+                <button
+                  className="action-button danger"
+                  onClick={() => setShowCancelModal(true)}
+                  style={{ width: "100%" }}
+                >
+                  Cancelar Agendamento
+                </button>
+              )}
             </div>
           ) : (
             <p style={{ color: "#96574b", fontSize: "0.9rem", marginTop: "1rem" }}>
-              O prazo de 24h para cancelamento já expirou ou o agendamento não está mais ativo.
+              O prazo de 24h para cancelamento/reagendamento já expirou ou o agendamento não está mais ativo.
             </p>
           )}
         </div>
@@ -270,6 +333,53 @@ export default function CustomerAppointmentPage() {
                 </button>
                 <button type="submit" style={{ backgroundColor: "#c0392b", color: "white" }}>
                   Confirmar Cancelamento
+                </button>
+              </div>
+            </form>
+          </dialog>
+        </div>
+      )}
+
+      {showRescheduleModal && appointment && (
+        <div className="dialog-backdrop" onClick={() => { setShowRescheduleModal(false); setNewDate(""); setNewTime(""); }}>
+          <dialog className="dialog-card" open>
+            <h2>Reagendar Agendamento</h2>
+            <p>Selecione a nova data e horário:</p>
+            <p><strong>Cliente:</strong> {customer.fullName}</p>
+            <p><strong>Serviço:</strong> {appointment.service.name}</p>
+            <p><strong>Data/Hora atual:</strong> {new Date(appointment.startAtUtc).toLocaleString("pt-BR", {
+              weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+            })}</p>
+            <form onSubmit={(e) => { e.preventDefault(); handleReschedule(); }}>
+              <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+                <div>
+                  <label htmlFor="newDate">Nova Data:</label>
+                  <input
+                    id="newDate"
+                    type="date"
+                    value={newDate}
+                    onChange={e => setNewDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="newTime">Novo Horário:</label>
+                  <input
+                    id="newTime"
+                    type="time"
+                    value={newTime}
+                    onChange={e => setNewTime(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="dialog-actions">
+                <button type="button" className="secondary-button" onClick={() => { setShowRescheduleModal(false); setNewDate(""); setNewTime(""); }}>
+                  Voltar
+                </button>
+                <button type="submit" style={{ backgroundColor: "#2a5f9c", color: "white" }}>
+                  Confirmar Reagendamento
                 </button>
               </div>
             </form>
